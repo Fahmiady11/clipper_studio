@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\YtDlpService;
+use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -11,11 +12,12 @@ class MetaController extends Controller
 {
     public function show(Request $request, YtDlpService $ytdlp): JsonResponse
     {
-        $request->validate([
-            'url' => ['required', 'string', 'regex:/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)[A-Za-z0-9_-]{6,}/'],
-        ]);
+        $request->validate(['url' => ['required', 'string', 'max:500']]);
 
-        $url = $request->string('url')->toString();
+        $url = YoutubeUrl::canonical($request->string('url')->toString());
+        if (!$url) {
+            return response()->json(['error' => 'Link YouTube tidak valid.'], 422);
+        }
         $log = Log::channel('clipper_api');
 
         try {
@@ -36,7 +38,14 @@ class MetaController extends Controller
                 'error'   => $e->getMessage(),
             ]);
 
-            return response()->json(['error' => $e->getMessage()], 422);
+            // Full yt-dlp output stays in the log; it can contain server paths and cookie locations
+            $msg = str_contains($e->getMessage(), 'Sign in to confirm')
+                ? 'YouTube meminta verifikasi (cookies). Periksa pengaturan YTDLP_COOKIES di server.'
+                : (str_contains($e->getMessage(), 'Private video') || str_contains($e->getMessage(), 'unavailable')
+                    ? 'Video tidak tersedia atau privat.'
+                    : 'Gagal membaca video dari YouTube. Coba lagi nanti.');
+
+            return response()->json(['error' => $msg], 422);
         }
     }
 }

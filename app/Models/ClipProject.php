@@ -33,6 +33,7 @@ class ClipProject extends Model
         'progress_stage',
         'progress_message',
         'error_msg',
+        'cancelled_at',
     ];
 
     protected $casts = [
@@ -42,6 +43,7 @@ class ClipProject extends Model
         'max_duration'     => 'integer',
         'music_enabled'    => 'boolean',
         'music_volume'     => 'integer',
+        'cancelled_at'     => 'datetime',
     ];
 
     protected static function boot(): void

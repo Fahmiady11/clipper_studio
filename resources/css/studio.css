@@ -129,6 +129,98 @@ button {
     font-weight: 600
 }
 
+/* Account menu (partials/user-menu) */
+.user-menu {
+    position: relative
+}
+
+.user-menu-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border-radius: 7px;
+    transition: color .15s, background .15s
+}
+
+.user-menu-btn:hover,
+.user-menu-btn[aria-expanded="true"] {
+    color: var(--text);
+    background: var(--surface)
+}
+
+.user-menu-name {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap
+}
+
+.user-menu-pop {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 220px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+    z-index: 50
+}
+
+.user-menu-head {
+    padding: 10px 10px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px
+}
+
+.user-menu-head span {
+    color: var(--text-muted);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis
+}
+
+.user-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left
+}
+
+.user-menu-item {
+    text-decoration: none
+}
+
+.user-menu-item:hover {
+    background: var(--surface-3)
+}
+
+button.user-menu-item:hover {
+    background: rgba(248, 113, 113, .1);
+    color: #f87171
+}
+
 .wizbar {
     position: sticky;
     top: 61px;
@@ -1500,6 +1592,8 @@ textarea.field {
 .hs-draft{background:var(--surface-3);color:var(--text-muted)}
 .hs-generated{background:var(--yellow-dim);color:var(--yellow)}
 .hs-rendered{background:var(--teal-dim);color:var(--teal)}
+.hs-processing{background:var(--blue-dim);color:var(--blue)}
+.hist-clear[disabled]{opacity:.5;pointer-events:none}
 .hist-date{font-size:11px;color:var(--text-dim)}
 .hist-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0}
 .hist-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;padding:7px 12px;white-space:nowrap;transition:border-color .15s,background .15s}
@@ -1509,3 +1603,564 @@ textarea.field {
 .hist-clear{background:none;border:0;color:var(--text-dim);cursor:pointer;font-size:12px;font-family:inherit;padding:4px 8px;border-radius:6px;transition:color .15s}
 .hist-clear:hover{color:#ef4444}
 .locked-notice{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--yellow);background:var(--yellow-dim);padding:5px 9px;border-radius:6px;margin-bottom:12px}
+
+/* Hook overlay in the phone preview — sizes come from pvHookBlockStyle() in
+   cqw of a 1080px-wide video, so it matches HookRenderer at any frame size. */
+.pv-hook {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    container-type: size;
+    pointer-events: none;
+    animation: fadeIn .25s ease both
+}
+
+.pv-hook-block {
+    position: absolute;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    white-space: pre;
+    animation: hkPop .26s ease-out both
+}
+
+/* Same pop as the render: 82% → 108% → 100% */
+@keyframes hkPop {
+    0% {
+        scale: .82;
+        opacity: 0
+    }
+
+    54% {
+        scale: 1.08;
+        opacity: 1
+    }
+
+    100% {
+        scale: 1
+    }
+}
+
+.pv-hook-block .hk-em {
+    color: var(--hk-em, inherit)
+}
+
+.pv-hook-block.hk-full .hk-em {
+    display: inline-block;
+    color: var(--hk-marker-ink);
+    background: var(--hk-marker);
+    padding: 0 var(--hk-mpad);
+    margin: 0 calc(-1 * var(--hk-mpad));
+    border-radius: var(--hk-mr);
+    line-height: var(--hk-mh)
+}
+
+.pv-hook-block.hk-full .pv-hook-line {
+    background: var(--hk-bg);
+    padding: 0 var(--hk-pad);
+    border-radius: var(--hk-r);
+    box-shadow: var(--hk-shadow)
+}
+
+.pv-hook-tag {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 34px;
+    z-index: 7;
+    text-align: center;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 9px;
+    letter-spacing: .1em;
+    color: rgba(255, 255, 255, .55);
+    pointer-events: none
+}
+
+.btn-sm {
+    padding: 10px 16px;
+    font-size: 13px;
+    border-radius: 10px
+}
+
+.wiz-preview {
+    position: sticky;
+    top: 130px
+}
+
+.fhint {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: -6px
+}
+
+/* Hook style picker (step 5) */
+.hook-styles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px
+}
+
+.hook-style {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text-muted);
+    transition: border-color .15s, background .15s, color .15s
+}
+
+.hook-style:hover {
+    border-color: var(--border-strong);
+    color: var(--text)
+}
+
+.hook-style.on {
+    border-color: var(--teal);
+    background: var(--teal-dim);
+    color: var(--text)
+}
+
+.hook-style-demo {
+    height: 46px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1.2;
+    text-align: center;
+    color: #fff
+}
+
+.hs-full i {
+    font-style: normal;
+    background: #fff;
+    color: #111;
+    padding: 0 6px;
+    border-radius: 4px
+}
+
+.hs-semi {
+    background: rgba(0, 0, 0, .62);
+    border: 1px solid var(--border-strong);
+    padding: 5px 10px;
+    border-radius: 7px;
+    height: auto;
+    min-height: 46px
+}
+
+.hs-none {
+    -webkit-text-stroke: 3px #000;
+    paint-order: stroke fill;
+    font-size: 13px
+}
+
+.hook-style-name {
+    font-size: 12px;
+    font-weight: 500
+}
+
+/* Cancel controls */
+.proc-cancel {
+    margin: 18px auto 0
+}
+
+.proc-note {
+    max-width: 460px;
+    margin: 4px auto 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5
+}
+
+.render-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius)
+}
+
+.render-card-spin {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--teal);
+    animation: spin 1s linear infinite
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg)
+    }
+}
+
+.render-card-txt {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px
+}
+
+.render-card-txt span {
+    color: var(--text-muted);
+    font-size: 12.5px
+}
+
+.clip-card-s[disabled] {
+    opacity: .45;
+    cursor: not-allowed
+}
+
+.modal-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: -8px 0 14px;
+    line-height: 1.5
+}
+
+/* ── Topbar labels (short versions for phones) ─────────────────────────── */
+.brand-sub {
+    color: var(--text-muted);
+    font-weight: 500
+}
+
+.lbl-short {
+    display: none
+}
+
+.wiz-nav-wrap {
+    margin: 0 auto;
+    padding: 0 32px;
+    width: 100%
+}
+
+/* ── Tablet & below: one column, nothing sticky beside content ────────── */
+@media (max-width: 1000px) {
+    .wiz-preview,
+    .result2-aside {
+        position: static
+    }
+}
+
+/* ── Phones ─────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+    .topbar {
+        padding: 12px 16px
+    }
+
+    .brand-sub,
+    .user-menu-name,
+    .lbl-long {
+        display: none
+    }
+
+    .lbl-short {
+        display: inline
+    }
+
+    .topbar-nav {
+        gap: 2px
+    }
+
+    .topbar-nav a,
+    .user-menu-btn {
+        padding: 6px 8px
+    }
+
+    .wizbar {
+        top: 53px;
+        padding: 10px 16px
+    }
+
+    .wstep-line {
+        margin: 0 4px;
+        min-width: 6px
+    }
+
+    .wstep-dot {
+        width: 24px;
+        height: 24px
+    }
+
+    .wizard {
+        padding: 28px 16px 40px
+    }
+
+    .wiz-title {
+        font-size: 24px
+    }
+
+    .wiz-desc {
+        font-size: 14px
+    }
+
+    .wiz-split {
+        gap: 28px
+    }
+
+    /* Step 1 */
+    .meta-card {
+        flex-direction: column;
+        gap: 14px;
+        padding: 14px
+    }
+
+    .meta-thumb {
+        width: 100%
+    }
+
+    /* Step 2 */
+    .layout-grid {
+        grid-template-columns: 1fr
+    }
+
+    .layout-card {
+        grid-template-columns: 1fr 88px;
+        padding: 18px 18px 44px
+    }
+
+    .layout-card-illu {
+        width: 88px;
+        height: 88px
+    }
+
+    /* Footer nav: sticks to the bottom, buttons share the width */
+    .wiz-nav-wrap {
+        padding: 0;
+        position: sticky;
+        bottom: 0;
+        z-index: 8
+    }
+
+    .wiz-nav {
+        position: static;
+        gap: 10px;
+        margin: 0;
+        padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+        background: rgba(10, 10, 12, .94);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid var(--border)
+    }
+
+    .wiz-nav-summary,
+    .locked-notice {
+        display: none
+    }
+
+    .wiz-nav-btns {
+        width: 100%
+    }
+
+    .wiz-nav-btns .btn {
+        flex: 1;
+        justify-content: center;
+        padding: 13px 14px
+    }
+
+    .wiz-nav-btns .btn-ghost {
+        flex: 0 0 auto
+    }
+
+    /* Step 6 */
+    .processing {
+        padding: 40px 16px
+    }
+
+    .proc-title {
+        font-size: 22px
+    }
+
+    .proc-log {
+        width: 100%
+    }
+
+    /* Step 7 */
+    .clip-card-s {
+        grid-template-columns: 36px 1fr;
+        gap: 12px;
+        padding: 14px
+    }
+
+    .clip-rank {
+        width: 36px;
+        height: 36px;
+        font-size: 15px
+    }
+
+    .clip-aside {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center
+    }
+
+    .render-card {
+        flex-wrap: wrap
+    }
+
+    .render-card .btn {
+        width: 100%
+    }
+
+    /* Result */
+    .result2 {
+        padding: 24px 16px 64px;
+        gap: 28px
+    }
+
+    .phone-frame {
+        max-width: 280px
+    }
+
+    .dl-row .btn {
+        flex: 1;
+        justify-content: center
+    }
+
+    .done-banner {
+        flex-wrap: wrap
+    }
+
+    .modal {
+        padding: 20px
+    }
+
+    .modal-actions .btn {
+        flex: 1;
+        justify-content: center
+    }
+
+    .hook-styles {
+        gap: 8px
+    }
+}
+
+@media (max-width: 380px) {
+    .brand-name {
+        display: none
+    }
+}
+
+/* Draggable subtitle in the preview (step 4, autopilot editor) */
+.pv-sub-drag {
+    cursor: grab;
+    touch-action: none;
+    user-select: none
+}
+
+.pv-sub-drag > div {
+    outline: 1.5px dashed transparent;
+    outline-offset: 4px;
+    transition: outline-color .15s
+}
+
+.pv-sub-drag:hover > div,
+.pv-sub-drag.dragging > div {
+    outline-color: rgba(45, 212, 191, .8)
+}
+
+.pv-sub-drag.dragging {
+    cursor: grabbing
+}
+
+.pv-guides {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none
+}
+
+.pv-guide-mid {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1px dashed rgba(45, 212, 191, .6)
+}
+
+.pv-guide-ui {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 17%;
+    background: repeating-linear-gradient(-45deg, rgba(248, 113, 113, .18) 0 6px, transparent 6px 12px);
+    border-top: 1px dashed rgba(248, 113, 113, .6);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center
+}
+
+.pv-guide-ui span {
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, .7)
+}
+
+/* Music library empty / mood missing */
+.music-warn {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, .08);
+    border: 1px solid rgba(251, 191, 36, .3)
+}
+
+.music-warn.soft {
+    color: var(--text-muted);
+    background: var(--surface);
+    border-color: var(--border)
+}
+
+.music-warn a {
+    color: inherit;
+    font-weight: 600
+}
+
+.gen-error {
+    max-width: 600px;
+    margin: 24px auto;
+    padding: 14px 18px;
+    background: rgba(239, 68, 68, .1);
+    border: 1px solid rgba(239, 68, 68, .3);
+    border-radius: 10px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #f87171;
+    word-break: break-word
+}
+
+.gen-error-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-muted)
+}

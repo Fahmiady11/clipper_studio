@@ -15,11 +15,13 @@ class SubtitleSetting extends Model
         'text_color',
         'highlight_color',
         'position',
+        'position_y',
         'background_style',
     ];
 
     protected $casts = [
         'enabled'   => 'boolean',
+        'position_y' => 'float',
         'font_size' => 'integer',
     ];
 

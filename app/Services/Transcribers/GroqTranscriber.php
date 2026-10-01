@@ -37,7 +37,7 @@ class GroqTranscriber
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $fields,
-            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . env('GROQ_API_KEY')],
+            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . config('services.groq.api_key')],
             CURLOPT_TIMEOUT        => 120,
         ]);
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Cancellation;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -70,7 +71,7 @@ class TranscriptService
         $outTpl = $tmpDir . '/sub.%(ext)s';
         $cmd = sprintf(
             '%s%s --skip-download --write-auto-subs --write-subs --sub-langs %s'
-            . ' --sub-format json3 --no-playlist -o %s %s 2>&1',
+            . ' --sub-format json3 --no-playlist -o %s -- %s 2>&1',
             $bin,
             $cookie,
             escapeshellarg('id,en'),
@@ -80,7 +81,7 @@ class TranscriptService
 
         // Don't hard-fail on non-zero exit: a 429 on the 2nd lang still leaves
         // the 1st lang's file written. We validate by looking for output files.
-        exec($cmd, $output, $code);
+        [$code, $output] = Cancellation::exec($cmd);
         Log::channel('clipper_jobs')->info('yt-dlp subtitle fetch', ['code' => $code, 'out' => implode("\n", $output)]);
 
         // Prefer Indonesian, then English, then anything written
@@ -214,8 +215,8 @@ class TranscriptService
         $tmpAudio = sys_get_temp_dir() . '/ts_audio_' . uniqid() . '.mp3';
 
         $log->info('fallbackGroq: extracting audio', ['video' => $videoPath, 'tmp' => $tmpAudio]);
-        exec(sprintf('%s -i %s -ar 16000 -ac 1 -b:a 32k %s -y 2>&1',
-            $ffmpeg, escapeshellarg($videoPath), escapeshellarg($tmpAudio)), $out, $code);
+        [$code, $out] = Cancellation::exec(sprintf('%s -i %s -ar 16000 -ac 1 -b:a 32k %s -y 2>&1',
+            $ffmpeg, escapeshellarg($videoPath), escapeshellarg($tmpAudio)));
 
         if ($code !== 0 || !file_exists($tmpAudio)) {
             $log->error('fallbackGroq: ffmpeg failed', ['code' => $code, 'out' => implode("\n", $out)]);

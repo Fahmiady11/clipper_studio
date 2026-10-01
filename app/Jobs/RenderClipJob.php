@@ -4,8 +4,11 @@ namespace App\Jobs;
 
 use App\Models\GeneratedClip;
 use App\Services\FFmpegService;
+use App\Services\HookRenderer;
 use App\Services\MusicService;
 use App\Services\YtDlpService;
+use App\Support\Cancellation;
+use App\Support\JobCancelled;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -31,10 +34,31 @@ class RenderClipJob implements ShouldQueue
         return [(new WithoutOverlapping('render:' . $this->clipId))->expireAfter($this->timeout)->dontRelease()];
     }
 
-    public function handle(FFmpegService $ffmpeg, MusicService $music, YtDlpService $ytdlp): void
+    public function handle(FFmpegService $ffmpeg, MusicService $music, YtDlpService $ytdlp, HookRenderer $hooks): void
     {
-        $log  = Log::channel('clipper_jobs');
-        $clip = GeneratedClip::with(['clipProject.subtitleSetting', 'clipProject.hookSetting', 'clipProject.transcript'])->findOrFail($this->clipId);
+        $clip = GeneratedClip::with(['clipProject.subtitleSetting', 'clipProject.hookSetting', 'clipProject.transcript'])->find($this->clipId);
+        if (!$clip || $clip->cancelled_at) {
+            return; // cancelled or deleted from history while still waiting in the queue
+        }
+
+        $tempDir = storage_path('app/temp/' . $clip->clip_project_id);
+
+        try {
+            Cancellation::watch(
+                // Deleted (history cleared) counts as cancelled too
+                fn() => !GeneratedClip::whereKey($this->clipId)->whereNull('cancelled_at')->exists(),
+                fn() => $this->render($clip, $ffmpeg, $music, $ytdlp, $hooks)
+            );
+        } catch (JobCancelled) {
+            // The cancel endpoint already reset the clip; just drop the half-made files
+            $this->cleanupTemp($tempDir, $this->clipId);
+            Log::channel('clipper_jobs')->info('RenderClipJob cancelled', ['clip_id' => $this->clipId]);
+        }
+    }
+
+    private function render(GeneratedClip $clip, FFmpegService $ffmpeg, MusicService $music, YtDlpService $ytdlp, HookRenderer $hooks): void
+    {
+        $log     = Log::channel('clipper_jobs');
         $project = $clip->clipProject;
 
         $clip->update(['status' => 'processing']);
@@ -70,25 +94,29 @@ class RenderClipJob implements ShouldQueue
         $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, (float) $clip->start_seconds, (float) $clip->end_seconds);
 
         $current = $step2;
+        Cancellation::throwIfCancelled();
 
         // 3. Resolve hook first — its duration drives subtitle suppression
         $hook         = $project->hookSetting;
         $hookText     = null;
+        $hookOverlay  = null;
         $hookDuration = 0.0;
-        $hookSettings = [];
         if ($hook && $hook->enabled) {
-            $text = $hook->is_ai_generated ? ($clip->hook_text ?? $hook->hook_text) : $hook->hook_text;
+            // A per-clip edit from the result screen beats the project/AI text
+            $text = $clip->hook_text_override
+                ?: ($hook->is_ai_generated ? ($clip->hook_text ?? $hook->hook_text) : $hook->hook_text);
             if ($text) {
                 $hookText     = $text;
                 $hookDuration = (float) $hook->duration_seconds;
-                $hookSettings = [
+                $image        = $tempDir . '/hook_' . $this->clipId . '.png';
+                $hookOverlay  = ['image' => $image] + $hooks->render($text, [
                     'text_color'       => $hook->text_color,
                     'background_style' => $hook->background_style,
                     'position'         => $hook->position,
-                    // Use subtitle font family for consistency; hook has no own font setting yet
+                    // Hook shares the subtitle font and highlight so the clip has one look
                     'font_family'      => $project->subtitleSetting?->font_family ?? 'Montserrat',
-                    'font_size'        => 60,
-                ];
+                    'accent_color'     => $project->subtitleSetting?->highlight_color ?? '#facc15',
+                ], $image);
             }
         }
 
@@ -121,6 +149,7 @@ class RenderClipJob implements ShouldQueue
                     'text_color'       => $subtitle->text_color,
                     'highlight_color'  => $subtitle->highlight_color,
                     'position'         => $subtitle->position,
+                    'position_y'       => $subtitle->position_y,
                     'background_style' => $subtitle->background_style,
                 ], (float) $clip->start_seconds, $hookDuration);
                 file_put_contents($assPath, $assContent);
@@ -135,12 +164,13 @@ class RenderClipJob implements ShouldQueue
         }
 
         // 5. Single pass: burn subtitles + overlay hook (layer 2), audio preserved
-        if ($assPath || $hookText) {
+        if ($assPath || $hookOverlay) {
             $log->info('Burning overlay', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath]);
             $final = $tempDir . '/final_' . $this->clipId . '.mp4';
-            $ffmpeg->burnSubtitlesAndHook($current, $assPath, $hookText, $hookDuration, $hookSettings, $final);
+            $ffmpeg->burnSubtitlesAndHook($current, $assPath, $hookOverlay, $hookDuration, $final);
             $current = $final;
         }
+        Cancellation::throwIfCancelled();
 
         // 6. Background music (ducked under the voice)
         $musicTrack = null;
@@ -152,13 +182,14 @@ class RenderClipJob implements ShouldQueue
                 $withMusic = $tempDir . '/music_' . $this->clipId . '.mp4';
                 $ffmpeg->mixMusic($current, $track, (int) $project->music_volume, $withMusic);
                 $current = $withMusic;
-                $musicTrack = basename($track);
+                $musicTrack = $music->relative($track); // "mood/file.mp3" — keys the credit row
             } else {
                 $log->warning('Music enabled but library is empty — skipped', ['path' => config('services.music.path')]);
             }
         }
 
         // 7. Move to output
+        Cancellation::throwIfCancelled();
         $outDir  = 'clips/' . $project->user_id . '/' . $project->id;
         Storage::makeDirectory($outDir);
         $outPath = $outDir . '/' . $this->clipId . '.mp4';
@@ -166,7 +197,9 @@ class RenderClipJob implements ShouldQueue
 
         $this->cleanupTemp($tempDir, $this->clipId);
 
-        $clip->update(['output_path' => $outPath, 'status' => 'done', 'music_track' => $musicTrack]);
+        // whereNull: a cancel that landed during the final copy wins over "done"
+        GeneratedClip::whereKey($this->clipId)->whereNull('cancelled_at')
+            ->update(['output_path' => $outPath, 'status' => 'done', 'music_track' => $musicTrack]);
 
         $log->info('RenderClipJob done', [
             'clip_id'    => $this->clipId,
@@ -183,7 +216,7 @@ class RenderClipJob implements ShouldQueue
             'trace'   => $e->getTraceAsString(),
         ]);
 
-        GeneratedClip::where('id', $this->clipId)->update([
+        GeneratedClip::where('id', $this->clipId)->whereNull('cancelled_at')->update([
             'status'    => 'failed',
             'error_msg' => $e->getMessage(),
         ]);
@@ -192,7 +225,7 @@ class RenderClipJob implements ShouldQueue
     private function cleanupTemp(string $dir, string $clipId): void
     {
         foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_'] as $prefix) {
-            foreach (['.mp4', '.ass'] as $ext) {
+            foreach (['.mp4', '.ass', '.png'] as $ext) {
                 $f = $dir . '/' . $prefix . $clipId . $ext;
                 if (file_exists($f)) @unlink($f);
             }

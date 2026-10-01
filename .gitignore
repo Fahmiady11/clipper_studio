@@ -25,3 +25,6 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Security audit notes (describe weak spots) — keep out of the repo
+/audit-context

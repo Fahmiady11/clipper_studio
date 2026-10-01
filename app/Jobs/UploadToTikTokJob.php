@@ -36,8 +36,17 @@ class UploadToTikTokJob implements ShouldQueue
     public function handle(TikTokService $tiktok): void
     {
         $log     = Log::channel('clipper_jobs');
-        $clip    = GeneratedClip::findOrFail($this->clipId);
+        $clip    = GeneratedClip::with('clipProject')->findOrFail($this->clipId);
         $account = TiktokAccount::findOrFail($this->accountId);
+
+        // Re-check at run time: the clip may have been rejected/re-rendered/deleted since
+        // dispatch, and an account must only ever post its owner's clips
+        if ($account->user_id !== $clip->clipProject?->user_id) {
+            throw new \RuntimeException('Akun TikTok bukan milik pemilik clip.');
+        }
+        if ($clip->status !== 'done' || !$clip->output_path || !Storage::exists($clip->output_path)) {
+            throw new \RuntimeException('File clip tidak tersedia (mungkin ditolak atau sedang dirender ulang).');
+        }
 
         $clip->update(['tiktok_status' => 'uploading', 'tiktok_error' => null]);
         $log->info('TikTok upload started', ['clip_id' => $clip->id, 'account' => $account->display_name, 'mode' => $this->mode]);

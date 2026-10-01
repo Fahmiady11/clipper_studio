@@ -2,24 +2,38 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
+/**
+ * LLM calls for clip analysis and captions. One path for all of them:
+ * an OpenAI-compatible gateway first when configured (e.g. OmniRoute), then
+ * each Gemini model in services.gemini.models. Every model has its own quota,
+ * so a model whose free daily quota is spent is skipped at once; overloaded
+ * ones (503) are retried with growing pauses before moving on.
+ */
 class GeminiService
 {
-    private string $apiKey;
-
     private const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
-    private array $models = [
-        // self::BASE . 'gemini-2.5-pro:generateContent',
-        self::BASE . 'gemini-2.5-flash:generateContent',
-        self::BASE . 'gemini-2.5-flash-lite:generateContent',
-    ];
+    private string $apiKey;
+    /** @var list<string> */
+    private array $models;
+    /** @var array{url: string, key: string, models: list<string>}|null */
+    private ?array $gateway;
 
     public function __construct()
     {
-        $this->apiKey = config('services.gemini.key', '');
+        $this->apiKey = (string) config('services.gemini.key', '');
+        $this->models = array_values(array_filter(array_map('trim', (array) config('services.gemini.models', []))));
+        $gw = config('services.llm_gateway');
+        // LLM_GATEWAY_MODEL may list several models, comma separated, tried in order
+        $gwModels = array_values(array_filter(array_map('trim', explode(',', (string) ($gw['model'] ?? '')))));
+        $this->gateway = !empty($gw['url']) && $gwModels ? [
+            'url' => rtrim($gw['url'], '/'), 'key' => (string) ($gw['key'] ?? ''), 'models' => $gwModels,
+        ] : null;
     }
 
     public function analyzeVideo(string $youtubeUrl, int $clipCount, string $layoutMode): array
@@ -27,72 +41,9 @@ class GeminiService
         $meta   = $this->fetchVideoMeta($youtubeUrl);
         $prompt = $this->buildPrompt($meta, $clipCount, $layoutMode);
 
-        $lastError  = null;
-        $log        = Log::channel('clipper_jobs');
-        $modelIndex = 0;
+        $clips = $this->generate($prompt, 'analyzeVideo', 0.3, 90, fn($data) => is_array($data) && $data && array_is_list($data) ? $data : null);
 
-        foreach ($this->models as $modelUrl) {
-            $modelName  = explode('/', parse_url($modelUrl, PHP_URL_PATH))[5] ?? $modelUrl;
-            $modelIndex++;
-            $isPrimary  = $modelIndex === 1;
-            $label      = $isPrimary ? 'PRIMARY' : 'FALLBACK';
-
-            for ($attempt = 1; $attempt <= 2; $attempt++) {
-                try {
-                    $log->info("[GEMINI:analyzeVideo] Trying {$label}: {$modelName}", ['attempt' => $attempt]);
-                    $response = Http::timeout(90)->post("{$modelUrl}?key={$this->apiKey}", [
-                        'contents'         => [['parts' => [['text' => $prompt]]]],
-                        'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.3],
-                    ]);
-
-                    if ($response->status() === 429) {
-                        $wait      = $this->parseRetryDelay($response->body());
-                        $lastError = "429 on {$modelName} (retryDelay: {$wait}s)";
-                        $log->warning("[GEMINI:analyzeVideo] 429 rate-limit on {$label}: {$modelName}", ['wait' => $wait]);
-                        if ($attempt === 1 && $wait > 0 && $wait <= 120) {
-                            sleep($wait + 1);
-                            continue;
-                        }
-                        break;
-                    }
-
-                    if ($response->status() === 503 && $attempt === 1) {
-                        $lastError = "503 on {$modelName}, retrying…";
-                        $log->warning("[GEMINI:analyzeVideo] 503 on {$label}: {$modelName}, retrying in 5s");
-                        sleep(5);
-                        continue;
-                    }
-
-                    if (!$response->ok()) {
-                        $lastError = "HTTP {$response->status()} on {$modelName}";
-                        $log->error("[GEMINI:analyzeVideo] {$label} failed: {$lastError}");
-                        break;
-                    }
-
-                    $text     = $response->json('candidates.0.content.parts.0.text') ?? '';
-                    $clean    = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim($text));
-                    $segments = json_decode($clean, true);
-
-                    if (!is_array($segments) || empty($segments)) {
-                        $lastError = "Invalid JSON from {$modelName}";
-                        $log->error("[GEMINI:analyzeVideo] {$label} invalid JSON: {$modelName}");
-                        break;
-                    }
-
-                    $log->info("[GEMINI:analyzeVideo] SUCCESS with {$label}: {$modelName}", [
-                        'attempt' => $attempt,
-                        'clips'   => count($segments),
-                    ]);
-                    return array_slice($segments, 0, $clipCount);
-                } catch (\Throwable $e) {
-                    $lastError = $e->getMessage();
-                    $log->error("[GEMINI:analyzeVideo] {$label} exception: {$modelName}", ['error' => $lastError]);
-                    break;
-                }
-            }
-        }
-
-        throw new \RuntimeException('Gemini analisa gagal (semua model): ' . $lastError);
+        return array_slice($clips, 0, $clipCount);
     }
 
     public function analyzeWithTranscript(
@@ -105,71 +56,15 @@ class GeminiService
     ): array {
         $prompt = $this->buildPromptFromTranscript($transcript, $clipCount, $layoutType, $durationMode, $minDuration, $maxDuration);
 
-        $lastError  = null;
-        $log        = Log::channel('clipper_jobs');
-        $modelIndex = 0;
-
-        foreach ($this->models as $modelUrl) {
-            $modelName  = explode('/', parse_url($modelUrl, PHP_URL_PATH))[5] ?? $modelUrl;
-            $modelIndex++;
-            $label      = $modelIndex === 1 ? 'PRIMARY' : 'FALLBACK';
-
-            for ($attempt = 1; $attempt <= 2; $attempt++) {
-                try {
-                    $log->info("[GEMINI:analyzeTranscript] Trying {$label}: {$modelName}", ['attempt' => $attempt]);
-                    $response = Http::timeout(300)->post("{$modelUrl}?key={$this->apiKey}", [
-                        'contents'         => [['parts' => [['text' => $prompt]]]],
-                        'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.3],
-                    ]);
-
-                    if ($response->status() === 429) {
-                        $wait      = $this->parseRetryDelay($response->body());
-                        $lastError = "429 on {$modelName}";
-                        $log->warning("[GEMINI:analyzeTranscript] 429 rate-limit on {$label}: {$modelName}", ['wait' => $wait]);
-                        if ($attempt === 1 && $wait > 0 && $wait <= 120) {
-                            sleep($wait + 1);
-                            continue;
-                        }
-                        break;
-                    }
-
-                    if ($response->status() === 503 && $attempt === 1) {
-                        $lastError = "503 on {$modelName}, retrying…";
-                        $log->warning("[GEMINI:analyzeTranscript] 503 on {$label}: {$modelName}, retrying in 5s");
-                        sleep(5);
-                        continue;
-                    }
-
-                    if (!$response->ok()) {
-                        $lastError = "HTTP {$response->status()} on {$modelName}";
-                        $log->error("[GEMINI:analyzeTranscript] {$label} failed: {$lastError}");
-                        break;
-                    }
-
-                    $text  = $response->json('candidates.0.content.parts.0.text') ?? '';
-                    $clean = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim($text));
-                    $clips = json_decode($clean, true);
-
-                    if (!is_array($clips) || empty($clips)) {
-                        $lastError = "Invalid JSON from {$modelName}";
-                        $log->error("[GEMINI:analyzeTranscript] {$label} invalid JSON: {$modelName}");
-                        break;
-                    }
-
-                    $log->info("[GEMINI:analyzeTranscript] SUCCESS with {$label}: {$modelName}", [
-                        'attempt' => $attempt,
-                        'clips'   => count($clips),
-                    ]);
-                    return array_slice($clips, 0, $clipCount);
-                } catch (\Throwable $e) {
-                    $lastError = $e->getMessage();
-                    $log->error("[GEMINI:analyzeTranscript] {$label} exception: {$modelName}", ['error' => $lastError]);
-                    break;
-                }
+        $clips = $this->generate($prompt, 'analyzeTranscript', 0.3, 300, function ($data) {
+            // Some models wrap the array: {"clips": [...]}
+            if (is_array($data) && !array_is_list($data)) {
+                $data = collect($data)->first(fn($v) => is_array($v) && array_is_list($v));
             }
-        }
+            return is_array($data) && $data ? $data : null;
+        });
 
-        throw new \RuntimeException('Gemini analisa gagal: ' . $lastError);
+        return array_slice($clips, 0, $clipCount);
     }
 
     public function generateCaption(string $topic, string $hookText, array $subtitleSegments, string $language = 'id'): array
@@ -193,47 +88,142 @@ class GeminiService
         {"caption": "...", "hashtags": ["#tag1", "#tag2"]}
         PROMPT;
 
-        foreach ($this->models as $modelUrl) {
-            for ($attempt = 1; $attempt <= 2; $attempt++) {
+        try {
+            $data = $this->generate($prompt, 'caption', 0.7, 30, fn($d) => isset($d['caption'], $d['hashtags']) ? $d : null);
+        } catch (RuntimeException) {
+            return ['caption' => '', 'hashtags' => []];
+        }
+
+        return [
+            'caption'  => (string) $data['caption'],
+            'hashtags' => array_values(array_filter((array) $data['hashtags'], 'is_string')),
+        ];
+    }
+
+    /**
+     * Ask each provider in turn until one returns JSON that $accept turns into a value.
+     *
+     * @template T
+     * @param callable(mixed): (T|null) $accept null = unusable answer, try the next model
+     * @return T
+     */
+    private function generate(string $prompt, string $tag, float $temperature, int $timeout, callable $accept): mixed
+    {
+        $log      = Log::channel('clipper_jobs');
+        $failures = [];
+
+        foreach ($this->targets() as $target) {
+            $name = $target['name'];
+            // Seconds before the 2nd and 3rd try on 5xx/timeouts
+            foreach ([0, ...(array) config('services.gemini.retry_pauses', [4, 12])] as $try => $pause) {
+                if ($pause) {
+                    sleep($pause);
+                }
                 try {
-                    $response = Http::timeout(30)->post("{$modelUrl}?key={$this->apiKey}", [
-                        'contents'         => [['parts' => [['text' => $prompt]]]],
-                        'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.7],
-                    ]);
+                    $log->info("[LLM:{$tag}] {$name}", ['try' => $try + 1]);
+                    $response = $target['call']($prompt, $temperature, $timeout);
+                } catch (\Throwable $e) {
+                    $failures[$name] = 'koneksi gagal';
+                    $log->warning("[LLM:{$tag}] {$name} exception", ['error' => $e->getMessage()]);
+                    continue; // timeouts/connection resets: worth another try
+                }
 
-                    if ($response->status() === 429) {
-                        $wait = $this->parseRetryDelay($response->body());
-                        if ($attempt === 1 && $wait > 0 && $wait <= 60) {
-                            sleep($wait + 1);
-                            continue;
-                        }
-                        break;
+                $status = $response->status();
+                if ($status === 429) {
+                    $wait = $this->parseRetryDelay($response->body());
+                    $daily = str_contains($response->body(), 'PerDay') || str_contains($response->body(), 'free_tier_requests');
+                    $failures[$name] = $daily ? 'kuota harian habis' : 'rate limit';
+                    $log->warning("[LLM:{$tag}] {$name} 429", ['daily' => $daily, 'wait' => $wait]);
+                    if ($daily || $try > 0 || $wait > 30) {
+                        break; // its quota won't come back in time: next model
                     }
-
-                    if ($response->status() === 503 && $attempt === 1) {
-                        sleep(5);
-                        continue;
-                    }
-
-                    if (!$response->ok()) break;
-
-                    $text  = $response->json('candidates.0.content.parts.0.text') ?? '';
-                    $clean = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim($text));
-                    $data  = json_decode($clean, true);
-
-                    if (isset($data['caption']) && isset($data['hashtags'])) {
-                        return [
-                            'caption'  => (string) $data['caption'],
-                            'hashtags' => array_values(array_filter((array) $data['hashtags'], 'is_string')),
-                        ];
-                    }
-                } catch (\Throwable) {
+                    sleep(min(max(1, $wait), 30));
+                    continue;
+                }
+                if ($status >= 500) {
+                    $failures[$name] = "server sibuk ({$status})";
+                    $log->warning("[LLM:{$tag}] {$name} {$status}");
+                    continue;
+                }
+                if (!$response->ok()) {
+                    $failures[$name] = "HTTP {$status}";
+                    $log->error("[LLM:{$tag}] {$name} HTTP {$status}", ['body' => mb_substr($response->body(), 0, 300)]);
                     break;
                 }
+
+                $text   = $target['text']($response);
+                $clean  = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim((string) $text));
+                $result = $accept(json_decode($clean, true));
+                if ($result === null) {
+                    $failures[$name] = 'jawaban tidak valid';
+                    $log->warning("[LLM:{$tag}] {$name} returned unusable JSON");
+                    break;
+                }
+
+                $log->info("[LLM:{$tag}] SUCCESS {$name}", ['try' => $try + 1]);
+                return $result;
             }
         }
 
-        return ['caption' => '', 'hashtags' => []];
+        if (!$failures) {
+            throw new RuntimeException('Tidak ada AI yang dikonfigurasi: isi LLM_GATEWAY_* atau GEMINI_API_KEY di .env.');
+        }
+
+        throw new RuntimeException($this->failureMessage($failures));
+    }
+
+    /** @return list<array{name: string, call: callable, text: callable}> */
+    private function targets(): array
+    {
+        $targets = [];
+
+        foreach ($this->gateway['models'] ?? [] as $model) {
+            $gw = $this->gateway;
+            $targets[] = [
+                'name' => 'gateway:' . $model,
+                'call' => fn(string $prompt, float $t, int $timeout): Response => Http::timeout(max($timeout, 120))
+                    ->withToken($gw['key'])
+                    ->post($gw['url'] . '/chat/completions', [
+                        'model'       => $model,
+                        'messages'    => [['role' => 'user', 'content' => $prompt]],
+                        'temperature' => $t,
+                    ]),
+                'text' => fn(Response $r) => $r->json('choices.0.message.content'),
+            ];
+        }
+
+        // No API key = gateway only; skip Gemini instead of sending keyless requests
+        foreach ($this->apiKey !== '' ? $this->models : [] as $model) {
+            $targets[] = [
+                'name' => $model,
+                // Key in a header, not the URL: URLs end up in exception messages and logs
+                'call' => fn(string $prompt, float $t, int $timeout): Response => Http::timeout($timeout)
+                    ->withHeaders(['x-goog-api-key' => $this->apiKey])
+                    ->post(self::BASE . "{$model}:generateContent", [
+                        'contents'         => [['parts' => [['text' => $prompt]]]],
+                        'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => $t],
+                    ]),
+                'text' => fn(Response $r) => $r->json('candidates.0.content.parts.0.text'),
+            ];
+        }
+
+        return $targets;
+    }
+
+    /** One line a user can act on, instead of the last model's raw HTTP error. */
+    private function failureMessage(array $failures): string
+    {
+        $values = array_values($failures);
+        $hint = match (true) {
+            $values && count(array_filter($values, fn($v) => str_contains($v, 'kuota'))) === count($values)
+                => 'Kuota harian Gemini habis di semua model. Coba lagi besok, atau pakai API key berbayar / gateway.',
+            $values && count(array_filter($values, fn($v) => str_contains($v, 'sibuk') || str_contains($v, 'kuota') || str_contains($v, 'rate'))) === count($values)
+                => 'Server Gemini sedang sibuk/terbatas. Coba lagi beberapa menit lagi.',
+            default => 'AI gagal menganalisis.',
+        };
+        $detail = implode(', ', array_map(fn($m, $why) => "{$m}: {$why}", array_keys($failures), $values));
+
+        return "Gemini analisa gagal — {$hint}" . ($detail ? " ({$detail})" : '');
     }
 
     private function buildPromptFromTranscript(
@@ -300,6 +290,30 @@ class GeminiService
         - Hanya pilih segmen dengan viral_score ≥ 7
         - Urutkan dari viral_score tertinggi ke terendah
 
+        == HOOK_TEXT — teks besar di layar selama 3 detik pertama ==
+        Tujuannya satu: bikin orang BERHENTI scroll karena PENASARAN. Ini judul, BUKAN kutipan transcript dan BUKAN ringkasan.
+        - MAKSIMAL 5 KATA (idealnya 3–4), maksimal 30 karakter. Hitung katanya.
+        - Buka "celah rasa ingin tahu": janjikan jawaban/kejutan yang baru terungkap di dalam clip. JANGAN bocorkan jawabannya.
+        - Teknik penasaran yang ampuh:
+          · rahasia/hal tersembunyi ("Rahasia yang *disembunyikan* bank")
+          · kalimat menggantung ("Ternyata *penyebabnya* ini…")
+          · kontradiksi/kontras ("Gaji 50 juta, tetap *bokek*")
+          · pertanyaan tajam ("Kenapa kamu *susah kaya*?")
+          · klaim berani ("Kerja keras itu *overrated*")
+          · angka spesifik ("3 tanda kamu *burnout*")
+          · taruhan pribadi/pengakuan ("Aku ditipu *sahabat sendiri*")
+          · peringatan ("Jangan *resign* dulu!")
+        - Bahasa santai mengikuti gaya pembicara (gue/lo atau aku/kamu), bahasa {$langHint}. Tanpa titik di akhir; boleh "?", "!", atau "…".
+        - Apit 1–2 kata terpenting dengan bintang untuk diberi warna sorotan, contoh: "Gaji 50 juta, tetap *bokek*".
+        - DILARANG: lebih dari 5 kata, emoji, hashtag, tanda kutip, kalimat terpotong, nama orang yang tidak dikenal penonton,
+          kalimat generik ("Wajib nonton!", "Tonton sampai habis"), clickbait yang tidak dijawab clip.
+        Contoh BURUK → BAIK:
+        - "Tapi kalau kemudian hanya menjadi sebagai korban, lalu berharap orang lain yang mengubah.." → "Berhenti jadi *korban*!"
+        - "Kakek ini menikah 60 tahun, tapi kenapa masih terlihat sangat mencintai? Rahasianya: dia…" → "Rahasia nikah *60 tahun*"
+        - "Di usia dewasa pentingnya kita punya respons flexibility." → "Skill dewasa yang *langka*"
+        - "Daripada nanya 'gimana caranya viral?', ubah pertanyaannya jadi…" → "Berhenti ngejar *viral*"
+        - "Gue takut di New York. Ada berita disamperin, ditusuk, dibakar di subway?" → "Sisi *gelap* New York"
+
         == FORMAT OUTPUT ==
         Kembalikan array JSON {$clipCount} item:
         [
@@ -311,7 +325,7 @@ class GeminiService
             "reason": string (mengapa segmen ini viral — sebutkan sinyal spesifik dari transcript),
             "viral_score": int (1-10, berdasarkan kriteria di atas),
             "viral_potential": "tinggi"|"sedang"|"rendah",
-            "hook_text": string (kalimat hook max 100 karakter bahasa {$langHint}, harus dari kalimat pembuka segmen atau adaptasinya),
+            "hook_text": string (judul overlay MAKSIMAL 5 kata, bikin penasaran, ikuti aturan HOOK_TEXT di atas),
             "completion_check": string (konfirmasi bahwa topik selesai di end_seconds, bukan terpotong),
             "music_mood": "energetic"|"chill"|"inspiring"|"dramatic"|"funny"|"sad" (suasana musik latar yang paling cocok dengan emosi segmen),
             "subtitle_segments": [{"start": float, "end": float, "text": string}]
@@ -335,7 +349,7 @@ class GeminiService
         $urlArg  = escapeshellarg($url);
         $cookies = $this->cookiesArg();
 
-        exec("$ytdlp $cookies --dump-json --no-download $urlArg 2>/dev/null", $out, $code);
+        exec("$ytdlp $cookies --dump-json --no-download -- $urlArg 2>/dev/null", $out, $code);
 
         if ($code !== 0 || empty($out)) {
             return ['title' => 'Unknown', 'description' => '', 'duration' => 0, 'chapters' => [], 'tags' => []];
@@ -424,7 +438,7 @@ class GeminiService
     private function cookiesArg(): string
     {
         $candidates = [
-            env('YTDLP_COOKIES', ''),
+            config('services.ytdlp.cookies_file', ''),
             ($_SERVER['HOME'] ?? '') . '/yt-cookies.txt',
         ];
         foreach ($candidates as $path) {

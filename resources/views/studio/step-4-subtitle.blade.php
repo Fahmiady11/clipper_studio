@@ -50,10 +50,14 @@
         <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Posisi</div>
           <div class="seg">
-            <button :class="{ on: subtitlePos === 'top' }"    @click="subtitlePos = 'top'"    type="button">Atas</button>
-            <button :class="{ on: subtitlePos === 'center' }" @click="subtitlePos = 'center'" type="button">Tengah</button>
-            <button :class="{ on: subtitlePos === 'bottom' }" @click="subtitlePos = 'bottom'" type="button">Bawah</button>
+            <button :class="{ on: subtitleY === null && subtitlePos === 'top' }"    @click="subtitlePos = 'top'; subtitleY = null"    type="button">Atas</button>
+            <button :class="{ on: subtitleY === null && subtitlePos === 'center' }" @click="subtitlePos = 'center'; subtitleY = null" type="button">Tengah</button>
+            <button :class="{ on: subtitleY === null && subtitlePos === 'bottom' }" @click="subtitlePos = 'bottom'; subtitleY = null" type="button">Bawah</button>
+            <button class="on" x-show="subtitleY !== null" @click="subtitleY = null" type="button" title="Kembali ke preset">
+              <span x-text="'Kustom · ' + subtitleY + '%'"></span> ✕
+            </button>
           </div>
+          <div class="fhint" style="margin-top:8px">Atau seret subtitle di preview untuk menaruhnya persis di posisi yang kamu mau.</div>
         </div>
         <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Background subtitle</div>
@@ -67,7 +71,7 @@
     </div>
 
     {{-- RIGHT: dedicated phone preview --}}
-    <div style="position:sticky;top:130px">
+    <div class="wiz-preview">
       <div class="preview-label">
         <span>Live preview · 9:16</span>
         <span x-text="currentLayout.title"></span>
@@ -83,8 +87,15 @@
           <span x-text="meta ? meta.channel : 'Channel Preview'"></span>
         </div>
 
-        {{-- subtitle ON: karaoke words always visible (ignores hook state) --}}
-        <div x-show="subtitleEnabled" :style="pvSubStyle()">
+        {{-- Drag guides: centre line + the strip TikTok's caption/buttons cover --}}
+        <div class="pv-guides" x-show="subDragging">
+          <div class="pv-guide-mid"></div>
+          <div class="pv-guide-ui"><span>tertutup UI TikTok</span></div>
+        </div>
+
+        {{-- subtitle ON: karaoke words always visible (ignores hook state); drag to move --}}
+        <div x-show="subtitleEnabled" :style="pvSubStyle()" class="pv-sub-drag" :class="{ dragging: subDragging }"
+             @pointerdown="startSubDrag($event)" title="Seret untuk memindahkan subtitle">
           <div :style="pvSubBoxStyle()">
             <template x-for="w in pvSubWordsAlways" :key="w.idx">
               <span

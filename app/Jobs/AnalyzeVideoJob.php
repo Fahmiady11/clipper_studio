@@ -9,6 +9,9 @@ use App\Services\GeminiService;
 use App\Services\MusicService;
 use App\Services\TranscriptService;
 use App\Services\YtDlpService;
+use App\Support\Cancellation;
+use App\Support\HookText;
+use App\Support\JobCancelled;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -46,8 +49,28 @@ class AnalyzeVideoJob implements ShouldQueue
 
     public function handle(YtDlpService $ytdlp, TranscriptService $transcriptSvc, GeminiService $gemini): void
     {
-        $log     = Log::channel('clipper_jobs');
-        $project = ClipProject::with(['subtitleSetting', 'hookSetting'])->findOrFail($this->projectId);
+        $project = ClipProject::with(['subtitleSetting', 'hookSetting'])->find($this->projectId);
+        if (!$project || $project->cancelled_at) {
+            return; // cancelled or deleted from history while still waiting in the queue
+        }
+
+        try {
+            Cancellation::watch(
+                fn() => $this->isCancelled(),
+                fn() => $this->analyze($project, $ytdlp, $transcriptSvc, $gemini)
+            );
+        } catch (JobCancelled) {
+            // The cancel endpoint already marked the project; drop the partial download
+            foreach (glob(storage_path('app/temp/' . $this->projectId . '/video.*')) ?: [] as $partial) {
+                @unlink($partial);
+            }
+            Log::channel('clipper_jobs')->info('AnalyzeVideoJob cancelled', ['project_id' => $this->projectId]);
+        }
+    }
+
+    private function analyze(ClipProject $project, YtDlpService $ytdlp, TranscriptService $transcriptSvc, GeminiService $gemini): void
+    {
+        $log = Log::channel('clipper_jobs');
 
         $this->stage($project, 1);
         $log->info('AnalyzeVideoJob started', [
@@ -130,7 +153,7 @@ class AnalyzeVideoJob implements ShouldQueue
                 'topic'           => $clip['topic'] ?? 'Clip #' . $clip['ranking'],
                 'reason'          => $clip['reason'] ?? '',
                 'viral_potential' => $clip['viral_potential'] ?? 'sedang',
-                'hook_text'       => mb_substr($clip['hook_text'] ?? '', 0, 100) ?: null,
+                'hook_text'       => HookText::clean($clip['hook_text'] ?? null, shorten: true),
                 'subtitle_json'   => $clip['subtitle_segments'] ?? [],
                 'music_mood'      => MusicService::normalizeMood($clip['music_mood'] ?? null),
                 'status'          => 'pending',
@@ -143,7 +166,8 @@ class AnalyzeVideoJob implements ShouldQueue
             $log->debug('GeneratedClip saved', ['ranking' => $clip['ranking']]);
         }
 
-        $project->update(['status' => 'done', 'progress_stage' => 6]);
+        // whereNull: a cancel that landed during the save wins over "done"
+        ClipProject::whereKey($project->id)->whereNull('cancelled_at')->update(['status' => 'done', 'progress_stage' => 6]);
         $log->info('AnalyzeVideoJob done', ['project_id' => $project->id]);
     }
 
@@ -155,15 +179,23 @@ class AnalyzeVideoJob implements ShouldQueue
             'trace'      => $e->getTraceAsString(),
         ]);
 
-        ClipProject::where('id', $this->projectId)->update([
+        ClipProject::where('id', $this->projectId)->whereNull('cancelled_at')->update([
             'status'           => 'failed',
             'error_msg'        => $e->getMessage(),
             'progress_message' => mb_substr('Gagal: ' . $e->getMessage(), 0, 119),
         ]);
     }
 
+    private function isCancelled(): bool
+    {
+        // A project deleted from history counts as cancelled too
+        return !ClipProject::whereKey($this->projectId)->whereNull('cancelled_at')->exists();
+    }
+
     private function stage(ClipProject $project, int $n): void
     {
+        Cancellation::throwIfCancelled(); // stage boundaries are the cancel checkpoints
+
         $tries = 0;
         do {
             try {

@@ -9,7 +9,10 @@ use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
 use App\Models\VideoSource;
+use App\Services\MusicService;
 use App\Services\ProjectCreator;
+use App\Support\ClipSettings;
+use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -38,35 +41,46 @@ class AutopilotController extends Controller
             'videos_found'   => $s->discovered_videos_count,
             'last_run_at'    => $s->last_run_at?->toISOString(),
             'last_error'     => $s->last_error,
+            'settings'       => ClipSettings::forAutopilot($s->settings),
         ]));
+    }
+
+    /** Starting look for a new source: the user's latest manual project, else defaults. */
+    public function defaults(ProjectCreator $creator): JsonResponse
+    {
+        return response()->json(ClipSettings::forAutopilot($creator->settingsFrom($this->latestManualProject())));
     }
 
     public function storeSource(Request $request, ProjectCreator $creator): JsonResponse
     {
         $data = $request->validate([
             'type'           => ['required', 'in:channel,keyword'],
-            'value'          => ['required', 'string', 'max:255'],
+            'value'          => ['required', 'string', 'max:255', function ($attribute, $value, $fail) use ($request) {
+                if ($request->input('type') === 'channel' && !YoutubeUrl::channel($value)) {
+                    $fail('Channel tidak valid. Pakai @namachannel atau link youtube.com/@namachannel.');
+                }
+                if ($request->input('type') === 'keyword' && preg_match('/[\r\n]/', $value)) {
+                    $fail('Keyword tidak boleh berisi baris baru.');
+                }
+            }],
             'interval_hours' => ['sometimes', 'integer', 'min:1', 'max:168'],
             'max_per_run'    => ['sometimes', 'integer', 'min:1', 'max:5'],
             'min_minutes'    => ['sometimes', 'integer', 'min:1', 'max:600'],
             'max_minutes'    => ['sometimes', 'integer', 'min:1', 'max:600', 'gte:min_minutes'],
-        ]);
+        ] + ClipSettings::rules('settings.'));
 
-        // Clips follow the look of the user's latest manual project
-        $template = ClipProject::where('user_id', Auth::id())
-            ->whereNull('video_source_id')
-            ->latest()
-            ->first();
+        // Look chosen in the form, else the user's latest manual project
+        $settings = $data['settings'] ?? $creator->settingsFrom($this->latestManualProject());
 
         $source = VideoSource::create([
             'user_id'           => Auth::id(),
             'type'              => $data['type'],
-            'value'             => trim($data['value']),
+            'value'             => $data['type'] === 'channel' ? YoutubeUrl::channel($data['value']) : trim($data['value']),
             'interval_hours'    => $data['interval_hours'] ?? 6,
             'max_per_run'       => $data['max_per_run'] ?? 1,
             'min_video_seconds' => ($data['min_minutes'] ?? 5) * 60,
             'max_video_seconds' => ($data['max_minutes'] ?? 120) * 60,
-            'settings'          => $creator->settingsFrom($template),
+            'settings'          => ClipSettings::forAutopilot($settings),
         ]);
 
         return response()->json(['id' => $source->id], 201);
@@ -74,8 +88,13 @@ class AutopilotController extends Controller
 
     public function updateSource(Request $request, int $sourceId): JsonResponse
     {
-        $data = $request->validate(['enabled' => ['required', 'boolean']]);
-        $this->ownedSource($sourceId)->update($data);
+        $source = $this->ownedSource($sourceId);
+        $data   = $request->validate(['enabled' => ['sometimes', 'boolean']] + ClipSettings::rules('settings.'));
+        if (isset($data['settings'])) {
+            // Applies to clips made from now on; ones already made keep their look
+            $data['settings'] = ClipSettings::forAutopilot(array_replace_recursive($source->settings ?? [], $data['settings']));
+        }
+        $source->update($data);
 
         return response()->json(['success' => true]);
     }
@@ -98,7 +117,7 @@ class AutopilotController extends Controller
     }
 
     /** Autopilot clips: waiting for review first, then the most recent decisions. */
-    public function review(): JsonResponse
+    public function review(MusicService $music): JsonResponse
     {
         $base = GeneratedClip::query()
             ->whereNotNull('review_status')
@@ -123,6 +142,7 @@ class AutopilotController extends Controller
             'preview_url'     => $c->status === 'done' ? url("/api/clips/{$c->id}/download") : null,
             'tiktok_status'   => $c->tiktok_status,
             'tiktok_error'    => $c->tiktok_error,
+            'music_credit'    => $music->creditFor($c->music_track),
         ]));
     }
 
@@ -132,7 +152,9 @@ class AutopilotController extends Controller
         $clip    = $this->ownedReviewClip($clipId);
         $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']);
 
-        abort_if($clip->status !== 'done', 422, 'Clip belum selesai dirender.');
+        abort_if($clip->status !== 'done' || !$clip->output_path, 422, 'Clip belum selesai dirender.');
+        abort_if($clip->review_status === 'rejected', 422, 'Clip sudah ditolak dan filenya dihapus.');
+        abort_if(in_array($clip->tiktok_status, ['queued', 'uploading', 'processing'], true), 409, 'Clip sedang dikirim ke TikTok.');
         abort_unless($account->hasScope('video.upload'), 422, TiktokAccount::scopeMessage('video.upload'));
 
         $clip->update([
@@ -157,6 +179,11 @@ class AutopilotController extends Controller
         $clip->update(['review_status' => 'rejected', 'output_path' => null]);
 
         return response()->json(['success' => true]);
+    }
+
+    private function latestManualProject(): ?ClipProject
+    {
+        return ClipProject::where('user_id', Auth::id())->whereNull('video_source_id')->latest()->first();
     }
 
     private function ownedSource(int $sourceId): VideoSource

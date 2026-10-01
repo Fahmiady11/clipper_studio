@@ -114,4 +114,12 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    | Public sign-up. Off by default: the very first account can always be
+    | created (so a fresh install works), after that /register is closed
+    | unless REGISTRATION_ENABLED=true. Strangers with the URL can't sign up
+    | and spend your AI quota, disk and TikTok accounts.
+    */
+    'registration_enabled' => (bool) env('REGISTRATION_ENABLED', false),
+
 ];

@@ -36,7 +36,18 @@ return [
     ],
 
     'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
+        'key'    => env('GEMINI_API_KEY'),
+        // Tried in order; each has its own (free-tier) quota, so a longer list survives a spent one
+        'models' => explode(',', env('GEMINI_MODELS',
+            'gemini-2.5-flash,gemini-3.5-flash,gemini-2.5-flash-lite,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-flash-lite-latest')),
+    ],
+
+    // Optional OpenAI-compatible gateway (e.g. OmniRoute) tried before the Gemini API key.
+    // LLM_GATEWAY_URL is the base that ends in /v1; leave empty to use Gemini directly.
+    'llm_gateway' => [
+        'url'   => env('LLM_GATEWAY_URL'),
+        'key'   => env('LLM_GATEWAY_KEY'),
+        'model' => env('LLM_GATEWAY_MODEL'),
     ],
 
     'ytdlp' => [

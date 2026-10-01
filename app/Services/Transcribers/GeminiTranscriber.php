@@ -14,7 +14,7 @@ class GeminiTranscriber
     public function transcribe(string $cutFileArg, string $destSrt, string $lang, int $duration): void
     {
         echo "Using Gemini API for transcription\n";
-        $apiKey    = env('GEMINI_API_KEY');
+        $apiKey    = config('services.gemini.key'); // env() is null once config is cached
         $audioFile = "/tmp/{$this->jobId}_gemini.wav";
         $audioOut  = escapeshellarg($audioFile);
 
@@ -56,13 +56,14 @@ class GeminiTranscriber
             'generationConfig' => ['temperature' => 0.0],
         ]);
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=' . $apiKey;
+        // Key in a header, never in the URL (URLs leak into logs and error messages)
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
         $ch  = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'x-goog-api-key: ' . $apiKey],
             CURLOPT_TIMEOUT        => 180,
         ]);
 

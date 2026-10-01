@@ -38,6 +38,9 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);-webkit-font
 .footer{margin-top:20px;text-align:center;font-size:13px;color:var(--text-muted)}
 .footer a{color:var(--teal);text-decoration:none}
 .footer a:hover{text-decoration:underline}
+.notice{font-size:13px;line-height:1.45;color:var(--teal);background:var(--teal-dim);border:1px solid rgba(45,212,191,.25);border-radius:10px;padding:10px 14px;margin:0 0 20px}
+.btn[disabled]{opacity:.6;cursor:default;transform:none}
+@media(max-width:480px){.shell{padding:20px 16px;justify-content:flex-start;padding-top:48px}.card{padding:24px 20px}.brand{margin-bottom:28px}}
 </style>
 </head>
 <body>
@@ -51,7 +54,11 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);-webkit-font
     <h1 class="card-title">Buat akun baru</h1>
     <p class="card-sub">Gratis. Tidak perlu kartu kredit.</p>
 
-    <form method="POST" action="{{ route('register') }}">
+    @if (session('status'))
+      <div class="notice" role="status">{{ session('status') }}</div>
+    @endif
+
+    <form method="POST" action="{{ route('register') }}" onsubmit="this.querySelector('[type=submit]').disabled = true">
       @csrf
 
       <div class="fblock">

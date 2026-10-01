@@ -1,4 +1,4 @@
-<div x-show="!done && step !== 6" style="margin:0 auto;padding:0 32px;width:100%">
+<div x-show="!done && step !== 6" class="wiz-nav-wrap">
   <div class="wiz-nav">
     <div class="wiz-nav-summary">
       <span x-show="step === 1" x-text="meta ? 'Video siap · ' + fmtClock(meta.durationSeconds) : 'Proses link untuk lanjut'"></span>

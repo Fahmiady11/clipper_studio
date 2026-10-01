@@ -131,7 +131,8 @@ class TikTokController extends Controller
         // The job stops polling after ~1 minute; pick up the final state here
         if ($clip->tiktok_status === 'processing' && $clip->tiktok_publish_id && $clip->tiktok_account_id) {
             try {
-                $account = TiktokAccount::findOrFail($clip->tiktok_account_id);
+                // Scoped to the user too: never use someone else's tokens, even via a stale id
+                $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($clip->tiktok_account_id);
                 $status  = $this->tiktok->publishStatus($account, $clip->tiktok_publish_id);
                 $clip->update([
                     'tiktok_status' => UploadToTikTokJob::mapStatus($status['status']),

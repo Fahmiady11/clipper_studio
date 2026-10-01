@@ -43,6 +43,7 @@ class ProjectCreator
             'text_color'       => $sub['text_color'] ?? '#ffffff',
             'highlight_color'  => $sub['highlight_color'] ?? '#facc15',
             'position'         => $sub['position'] ?? 'bottom',
+            'position_y'       => $sub['position_y'] ?? null,
             'background_style' => $sub['background_style'] ?? 'semi',
         ]);
 
@@ -81,7 +82,7 @@ class ProjectCreator
             'duration_mode' => $project->duration_mode,
             'min_duration'  => $project->min_duration,
             'max_duration'  => $project->max_duration,
-            'subtitle'      => $sub ? $sub->only(['enabled', 'font_family', 'font_size', 'text_color', 'highlight_color', 'position', 'background_style']) : [],
+            'subtitle'      => $sub ? $sub->only(['enabled', 'font_family', 'font_size', 'text_color', 'highlight_color', 'position', 'position_y', 'background_style']) : [],
             'hook'          => $hook ? $hook->only(['enabled', 'hook_text', 'is_ai_generated', 'duration_seconds', 'position', 'text_color', 'background_style']) : [],
             'music'         => ['enabled' => $project->music_enabled, 'mood' => $project->music_mood, 'volume' => $project->music_volume],
         ];

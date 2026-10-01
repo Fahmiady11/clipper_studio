@@ -16,12 +16,8 @@
     </div>
   </div>
   {{-- hook overlay --}}
-  <div x-show="pvInHook && hookEnabled" style="position:absolute;inset:0;z-index:7;animation:fadeIn .25s ease both">
-    <div :style="'position:absolute;left:20px;right:20px;text-align:center;'+pvHookPosStyle()">
-      <div :style="pvHookBoxStyle()" x-text="hookText"></div>
-      <div style="margin-top:10px;font-family:ui-monospace,monospace;font-size:9px;letter-spacing:.1em;color:rgba(255,255,255,.5)" x-text="'HOOK · '+hookDuration+'s'"></div>
-    </div>
-  </div>
+  @include('studio._hook-overlay', ['text' => 'pvHookText'])
+  <div x-show="pvInHook && hookEnabled" class="pv-hook-tag" x-text="'HOOK · ' + hookDuration + 's' + (hookAi ? ' · contoh AI' : '')"></div>
   {{-- progress bar --}}
   <div style="position:absolute;left:14px;right:14px;bottom:16px;z-index:5;height:2px;background:rgba(255,255,255,.22);border-radius:999px;overflow:hidden">
     <div :style="'width:'+pvProgress+'%;height:100%;background:#fff'"></div>

@@ -35,11 +35,11 @@ class AutopilotTest extends TestCase
         // Fake yt-dlp: prints flat-playlist JSON lines and records its arguments
         $this->fakeYtDlp = sys_get_temp_dir() . '/fake-ytdlp-' . uniqid();
         $lines = [
-            ['id' => 'vid_new_1', 'title' => 'Video baru 1', 'channel' => 'Chan', 'duration' => 1200],
-            ['id' => 'vid_short', 'title' => 'Terlalu pendek', 'channel' => 'Chan', 'duration' => 60],
-            ['id' => 'vid_seen',  'title' => 'Sudah diproses', 'channel' => 'Chan', 'duration' => 1500],
-            ['id' => 'vid_new_2', 'title' => 'Video baru 2', 'channel' => 'Chan', 'duration' => 900],
-            ['id' => 'vid_live',  'title' => 'Akan live', 'live_status' => 'is_upcoming'],
+            ['id' => 'vidNew1aaaa', 'title' => 'Video baru 1', 'channel' => 'Chan', 'duration' => 1200],
+            ['id' => 'vidShortaaa', 'title' => 'Terlalu pendek', 'channel' => 'Chan', 'duration' => 60],
+            ['id' => 'vidSeenaaaa',  'title' => 'Sudah diproses', 'channel' => 'Chan', 'duration' => 1500],
+            ['id' => 'vidNew2aaaa', 'title' => 'Video baru 2', 'channel' => 'Chan', 'duration' => 900],
+            ['id' => 'vidLiveaaaa',  'title' => 'Akan live', 'live_status' => 'is_upcoming'],
         ];
         $out = implode("\n", array_map('json_encode', $lines));
         file_put_contents($this->fakeYtDlp, "#!/bin/sh\necho \"\$@\" > {$this->fakeYtDlp}.args\ncat <<'JSON'\n{$out}\nJSON\n");
@@ -75,7 +75,7 @@ class AutopilotTest extends TestCase
     {
         $videos = (new YtDlpService())->listVideos('keyword', 'podcast bisnis', 20);
 
-        $this->assertSame(['vid_new_1', 'vid_short', 'vid_seen', 'vid_new_2'], array_column($videos, 'id'));
+        $this->assertSame(['vidNew1aaaa', 'vidShortaaa', 'vidSeenaaaa', 'vidNew2aaaa'], array_column($videos, 'id'));
         $this->assertStringContainsString('ytsearchdate20:podcast bisnis', file_get_contents($this->fakeYtDlp . '.args'));
     }
 
@@ -84,13 +84,13 @@ class AutopilotTest extends TestCase
         Queue::fake();
         $user   = User::factory()->create();
         $source = $this->source($user);
-        DiscoveredVideo::create(['user_id' => $user->id, 'video_id' => 'vid_seen']);
+        DiscoveredVideo::create(['user_id' => $user->id, 'video_id' => 'vidSeenaaaa']);
 
         $started = app(DiscoveryService::class)->run($source);
 
         $this->assertCount(2, $started); // new_1 + new_2; short, seen and upcoming skipped
         $this->assertSame(
-            ['https://www.youtube.com/watch?v=vid_new_1', 'https://www.youtube.com/watch?v=vid_new_2'],
+            ['https://www.youtube.com/watch?v=vidNew1aaaa', 'https://www.youtube.com/watch?v=vidNew2aaaa'],
             array_map(fn($p) => $p->youtube_url, $started)
         );
         $project = $started[0]->fresh();

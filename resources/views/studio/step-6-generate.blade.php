@@ -2,7 +2,8 @@
 
   {{-- Not started --}}
   <div class="processing" x-show="!generateStarted">
-    <div class="proc-status" style="color:var(--text-muted)">siap dianalisis</div>
+    <div class="proc-status" style="color:var(--text-muted)" x-text="generateCancelled ? 'dibatalkan' : 'siap dianalisis'"></div>
+    <div class="proc-note" x-show="generateCancelled">Analisis sebelumnya dibatalkan. Ubah pengaturan lewat langkah di atas, atau generate ulang.</div>
     <h2 class="proc-title">Generate clip dengan AI</h2>
     <p class="proc-sub">
       Gemini akan membaca transcript dan memilih <b style="color:var(--text)" x-text="clipCount"></b> momen paling
@@ -18,7 +19,13 @@
   </div>
 
   {{-- Error --}}
-  <div x-show="generateError" style="max-width:600px;margin:24px auto;padding:14px 18px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:#f87171" x-text="generateError"></div>
+  <div x-show="generateError" class="gen-error">
+    <div x-text="generateError"></div>
+    <div class="gen-error-actions" x-show="projectId">
+      <button class="btn btn-sm" type="button" @click="retryGenerate()" :disabled="retrying" x-text="retrying ? 'Mengulang…' : 'Coba lagi'"></button>
+      <span>Video & transcript sudah tersimpan — hanya langkah AI yang diulang.</span>
+    </div>
+  </div>
 
   {{-- Running --}}
   <div class="processing" x-show="generateStarted && !generateError">
@@ -26,6 +33,8 @@
     <h2 class="proc-title">AI sedang menganalisis video…</h2>
     <p class="proc-sub" x-text="'Memilih ' + clipCount + ' momen terbaik.'"></p>
     <div class="proc-bar-wrap"><div class="proc-bar" :style="'width:' + generateProgress + '%'"></div></div>
+    <button class="btn btn-secondary proc-cancel" type="button" @click="cancelGenerate()" :disabled="cancelling || !projectId"
+            x-text="cancelling ? 'Membatalkan…' : 'Batalkan analisis'"></button>
     <div class="proc-log">
       <template x-for="(s, i) in STAGES" :key="i">
         <div class="proc-log-row">

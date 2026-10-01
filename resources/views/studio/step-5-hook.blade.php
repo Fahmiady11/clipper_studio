@@ -43,21 +43,31 @@
           </div>
         </div>
         <div class="fblock">
-          <div class="fblock-title" style="margin-bottom:10px">Warna teks</div>
+          <div class="fblock-title" style="margin-bottom:10px">Gaya</div>
+          <div class="hook-styles">
+            <button class="hook-style" :class="{ on: hookBg === 'full' }" @click="hookBg = 'full'" type="button">
+              <span class="hook-style-demo hs-full"><i>Label</i><i>TikTok</i></span>
+              <span class="hook-style-name">Label</span>
+            </button>
+            <button class="hook-style" :class="{ on: hookBg === 'semi' }" @click="hookBg = 'semi'" type="button">
+              <span class="hook-style-demo hs-semi">Kotak<br>gelap</span>
+              <span class="hook-style-name">Kotak</span>
+            </button>
+            <button class="hook-style" :class="{ on: hookBg === 'none' }" @click="hookBg = 'none'" type="button">
+              <span class="hook-style-demo hs-none">Teks<br>outline</span>
+              <span class="hook-style-name">Outline</span>
+            </button>
+          </div>
+        </div>
+        <div class="fblock">
+          <div class="fblock-title" style="margin-bottom:10px" x-text="hookBg === 'full' ? 'Warna label' : 'Warna teks'"></div>
           <div class="swatches">
             <template x-for="c in COLOR_PRESETS" :key="c">
               <button class="swatch" :class="{ on: hookTextColor === c }" :style="'background:'+c" @click="hookTextColor = c" type="button"></button>
             </template>
           </div>
         </div>
-        <div class="fblock">
-          <div class="fblock-title" style="margin-bottom:10px">Background</div>
-          <div class="seg">
-            <button :class="{ on: hookBg === 'none' }" @click="hookBg = 'none'" type="button">Transparan</button>
-            <button :class="{ on: hookBg === 'semi' }" @click="hookBg = 'semi'" type="button">Semi hitam</button>
-            <button :class="{ on: hookBg === 'full' }" @click="hookBg = 'full'" type="button">Kotak penuh</button>
-          </div>
-        </div>
+        <div class="fhint">Apit kata dengan <b>*bintang*</b> untuk menyorotnya dengan warna highlight subtitle, misalnya <code>Gaji 50 juta, tetap *bokek*</code>. Hook pendek (3–7 kata) paling kuat; ukuran teks menyesuaikan otomatis. Font mengikuti subtitle (<span x-text="subtitleFont"></span>).</div>
       </div>
 
       <div class="fblock" style="margin-top:28px">
@@ -79,14 +89,21 @@
         <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Volume musik</div>
           <div class="sld-wrap">
-            <input class="sld" type="range" min="5" max="40" step="1" x-model.number="musicVolume" />
+            <input class="sld" type="range" min="5" max="100" step="1" x-model.number="musicVolume" />
             <span class="sld-val" x-text="musicVolume + '%'"></span>
           </div>
-          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Volume otomatis turun saat ada suara orang bicara.</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">15% = jelas di belakang suara · 30% = sejajar suara. Musik sedikit mengecil saat ada orang bicara.</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Lagu diambil dari <a href="/music" style="color:var(--teal)">library musik</a> sesuai mood; kredit lagu CC BY otomatis masuk caption.</div>
+          <div class="music-warn" x-show="musicEnabled && musicLibrary && musicLibrary.total === 0">
+            Library musik masih kosong — clip akan dirender <b>tanpa musik</b>. <a href="/music">Upload lagu dulu →</a>
+          </div>
+          <div class="music-warn soft" x-show="musicEnabled && musicLibrary && musicLibrary.total > 0 && musicMood && !musicLibrary.counts[musicMood]">
+            Belum ada lagu untuk mood ini — akan dipakai lagu dari mood lain.
+          </div>
         </div>
       </div>
     </div>
-    <div style="position:sticky;top:130px">
+    <div class="wiz-preview">
       <div class="preview-label"><span>Live preview · 9:16</span><span x-text="currentLayout.title"></span></div>
       @include('studio._phone-preview')
       <div style="margin-top:12px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.05em">↻ Hook tampil di awal loop</div>

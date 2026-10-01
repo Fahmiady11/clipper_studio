@@ -18,11 +18,7 @@
           </template>
         </div>
       </div>
-      <div x-show="pvInHook && hookEnabled" style="position:absolute;inset:0;z-index:7">
-        <div :style="'position:absolute;left:20px;right:20px;text-align:center;'+pvHookPosStyle()">
-          <div :style="pvHookBoxStyle()" x-text="resultHookText"></div>
-        </div>
-      </div>
+      @include('studio._hook-overlay', ['text' => 'resultHookText'])
       <div style="position:absolute;left:14px;right:14px;bottom:16px;z-index:5;height:2px;background:rgba(255,255,255,.22);border-radius:999px;overflow:hidden">
         <div :style="'width:'+pvProgress+'%;height:100%;background:#fff'"></div>
       </div>
@@ -35,6 +31,9 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
       </a>
       <button class="btn btn-secondary" @click="done = false; step = 7">Pilih clip lain</button>
+    </div>
+    <div style="text-align:center;margin-top:10px" x-show="hookEnabled">
+      <button class="res-edit" type="button" @click="openEditHook()">✎ Edit teks hook &amp; render ulang</button>
     </div>
     <div style="margin-top:14px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.05em"
          x-text="'H.264 · AAC · ' + (selectedClipObj ? Math.round(selectedClipObj.end_seconds - selectedClipObj.start_seconds) : 0) + 's · ' + currentLayout.title.toUpperCase()"></div>
@@ -51,6 +50,11 @@
         <p x-text="selectedClipObj ? '“' + selectedClipObj.topic + '” · ranking #' + selectedClipObj.ranking + ' · potensi viral ' + selectedClipObj.viral_potential : ''"></p>
       </div>
       <span class="status-pill">DONE</span>
+    </div>
+
+    <div class="music-warn" x-show="musicMissing" style="margin:-16px 0 24px">
+      Musik latar aktif, tapi library musik kosong saat dirender — clip ini <b>tanpa musik</b>.
+      <a href="/music">Upload lagu</a>, lalu render ulang lewat "Edit teks hook &amp; render ulang".
     </div>
 
     {{-- Caption & Hashtag (AI-generated) --}}

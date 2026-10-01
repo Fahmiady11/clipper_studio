@@ -5,11 +5,21 @@
     <p class="wiz-desc" x-text="'AI menemukan ' + clips.length + ' momen. Pilih satu untuk dipotong, diberi layout, subtitle, dan hook.'"></p>
   </div>
 
+  <div class="render-card" x-show="renderingClipId">
+    <div class="render-card-spin"></div>
+    <div class="render-card-txt">
+      <b x-text="'Merender clip #' + (selectedClipObj ? selectedClipObj.ranking : '') + '…'"></b>
+      <span>Potong, layout, subtitle, hook, lalu encode. Biasanya 1–5 menit.</span>
+    </div>
+    <button class="btn btn-secondary btn-sm" type="button" @click="cancelRender()" :disabled="cancelling"
+            x-text="cancelling ? 'Membatalkan…' : 'Batalkan'"></button>
+  </div>
+
   <div x-show="renderError" style="margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:#f87171" x-text="renderError"></div>
 
   <div class="clip-list">
     <template x-for="c in clips" :key="c.ranking">
-      <button class="clip-card-s" :class="{ on: selectedClip === c.ranking }" @click="selectedClip = c.ranking" type="button">
+      <button class="clip-card-s" :class="{ on: selectedClip === c.ranking }" @click="!renderingClipId && (selectedClip = c.ranking)" :disabled="!!renderingClipId && selectedClip !== c.ranking" type="button">
         <div class="clip-rank" x-text="c.ranking"></div>
         <div>
           <div class="clip-topic" x-text="c.topic"></div>

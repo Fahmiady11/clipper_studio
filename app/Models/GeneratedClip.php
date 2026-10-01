@@ -21,6 +21,7 @@ class GeneratedClip extends Model
         'reason',
         'viral_potential',
         'hook_text',
+        'hook_text_override',
         'subtitle_json',
         'caption',
         'hashtags_json',
@@ -34,6 +35,7 @@ class GeneratedClip extends Model
         'status',
         'review_status',
         'error_msg',
+        'cancelled_at',
     ];
 
     protected $casts = [
@@ -42,6 +44,7 @@ class GeneratedClip extends Model
         'end_seconds'   => 'float',
         'subtitle_json'  => 'array',
         'hashtags_json'  => 'array',
+        'cancelled_at'   => 'datetime',
     ];
 
     protected static function boot(): void

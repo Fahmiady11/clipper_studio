@@ -6,11 +6,11 @@ function studio() {
     'url','meta',
     'layout',
     'clipCount','durationMode','minDuration','maxDuration',
-    'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleBg',
+    'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
     'musicEnabled','musicMood','musicVolume',
     'generateStarted','generateProgress','generateLogIdx',
-    'projectId','clips','selectedClip',
+    'projectId','clips','selectedClip','renderingClipId',
     'downloadUrl','resultHookText',
   ];
 
@@ -37,22 +37,23 @@ function studio() {
   return {
     // ── state ──────────────────────────────────────────────────────────────
     step: 1, maxReached: 1, done: false, locked: false,
-    sessionId: null, historyOpen: false, history: [],
+    sessionId: null, historyOpen: false, history: [], clearingHistory: false,
 
     url: '', meta: null, loadingMeta: false, metaError: null,
     layout: 'reframe',
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 42,
     subtitleTextColor: '#ffffff', subtitleHighlight: '#facc15',
-    subtitlePos: 'bottom', subtitleBg: 'semi',
+    subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subDragging: false,
     hookEnabled: true, hookText: 'Ingin lebih baik? Coba ini.', hookAi: false,
     hookDuration: 3, hookPos: 'center', hookTextColor: '#ffffff', hookBg: 'semi',
-    musicEnabled: false, musicMood: '', musicVolume: 15,
+    musicEnabled: false, musicMood: '', musicVolume: 15, musicLibrary: null, musicMissing: false,
     generateStarted: false, generateProgress: 0, generateLogIdx: 0, generateTimer: null,
-    generateError: null, generateLogMsg: null,
+    generateError: null, generateLogMsg: null, generateCancelled: false, cancelling: false, retrying: false,
     projectId: null,
     clips: [], selectedClip: null,
-    renderingClipId: null, renderError: null, downloadUrl: null,
+    renderingClipId: null, renderError: null, downloadUrl: null, renderTimer: null,
+    fontsTick: 0,
     resultHookText: 'Ingin lebih baik? Coba ini.',
     editHookOpen: false, draftHook: '', copied: '',
     clipCaption: '', clipHashtags: [], loadingCaption: false,
@@ -122,7 +123,8 @@ function studio() {
     get selectedClipObj() {
       return this.clips.find(c => c.ranking === this.selectedClip) || null;
     },
-    get pvHookDur()   { return this.hookEnabled && this.hookText ? this.hookDuration : 0; },
+    get pvHookText()  { return this.hookAi ? this.SAMPLE_CLIPS[0].hook_text : this.hookText; },
+    get pvHookDur()   { return this.hookEnabled && this.pvHookText ? this.hookDuration : 0; },
     get pvSubTotal()  { return SAMPLE_SEGS.length ? SAMPLE_SEGS[SAMPLE_SEGS.length-1].end : 10.2; },
     get pvLoopTotal() { return this.pvHookDur + this.pvSubTotal; },
     get pvLt()        { return this.pvLoopTotal > 0 ? this.previewT % this.pvLoopTotal : 0; },
@@ -148,33 +150,19 @@ function studio() {
       return this.pvLoopTotal > 0 ? (this.pvLt / this.pvLoopTotal) * 100 : 0;
     },
 
-    // ── preview style helpers ──────────────────────────────────────────────
-    pvSubStyle() {
-      const base = 'position:absolute;left:14px;right:14px;z-index:6;text-align:center;';
-      const pos  = this.subtitlePos;
-      if (pos === 'top')    return base + 'top:14%;';
-      if (pos === 'center') return base + 'top:50%;transform:translateY(-50%);';
-      return base + 'bottom:13%;';
+    // ── preview style helpers (shared with autopilot: partials/clip-preview-js) ──
+    pvSubStyle()     { return ClipPreview.subStyle(this.subtitlePos, this.subtitleY); },
+    startSubDrag(e) {
+      this.subDragging = true;
+      ClipPreview.dragSubtitle(e, y => { this.subtitleY = y; }, () => { this.subDragging = false; });
     },
-    pvSubBoxStyle() {
-      const bgMap = { none:'transparent', semi:'rgba(0,0,0,.6)', full:'rgba(0,0,0,.9)' };
-      const bg = bgMap[this.subtitleBg] || 'transparent';
-      const fontStack = { Arial:'Arial,Helvetica,sans-serif', Roboto:"'Roboto',sans-serif", Montserrat:"'Montserrat',sans-serif", Oswald:"'Oswald',sans-serif", 'Bebas Neue':"'Bebas Neue',sans-serif" };
-      const ff = fontStack[this.subtitleFont] || 'sans-serif';
-      const sz = Math.round(this.subtitleSize * 0.34);
-      const bns = this.subtitleBg === 'none';
-      return `display:inline-block;background:${bg};padding:${bns ? '0' : '6px 10px'};border-radius:${this.subtitleBg === 'full' ? '0' : '8px'};font-family:${ff};font-size:${sz}px;font-weight:800;line-height:1.2;letter-spacing:-.01em;text-shadow:${bns ? '0 2px 8px rgba(0,0,0,.85)' : 'none'};text-transform:${this.subtitleFont === 'Bebas Neue' ? 'uppercase' : 'none'}`;
-    },
-    pvHookPosStyle() {
-      const pos = this.hookPos;
-      if (pos === 'top')    return 'top:18%;';
-      if (pos === 'bottom') return 'bottom:20%;';
-      return 'top:50%;transform:translateY(-50%);';
-    },
-    pvHookBoxStyle() {
-      const bg = { none:'transparent', semi:'rgba(0,0,0,.6)', full:'transparent' }[this.hookBg] || 'transparent';
-      const ts = this.hookBg === 'none' ? '0 2px 10px rgba(0,0,0,.8)' : 'none';
-      return `display:inline-block;background:${bg};padding:${this.hookBg === 'none' ? '0' : '10px 14px'};border-radius:10px;color:${this.hookTextColor};font-weight:800;font-size:23px;line-height:1.15;letter-spacing:-.02em;text-shadow:${ts}`;
+    pvSubBoxStyle()  { return ClipPreview.subBoxStyle({ font: this.subtitleFont, size: this.subtitleSize, bg: this.subtitleBg }); },
+    pvHook(text)     { return ClipPreview.hookLayout(text, this.subtitleFont, this.fontsTick); },
+    pvHookBlockStyle(text) {
+      return ClipPreview.hookStyle(text, {
+        family: this.subtitleFont, color: this.hookTextColor, accent: this.subtitleHighlight,
+        bg: this.hookBg, pos: this.hookPos, tick: this.fontsTick,
+      });
     },
 
     // ── persist: session ───────────────────────────────────────────────────
@@ -228,69 +216,94 @@ function studio() {
           });
       } catch {}
     },
-    async deleteHistoryItem(id) {
-      this.history = this.history.filter(h => h.id !== id);
+    async deleteHistoryItem(item) {
+      const running = item.status === 'processing' ? ' Proses yang masih berjalan akan dihentikan.' : '';
+      if (!confirm(`Hapus "${item.title}" beserta clip hasil rendernya?${running}`)) return;
+      this.history = this.history.filter(h => h.id !== item.id);
       try {
-        await fetch(`/api/projects/${id}`, {
+        const res = await fetch(`/api/projects/${item.id}`, {
           method: 'DELETE',
-          headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
         });
-      } catch {}
+        if (!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+        if (item.projectId === this.projectId) this.restart(); // the open project is gone
+      } catch (e) {
+        alert('Gagal menghapus riwayat. Coba lagi.');
+        this.loadHistory();
+      }
     },
     async clearAllHistory() {
+      if (!this.history.length) return;
+      if (!confirm(`Hapus semua ${this.history.length} riwayat beserta clip hasil rendernya? Tindakan ini tidak bisa dibatalkan.`)) return;
       const ids = this.history.map(h => h.id);
-      this.history = [];
-      await Promise.all(ids.map(id =>
-        fetch(`/api/projects/${id}`, {
+      this.clearingHistory = true;
+      try {
+        const res = await fetch('/api/projects', {
           method: 'DELETE',
-          headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        }).catch(() => {})
-      ));
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        this.history = [];
+        if (ids.includes(this.projectId)) this.restart();
+      } catch (e) {
+        alert('Gagal menghapus riwayat. Coba lagi.');
+        this.loadHistory();
+      } finally {
+        this.clearingHistory = false;
+      }
     },
     async restoreFromHistory(item) {
-      if (this.generateTimer) clearTimeout(this.generateTimer);
+      // Leave the current project: its jobs keep running on the server, we just stop watching
+      clearTimeout(this.generateTimer);
+      clearTimeout(this.renderTimer);
       Object.assign(this, {
         step: 6, maxReached: 6, done: false, locked: true,
-        generateStarted: true, generateProgress: 100,
-        generateLogIdx: this.STAGES.length,
-        generateError: null, generateLogMsg: null,
+        generateStarted: true, generateProgress: 0, generateLogIdx: 0,
+        generateError: null, generateLogMsg: 'Memuat status…', generateCancelled: false,
         projectId: item.projectId,
         meta: { title: item.title, thumbnailUrl: item.thumbnailUrl, durationSeconds: 0, channel: '', language: '' },
         clips: [], selectedClip: null,
-        downloadUrl: null, renderingClipId: null,
+        downloadUrl: null, renderingClipId: null, renderError: null, musicMissing: false,
         clipCaption: '', clipHashtags: [],
       });
       this.historyOpen = false;
 
-      if (item.status === 'processing') {
-        this.resumeGeneratePolling(item.projectId);
+      let data;
+      try {
+        const res = await fetch(`/api/projects/${item.projectId}/status`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        data = await res.json();
+      } catch (e) {
+        this.generateError = 'Gagal memuat project. Coba lagi.';
+        return;
+      }
+      if (this.projectId !== item.projectId) return; // another item was opened meanwhile
+
+      // Still analysing: show the stage the server is actually at and keep watching
+      if (data.status !== 'done') {
+        this.applyGenerateStatus(item.projectId, data);
+        if (data.status !== 'failed' && !data.cancelled) this.resumeGeneratePolling(item.projectId);
         return;
       }
 
-      try {
-        const res = await fetch(`/api/projects/${item.projectId}/status`, {
-          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
-        });
-        const data = await res.json();
-        this.clips = (data.clips || []).map(c => ({
-          ranking: c.ranking, start_seconds: c.start_seconds, end_seconds: c.end_seconds,
-          topic: c.topic, reason: c.reason, viral_potential: c.viral_potential,
-          hook_text: c.hook_text, id: c.id,
-        }));
-      } catch {}
-
-      // Auto-select the rendered clip so caption can be fetched on re-entry
-      if (item.renderedClipId) {
-        const rendered = this.clips.find(c => c.id === item.renderedClipId);
-        if (rendered) this.selectedClip = rendered.ranking;
-      }
-
+      this.clips = this.mapClips(data.clips);
       this.step = 7;
       this.maxReached = 7;
 
-      if (item.status === 'rendered' && item.downloadUrl) {
-        this.downloadUrl = item.downloadUrl;
-        this.done = true;
+      // A clip still rendering (started before switching away): pick it up again
+      const rendering = this.clips.find(c => c.status === 'processing');
+      if (rendering) {
+        this.selectedClip = rendering.ranking;
+        this.renderingClipId = rendering.id;
+        this.watchRender(rendering.id);
+      } else if (item.renderedClipId) {
+        // Auto-select the rendered clip so caption can be fetched on re-entry
+        const rendered = this.clips.find(c => c.id === item.renderedClipId);
+        if (rendered) this.selectedClip = rendered.ranking;
+        if (item.downloadUrl) {
+          this.downloadUrl = item.downloadUrl;
+          this.done = true;
+        }
       }
 
       this.saveSession();
@@ -301,6 +314,8 @@ function studio() {
       if (this.generateStarted && this.projectId && this.clips.length === 0 && this.step === 6) {
         this.resumeGeneratePolling(this.projectId);
       }
+      // Reloaded mid-render: the job kept going, so keep watching it
+      if (this.renderingClipId) this.watchRender(this.renderingClipId);
     },
 
     // ── navigation ─────────────────────────────────────────────────────────
@@ -344,6 +359,7 @@ function studio() {
 
     // ── step 6: generate + polling ─────────────────────────────────────────
     async startGenerate() {
+      this.generateCancelled = false;
       this.generateStarted = true;
       this.generateProgress = 5;
       this.generateLogIdx = 1;
@@ -372,6 +388,7 @@ function studio() {
               text_color: this.subtitleTextColor,
               highlight_color: this.subtitleHighlight,
               position: this.subtitlePos,
+              position_y: this.subtitleY,
               background_style: this.subtitleBg,
             },
             hook: {
@@ -401,70 +418,135 @@ function studio() {
         return;
       }
 
-      this.resumeGeneratePolling(projectId);
+      this.resumeGeneratePolling(projectId, 1500);
     },
 
-    resumeGeneratePolling(projectId) {
+    mapClips(list) {
+      return (list || []).map(c => ({
+        ranking: c.ranking, start_seconds: c.start_seconds, end_seconds: c.end_seconds,
+        topic: c.topic, reason: c.reason, viral_potential: c.viral_potential,
+        hook_text: c.hook_text, id: c.id, status: c.status,
+      }));
+    },
+
+    // Apply a /status response for the project being analysed. Returns false once
+    // there is nothing left to poll (done, failed, cancelled, or another project open).
+    applyGenerateStatus(projectId, data) {
+      if (this.projectId !== projectId) return false; // user switched project: ignore late replies
       const TOTAL_STAGES = this.STAGES.length;
+
+      if (data.cancelled) { this.resetAfterCancel(); return false; }
+      if (data.status === 'failed') {
+        this.generateError = data.error_msg || 'Analisis gagal.';
+        this.generateStarted = false;
+        this.locked = false; // let them adjust settings before trying again
+        return false;
+      }
+
+      // Stages only move forward; never jump back to an earlier one on screen
+      if (data.progress_stage > 0 && data.progress_stage >= this.generateLogIdx) {
+        this.generateLogIdx   = data.progress_stage;
+        this.generateLogMsg   = data.progress_message || null;
+        this.generateProgress = Math.round((data.progress_stage / TOTAL_STAGES) * 100);
+      } else if (!data.progress_stage) {
+        this.generateLogMsg = 'Menunggu antrian…';
+        this.generateLogIdx = Math.max(this.generateLogIdx, 1);
+      }
+
+      if (data.status === 'done') {
+        this.generateProgress = 100;
+        this.generateLogIdx = TOTAL_STAGES;
+        this.clips = this.mapClips(data.clips);
+        setTimeout(() => { if (this.projectId === projectId) this.goStep(7); }, 600);
+        return false;
+      }
+      return true;
+    },
+
+    resumeGeneratePolling(projectId, delay = 0) {
+      clearTimeout(this.generateTimer);
       const poll = async () => {
+        if (this.projectId !== projectId) return;
         try {
           const res = await fetch(`/api/projects/${projectId}/status`, {
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
           });
+          if (this.projectId !== projectId) return;
 
           if (res.status === 404) {
-            // Project hilang dari DB — reset session
+            // Project hilang dari DB (dihapus dari riwayat) — reset session
             this.restart();
             return;
           }
-
           if (!res.ok) {
-            this.generateError = `Server error (${res.status}). Coba refresh.`;
-            this.generateStarted = false;
+            this.generateTimer = setTimeout(poll, 5000); // transient server hiccup: keep trying
             return;
           }
 
-          const data = await res.json();
-
-          if (data.status === 'failed') {
-            this.generateError = data.error_msg || 'Analisis gagal.';
-            this.generateStarted = false;
-            return;
+          if (this.applyGenerateStatus(projectId, await res.json())) {
+            this.generateTimer = setTimeout(poll, 3000);
           }
-
-          if (data.progress_stage > 0) {
-            this.generateLogIdx  = data.progress_stage;
-            this.generateLogMsg  = data.progress_message || null;
-            this.generateProgress = Math.round((data.progress_stage / TOTAL_STAGES) * 100);
-          }
-
-          if (data.status === 'done') {
-            this.generateProgress = 100;
-            this.generateLogIdx = TOTAL_STAGES;
-            this.clips = (data.clips || []).map(c => ({
-              ranking:         c.ranking,
-              start_seconds:   c.start_seconds,
-              end_seconds:     c.end_seconds,
-              topic:           c.topic,
-              reason:          c.reason,
-              viral_potential: c.viral_potential,
-              hook_text:       c.hook_text,
-              id:              c.id,
-            }));
-            setTimeout(() => this.goStep(7), 600);
-            return;
-          }
-
-          this.generateTimer = setTimeout(poll, 3000);
         } catch (e) {
-          this.generateTimer = setTimeout(poll, 3000);
+          if (this.projectId === projectId) this.generateTimer = setTimeout(poll, 3000);
         }
       };
-      this.generateTimer = setTimeout(poll, 3000);
+      this.generateTimer = setTimeout(poll, delay);
+    },
+
+    async retryGenerate() {
+      const projectId = this.projectId;
+      if (!projectId || this.retrying) return;
+      this.retrying = true;
+      try {
+        const res = await fetch(`/api/projects/${projectId}/retry`, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { this.generateError = data.message || 'Gagal mengulang analisis.'; return; }
+        Object.assign(this, {
+          generateError: null, generateStarted: true, locked: true,
+          generateProgress: 0, generateLogIdx: 0, generateLogMsg: 'Diulang — menunggu antrian…',
+        });
+        this.resumeGeneratePolling(projectId, 1500);
+      } catch (e) {
+        this.generateError = 'Koneksi gagal. Coba lagi.';
+      } finally {
+        this.retrying = false;
+      }
+    },
+
+    async cancelGenerate() {
+      if (!this.projectId || this.cancelling) return;
+      if (!confirm('Batalkan analisis video ini? Proses yang sedang berjalan akan dihentikan.')) return;
+      this.cancelling = true;
+      clearTimeout(this.generateTimer);
+      try {
+        const res = await fetch(`/api/projects/${this.projectId}/cancel`, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+        });
+        if (res.status === 409) { this.resumeGeneratePolling(this.projectId); return; } // finished meanwhile
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        this.resetAfterCancel();
+      } catch (e) {
+        this.generateError = 'Gagal membatalkan. Coba lagi.';
+        this.resumeGeneratePolling(this.projectId);
+      } finally {
+        this.cancelling = false;
+      }
+    },
+    resetAfterCancel() {
+      clearTimeout(this.generateTimer);
+      Object.assign(this, {
+        generateStarted: false, generateProgress: 0, generateLogIdx: 0, generateLogMsg: null,
+        generateError: null, generateCancelled: true, projectId: null, locked: false,
+      });
     },
 
     // ── step 7: render + polling ───────────────────────────────────────────
-    async renderClip() {
+    // hookText given = re-render with an edited hook (from the result screen)
+    async renderClip(hookText = undefined) {
 
       if (!this.selectedClipObj) return;
       const clipId = this.selectedClipObj.id;
@@ -474,7 +556,8 @@ function studio() {
       try {
         const res = await fetch(`/api/clips/${clipId}/render`, {
           method: 'POST',
-          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+          body: JSON.stringify(hookText === undefined ? {} : { hook_text: hookText }),
         });
         const startData = await res.json();
         if (!res.ok) {
@@ -497,17 +580,30 @@ function studio() {
         this.renderError = 'Koneksi gagal.'; return;
       }
 
-      this.resultHookText = this.hookAi ? (this.selectedClipObj.hook_text || this.hookText) : this.hookText;
+      this.resultHookText = hookText !== undefined && hookText !== ''
+        ? hookText
+        : (this.hookAi ? (this.selectedClipObj.hook_text || this.hookText) : this.hookText);
 
+      this.watchRender(clipId, 3000);
+    },
+
+    // Poll a clip's render until it finishes; stops as soon as the user leaves it
+    watchRender(clipId, delay = 0) {
+      clearTimeout(this.renderTimer);
       const pollRender = async () => {
+        if (this.renderingClipId !== clipId) return; // cancelled or switched project
         try {
           const res = await fetch(`/api/clips/${clipId}/render-status`, {
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
           });
-          console.log(res);
           const data = await res.json();
+          if (this.renderingClipId !== clipId) return;
+          if (data.status === 'pending') { this.renderingClipId = null; return; } // cancelled elsewhere
           if (data.status === 'done') {
             this.downloadUrl = data.download_url;
+            this.musicMissing = !!data.music_missing;
+            const clip = this.clips.find(c => c.id === clipId);
+            if (clip) clip.status = 'done';
             this.done = true;
             this.renderingClipId = null;
             return;
@@ -517,12 +613,44 @@ function studio() {
             this.renderingClipId = null;
             return;
           }
-          setTimeout(pollRender, 3000);
+          this.renderTimer = setTimeout(pollRender, 3000);
         } catch (e) {
-          setTimeout(pollRender, 3000);
+          this.renderTimer = setTimeout(pollRender, 3000);
         }
       };
-      setTimeout(pollRender, 3000);
+      this.renderTimer = setTimeout(pollRender, delay);
+    },
+    async cancelRender() {
+      const clipId = this.renderingClipId;
+      if (!clipId || this.cancelling) return;
+      if (!confirm('Batalkan render clip ini?')) return;
+      this.cancelling = true;
+      try {
+        const res = await fetch(`/api/clips/${clipId}/cancel`, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+        });
+        if (res.ok || res.status === 409) {
+          clearTimeout(this.renderTimer);
+          this.renderingClipId = null;
+        }
+      } catch (e) {
+        this.renderError = 'Gagal membatalkan render. Coba lagi.';
+      } finally {
+        this.cancelling = false;
+      }
+    },
+    openEditHook() {
+      this.draftHook = this.resultHookText || '';
+      this.editHookOpen = true;
+    },
+    saveHookAndRerender() {
+      const text = this.draftHook.trim();
+      this.editHookOpen = false;
+      this.done = false;
+      this.step = 7;
+      this.downloadUrl = null;
+      this.renderClip(text);
     },
 
     // ── utilities ──────────────────────────────────────────────────────────
@@ -553,6 +681,12 @@ function studio() {
         published:  '✓ Sudah diposting di TikTok (cek profil kamu; sebelum app diaudit, videonya private).',
         failed:     'Upload gagal.',
       }[this.tiktokStatus] || '';
+    },
+    async loadMusicLibrary() {
+      try {
+        const res = await fetch('/api/music', { headers: { 'Accept': 'application/json' } });
+        if (res.ok) { const d = await res.json(); this.musicLibrary = { total: d.total, counts: d.counts }; }
+      } catch (e) { console.error('loadMusicLibrary', e); }
     },
     async loadTiktokAccounts() {
       try {
@@ -658,13 +792,14 @@ function studio() {
     },
     restart() {
       if (this.generateTimer) clearTimeout(this.generateTimer);
+      clearTimeout(this.renderTimer);
       this.clearSession();
       Object.assign(this, {
         step:1, maxReached:1, done:false, locked:false,
         url:'', meta:null, metaError:null,
         layout:'reframe',
         clipCount:3, durationMode:'auto', minDuration:20, maxDuration:45,
-        generateStarted:false, generateProgress:0, generateLogIdx:0, generateError:null, generateLogMsg:null,
+        generateStarted:false, generateProgress:0, generateLogIdx:0, generateError:null, generateLogMsg:null, generateCancelled:false,
         projectId:null,
         clips:[], selectedClip:null,
         renderingClipId:null, renderError:null, downloadUrl:null,
@@ -701,6 +836,9 @@ function studio() {
       this.watchAll();
       this.resumeIfNeeded();
       this.previewTick = setInterval(() => { this.previewT += 0.1; }, 100);
+      // Web fonts change text widths; re-run the hook layout once they are in
+      document.fonts?.ready.then(() => this.fontsTick++);
+      document.fonts?.addEventListener?.('loadingdone', () => this.fontsTick++);
       await this.loadHistory();
       // Clear caption when done resets (new generation started)
       this.$watch('done', val => {
@@ -723,7 +861,7 @@ function studio() {
         history.replaceState(null, '', location.pathname);
         if (tiktokResult !== 'connected') alert('Gagal menghubungkan TikTok (' + tiktokResult + ').');
       }
-      await this.loadTiktokAccounts();
+      await Promise.all([this.loadTiktokAccounts(), this.loadMusicLibrary()]);
       if (this.done && this.selectedClipObj) this.fetchTiktokStatus();
       // If restored from session and already done
       if (this.done && this.selectedClipObj && !this.clipCaption) this.fetchCaption();

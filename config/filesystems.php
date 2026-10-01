@@ -33,7 +33,8 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Off: clips are only served through the auth-checked download route
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

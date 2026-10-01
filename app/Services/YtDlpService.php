@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Cancellation;
 use RuntimeException;
 
 class YtDlpService
@@ -30,7 +31,8 @@ class YtDlpService
     public function getMetadata(string $url): array
     {
         set_time_limit(0); // yt-dlp exec wall-time counts against PHP limit on macOS
-        $cmd = sprintf('%s%s --dump-json --no-playlist %s 2>&1', $this->bin, $this->cookieArg, escapeshellarg($url));
+        // "--": whatever follows is a URL, never an option (blocks --exec style injection)
+        $cmd = sprintf('%s%s --dump-json --no-playlist -- %s 2>&1', $this->bin, $this->cookieArg, escapeshellarg($url));
         exec($cmd, $output, $code);
 
         if ($code !== 0) {
@@ -67,7 +69,7 @@ class YtDlpService
             : self::channelVideosUrl($value);
 
         $cmd = sprintf(
-            '%s%s --flat-playlist --dump-json --playlist-end %d --no-warnings %s 2>&1',
+            '%s%s --flat-playlist --dump-json --playlist-end %d --no-warnings -- %s 2>&1',
             $this->bin,
             $this->cookieArg,
             $limit,
@@ -152,7 +154,7 @@ class YtDlpService
             . ' --force-overwrites'
             . ' --no-part'
             . ' -o %s'
-            . ' %s'
+            . ' -- %s'
             . ' 2>&1',
             $this->bin,
             $this->cookieArg,
@@ -160,7 +162,7 @@ class YtDlpService
             escapeshellarg($url)
         );
 
-        exec($cmd, $output, $code);
+        [$code, $output] = Cancellation::exec($cmd);
 
         if ($code !== 0) {
             throw new RuntimeException('yt-dlp download failed: ' . implode("\n", $output));

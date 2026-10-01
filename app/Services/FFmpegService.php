@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\Cancellation;
+use App\Support\ClipSettings;
 use RuntimeException;
 
 class FFmpegService
@@ -11,6 +13,7 @@ class FFmpegService
     private const CUE_HOLD      = 0.25; // seconds a cue lingers after its last word
 
     private string $bin;
+    private string $posTag = ''; // ASS override placing every subtitle line (set by buildAssFile)
     private VideoLayoutService $layout;
 
     public function __construct()
@@ -107,6 +110,12 @@ class FFmpegService
         $position    = $subtitleSettings['position'] ?? 'bottom';
         $bgStyle     = $subtitleSettings['background_style'] ?? 'semi';
 
+        // Dragged position: every line is centred on that height (\an5 = middle-centre),
+        // matching the studio preview which centres the subtitle box on the same %.
+        $positionY    = $subtitleSettings['position_y'] ?? null;
+        $this->posTag = $positionY === null ? '' : sprintf('{\\an5\\pos(540,%d)}',
+            (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920));
+
         $alignment = match ($position) {
             'top'    => 8,
             'center' => 5,
@@ -171,7 +180,7 @@ class FFmpegService
 
     private function dialogue(float $start, float $end, string $text): string
     {
-        return 'Dialogue: 0,' . $this->toAssTime($start) . ',' . $this->toAssTime($end) . ",Default,,0,0,0,,{$text}\n";
+        return 'Dialogue: 0,' . $this->toAssTime($start) . ',' . $this->toAssTime($end) . ",Default,,0,0,0,,{$this->posTag}{$text}\n";
     }
 
     /**
@@ -320,33 +329,24 @@ class FFmpegService
     }
 
     /**
-     * Burn subtitles (ASS) and overlay the hook text onto the video in a single
-     * pass. Hook is layer 2 drawn over the video (layer 1) for the first
-     * $hookDuration seconds via enable='lt(t,dur)'. Audio is stream-copied so it
-     * is never lost (the old concat-with-silent-clip path dropped audio).
+     * Burn subtitles (ASS) and overlay the hook image onto the video in a single
+     * pass. The hook is a transparent PNG from HookRenderer, cropped to the text
+     * block; it pops in (scales 82% → 108% → 100% around its own centre), holds
+     * for $hookDuration seconds and fades out. Audio is stream-copied.
      *
      * @param string|null $assPath null/empty to skip subtitles
-     * @param string|null $hookText null/empty to skip hook overlay
+     * @param array{image: string, x: int, y: int, w: int, h: int}|null $hook null to skip the hook overlay
      */
     public function burnSubtitlesAndHook(
         string $input,
         ?string $assPath,
-        ?string $hookText,
+        ?array $hook,
         float $hookDuration,
-        array $hookSettings,
         string $output
     ): void {
-        $filters = [];
+        $hasHook = $hook && $hookDuration > 0;
 
-        if ($assPath) {
-            $fontsdir  = $this->layout->fontsDir();
-            $filters[] = 'ass=' . $assPath . ':fontsdir=' . $fontsdir;
-        }
-        if ($hookText !== null && $hookText !== '') {
-            $filters[] = $this->hookDrawtext($hookText, $hookDuration, $hookSettings);
-        }
-
-        if (empty($filters)) {
+        if (!$assPath && !$hasHook) {
             // Nothing to burn — just re-mux video as-is
             $cmd = sprintf(
                 '%s -y -i %s -c copy -movflags +faststart %s 2>&1',
@@ -356,104 +356,66 @@ class FFmpegService
             return;
         }
 
+        $subs   = $assPath ? 'ass=' . $assPath . ':fontsdir=' . $this->layout->fontsDir() : 'null';
+        $inputs = '-i ' . escapeshellarg($input);
+
+        if ($hasHook) {
+            $fadeOut = min(0.25, $hookDuration / 4);
+            $pop     = 'if(lt(t,0.14),0.82+t*1.857,if(lt(t,0.26),1.08-(t-0.14)*0.6667,1))';
+            $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', $hookDuration, escapeshellarg($hook['image']));
+            $filter  = sprintf(
+                '[0:v]%s[base];'
+                . "[1:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
+                . 'fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st=%.3f:d=%.2f:alpha=1[hook];'
+                // keep the block centred on its rendered spot while it scales
+                . "[base][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[v]",
+                $subs, $pop, $hookDuration - $fadeOut, $fadeOut,
+                $hook['x'], $hook['w'], $hook['y'], $hook['h']
+            );
+        } else {
+            $filter = "[0:v]{$subs}[v]";
+        }
+
         $cmd = sprintf(
-            '%s -y -i %s -vf %s -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y %s -filter_complex %s -map %s -map 0:a? -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
-            escapeshellarg($input),
-            escapeshellarg(implode(',', $filters)),
+            $inputs,
+            escapeshellarg($filter),
+            escapeshellarg('[v]'),
             escapeshellarg($output)
         );
 
         $this->exec($cmd, 'burnSubtitlesAndHook');
     }
 
-    private function hookDrawtext(string $text, float $duration, array $settings): string
-    {
-        $textColor  = $settings['text_color'] ?? '#ffffff';
-        $bgStyle    = $settings['background_style'] ?? 'none';
-        $position   = $settings['position'] ?? 'center';
-        $fontFamily = $settings['font_family'] ?? 'Montserrat';
-        $fontSize   = max(24, min(80, (int) ($settings['font_size'] ?? 60)));
-
-        $fontPath  = $this->layout->resolveFontByFamily($fontFamily);
-        $fontColor = '0x' . ltrim($textColor, '#');
-
-        $yPos = match ($position) {
-            'top'    => '(h*0.18)',
-            'bottom' => '(h*0.72)',
-            default  => '(h-text_h)/2',
-        };
-
-        $box = match ($bgStyle) {
-            'semi'  => ':box=1:boxcolor=0x000000aa:boxborderw=24',
-            'full'  => ':box=1:boxcolor=0x000000ff:boxborderw=24',
-            default => ':shadowcolor=0x000000aa:shadowx=3:shadowy=3',
-        };
-
-        $fontEsc = str_replace(['\\', "'"], ['\\\\', "\\'"], $fontPath);
-        $wrapped = $this->wrapHookText($text, $fontSize);
-        $textEsc = str_replace(['\\', "'", ':', '%'], ['\\\\', "\\'", '\\:', '\\%'], $wrapped);
-
-        return sprintf(
-            "drawtext=fontfile='%s':text='%s':fontsize=%d:fontcolor=%s"
-            . ":x=(w-text_w)/2:y=%s:line_spacing=8:fix_bounds=1%s"
-            . ":enable='lt(t,%s)'",
-            $fontEsc,
-            $textEsc,
-            $fontSize,
-            $fontColor,
-            $yPos,
-            $box,
-            $duration
-        );
-    }
-
-    private function wrapHookText(string $text, int $fontSize): string
-    {
-        // Approximate chars per line based on font size on 1080px canvas
-        // fontSize 60 → ~22 chars; fontSize 40 → ~32 chars; fontSize 80 → ~16 chars
-        $maxChars = (int) round(1320 / $fontSize);
-
-        $words = explode(' ', $text);
-        $lines = [];
-        $line  = '';
-        foreach ($words as $word) {
-            if ($line !== '' && strlen($line) + 1 + strlen($word) > $maxChars) {
-                $lines[] = $line;
-                $line    = $word;
-            } else {
-                $line = $line === '' ? $word : "{$line} {$word}";
-            }
-        }
-        if ($line !== '') {
-            $lines[] = $line;
-        }
-
-        // FFmpeg drawtext uses \n literal for newline inside text value
-        return implode('\n', $lines);
-    }
-
     /**
-     * Lay a looped music bed under the clip's audio. The music is ducked
-     * (sidechaincompress keyed on the voice) so speech stays clear, and fades
-     * in/out at the clip edges. Video is stream-copied — no re-encode.
+     * Lay a looped music bed under the clip's audio. Every track is first
+     * loudness-normalised (−16 LUFS, about speech level), so the slider means
+     * the same thing for a quiet track and a loud one: 30% = as loud as the
+     * voice, 15% = clearly audible behind it. While someone speaks the music
+     * ducks a few dB (sidechain), it fades in/out at the clip edges, and a
+     * limiter keeps the sum from clipping. Video is stream-copied.
      *
-     * @param int $volumePercent Music level before ducking (0–100).
+     * @param int $volumePercent Music level, 0–100 (30 ≈ level with the voice).
      */
     public function mixMusic(string $input, string $musicPath, int $volumePercent, string $output): void
     {
         $duration = $this->probeDuration($input);
-        $volume   = max(0, min(100, $volumePercent)) / 100;
+        $gain     = max(0, min(100, $volumePercent)) / 30;
         $fadeOut  = max(0, $duration - 1.5);
         $norm     = 'aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo';
 
-        $music = sprintf('[1:a]%s,volume=%.2f,afade=t=in:d=1,afade=t=out:st=%.3f:d=1.5', $norm, $volume, $fadeOut);
+        $music = sprintf(
+            '[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,%s,volume=%.3f,afade=t=in:d=1,afade=t=out:st=%.3f:d=1.5',
+            $norm, $gain, $fadeOut
+        );
 
         $filter = $this->hasAudio($input)
             ? "{$music}[m];[0:a]{$norm},asplit=2[voice][key];"
-              . '[m][key]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[duck];'
-              . '[voice][duck]amix=inputs=2:duration=first:normalize=0[aout]'
-            : "{$music}[aout]";
+              // gentle duck (~3–5 dB) so the bed stays audible under talking
+              . '[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=15:release=350[duck];'
+              . '[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]'
+            : "{$music},alimiter=limit=0.95[aout]";
 
         $cmd = sprintf(
             '%s -y -i %s -stream_loop -1 -i %s -filter_complex %s -map 0:v -map %s -t %s -c:v copy -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
@@ -526,8 +488,7 @@ class FFmpegService
 
     private function exec(string $cmd, string $context): void
     {
-        set_time_limit(0); // ffmpeg encode can exceed PHP max_execution_time
-        exec($cmd, $output, $code);
+        [$code, $output] = Cancellation::exec($cmd);
         if ($code !== 0) {
             throw new RuntimeException("FFmpeg {$context} failed:\n" . implode("\n", $output));
         }

@@ -6,30 +6,59 @@ use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\RenderClipJob;
 use App\Models\GeneratedClip;
 use App\Services\GeminiService;
+use App\Services\MusicService;
+use App\Support\HookText;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class RenderController extends Controller
 {
     use EnsuresQueueWorker;
 
-    public function render(string $clipId): JsonResponse
+    public function render(Request $request, string $clipId): JsonResponse
     {
+        $data = $request->validate(['hook_text' => ['sometimes', 'nullable', 'string', 'max:100']]);
         $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
 
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
 
+        // Edited hook from the result screen: store it and render again even if done
+        $rerender = array_key_exists('hook_text', $data);
+        if ($rerender) {
+            abort_if($clip->status === 'processing', 409, 'Clip masih dirender. Tunggu selesai atau batalkan dulu.');
+            $clip->hook_text_override = HookText::clean($data['hook_text']);
+        }
+
         // Already done or in-flight — return current status, frontend will poll
-        if (in_array($clip->status, ['done', 'processing'])) {
+        if (!$rerender && in_array($clip->status, ['done', 'processing'])) {
             return response()->json(['clip_id' => $clip->id, 'status' => $clip->status]);
         }
 
-        $clip->update(['status' => 'processing', 'error_msg' => null]);
+        $clip->fill(['status' => 'processing', 'error_msg' => null, 'cancelled_at' => null])->save();
 
         RenderClipJob::dispatch($clip->id);
         $this->ensureQueueWorkerRunning();
 
         return response()->json(['clip_id' => $clip->id, 'status' => 'processing']);
+    }
+
+    public function cancel(string $clipId): JsonResponse
+    {
+        $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
+
+        abort_if($clip->clipProject->user_id !== Auth::id(), 403);
+        abort_unless($clip->status === 'processing', 409, 'Clip tidak sedang dirender.');
+
+        // Back to "not rendered" so it can be picked again; the job sees
+        // cancelled_at, kills ffmpeg and exits without touching the status.
+        $clip->update([
+            'status'       => $clip->output_path ? 'done' : 'pending',
+            'error_msg'    => null,
+            'cancelled_at' => now(),
+        ]);
+
+        return response()->json(['clip_id' => $clip->id, 'status' => $clip->status]);
     }
 
     public function renderStatus(string $clipId): JsonResponse
@@ -43,23 +72,30 @@ class RenderController extends Controller
             'status'      => $clip->status,
             'error_msg'   => $clip->error_msg,
             'output_path' => $clip->output_path,
+            // Music was requested but the library had nothing to pick from
+            'music_missing' => $clip->status === 'done' && $clip->clipProject->music_enabled && !$clip->music_track,
             'download_url' => $clip->status === 'done'
                 ? url("/api/clips/{$clip->id}/download")
                 : null,
         ]);
     }
 
-    public function caption(string $clipId, GeminiService $gemini): JsonResponse
+    public function caption(string $clipId, GeminiService $gemini, MusicService $music): JsonResponse
     {
         $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
 
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
 
+        // CC BY music must be credited: added on every read so an edited credit shows up
+        $credit = $music->creditFor($clip->music_track);
+        $withCredit = fn(string $caption) => $credit ? rtrim($caption) . "\n\n🎵 {$credit}" : $caption;
+
         // Return cached caption if already generated
         if ($clip->caption !== null) {
             return response()->json([
-                'caption'  => $clip->caption,
-                'hashtags' => $clip->hashtags_json ?? [],
+                'caption'      => $withCredit($clip->caption),
+                'hashtags'     => $clip->hashtags_json ?? [],
+                'music_credit' => $credit,
             ]);
         }
 
@@ -68,7 +104,7 @@ class RenderController extends Controller
 
         $result = $gemini->generateCaption(
             $clip->topic,
-            $clip->hook_text ?? '',
+            HookText::plain($clip->hook_text_override ?? $clip->hook_text ?? ''),
             $segments,
             $lang,
         );
@@ -79,8 +115,9 @@ class RenderController extends Controller
         ]);
 
         return response()->json([
-            'caption'  => $result['caption'],
-            'hashtags' => $result['hashtags'],
+            'caption'      => $withCredit($result['caption']),
+            'hashtags'     => $result['hashtags'],
+            'music_credit' => $credit,
         ]);
     }
 }

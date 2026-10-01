@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\ClipProject;
 use App\Models\DiscoveredVideo;
 use App\Models\VideoSource;
+use App\Support\ClipSettings;
+use App\Support\YoutubeUrl;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -40,8 +42,13 @@ class DiscoveryService
                 continue;
             }
 
-            $url     = 'https://www.youtube.com/watch?v=' . $video['id'];
-            $project = $this->creator->create($source->user_id, $url, $source->settings ?? [], $source->id);
+            // The id comes from yt-dlp's listing output: rebuild the URL through the same
+            // strict check as user links instead of trusting whatever came back
+            $url = YoutubeUrl::canonical('https://www.youtube.com/watch?v=' . $video['id']);
+            if (!$url) {
+                continue;
+            }
+            $project = $this->creator->create($source->user_id, $url, ClipSettings::forAutopilot($source->settings), $source->id);
 
             DiscoveredVideo::create([
                 'user_id'          => $source->user_id,
