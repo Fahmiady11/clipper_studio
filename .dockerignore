@@ -21,3 +21,5 @@ deploy
 .idea
 .vscode
 docker-compose*.yml
+backups
+/backups/
