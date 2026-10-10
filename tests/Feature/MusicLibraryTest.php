@@ -30,6 +30,11 @@ class MusicLibraryTest extends TestCase
         config(['services.music.path' => $this->root]);
         $this->user = User::factory()->create();
 
+        exec('command -v ffmpeg && command -v ffprobe', $o, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('ffmpeg/ffprobe not installed');
+        }
+
         // A real (1 s, silent) mp3 so the ffprobe audio check runs for real
         if (! self::$mp3) {
             self::$mp3 = sys_get_temp_dir().'/music-test-src.mp3';

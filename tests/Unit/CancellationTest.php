@@ -18,7 +18,9 @@ class CancellationTest extends TestCase
 
     public function test_cancel_kills_the_running_command_and_its_children(): void
     {
-        $marker = 'cancel-test-'.uniqid();
+        // A unique duration tags the grandchild itself: `sleep` is what gets orphaned
+        // when only the shell layers die (Linux runs PHP > sh > sh > sleep)
+        $sleep = '30.'.random_int(10_000_000, 99_999_999);
         $start = microtime(true);
         $checks = 0;
 
@@ -27,15 +29,16 @@ class CancellationTest extends TestCase
                 function () use (&$checks) {
                     return ++$checks >= 2;
                 },
-                fn () => Cancellation::exec("sh -c 'sleep 30; echo {$marker}'")
+                fn () => Cancellation::exec("sh -c 'sleep {$sleep}; echo done'")
             );
             $this->fail('expected JobCancelled');
         } catch (JobCancelled) {
         }
 
         $this->assertLessThan(10, microtime(true) - $start);
-        exec('pgrep -f '.escapeshellarg("sleep 30; echo {$marker}"), $left);
-        $this->assertSame([], $left, 'child process killed');
+        // "[s]leep" so the pattern can't match the `sh -c pgrep ...` running it
+        exec('pgrep -f '.escapeshellarg("[s]leep {$sleep}"), $left);
+        $this->assertSame([], $left, 'every process of the command was killed');
     }
 
     public function test_throw_if_cancelled_only_inside_watch(): void

@@ -79,11 +79,29 @@ final class Cancellation
 
     private static function kill(Process $process): void
     {
-        // The command runs under `sh -c`; terminate its children (ffmpeg spawned
-        // by yt-dlp, the encoder itself) before the shell, or they keep running.
+        // The command runs under one or more `sh -c` layers (Linux keeps every
+        // layer; macOS execs some away), with the real work below them (ffmpeg
+        // spawned by yt-dlp). Collect the whole tree before signalling: once a
+        // shell dies its children are re-parented to init and can't be found.
         if ($pid = $process->getPid()) {
-            exec('pkill -TERM -P '.(int) $pid.' 2>/dev/null');
+            $tree = self::descendants((int) $pid);
+            if ($tree) {
+                exec('kill -TERM '.implode(' ', $tree).' 2>/dev/null');
+            }
         }
         $process->stop(3);
+    }
+
+    /** @return list<int> every descendant pid of $pid, deepest last */
+    private static function descendants(int $pid): array
+    {
+        exec('pgrep -P '.$pid.' 2>/dev/null', $children);
+
+        $all = [];
+        foreach ($children as $child) {
+            $all = [...$all, (int) $child, ...self::descendants((int) $child)];
+        }
+
+        return $all;
     }
 }

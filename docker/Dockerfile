@@ -53,7 +53,7 @@ ARG DENO_VERSION
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        nginx supervisor ffmpeg curl ca-certificates unzip postgresql-client libgomp1 \
+        nginx supervisor ffmpeg procps curl ca-certificates unzip postgresql-client libgomp1 \
         libpq-dev libicu-dev libzip-dev libfreetype6-dev libjpeg-dev libwebp-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" pdo_pgsql intl zip opcache pcntl gd \
