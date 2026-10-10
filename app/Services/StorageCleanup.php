@@ -46,7 +46,7 @@ class StorageCleanup
     {
         // Project ids are UUIDs; any other folder name is an orphan. Postgres rejects
         // non-UUID input for a uuid column, so don't query with it.
-        if (!Str::isUuid($dirName)) {
+        if (! Str::isUuid($dirName)) {
             return false;
         }
         $project = ClipProject::find($dirName);
