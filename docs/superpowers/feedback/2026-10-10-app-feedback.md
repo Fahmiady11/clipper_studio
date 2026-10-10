@@ -53,3 +53,16 @@ Hasil ringkas:
    Saran: di CI jalankan `npm ci && npm run build` sebelum `php artisan test` (rencana CI sudah perlu langkah ini),
    atau panggil `$this->withoutVite()` di tes tersebut agar tidak bergantung pada build front-end.
 Kesimpulan untuk CI: dengan Postgres 17, satu-satunya penyebab job `test` merah yang butuh kode kamu adalah butir 3 (`StorageCleanup`, perbaikan 1 baris). Butir 4 (GD) dan 5 (Vite) sudah ditangani di Dockerfile dan workflow.
+
+## Proxy/HTTPS di produksi Docker (review akhir, 2026-10-10)
+
+6. ✅ Sudah ditangani di infrastruktur (`docker/nginx.conf`), **opsional** untuk kamu. bootstrap/app.php:20
+   `$middleware->trustProxies(at: ['127.0.0.1', '::1'])`. Di produksi, request datang lewat Nginx host → `127.0.0.1:8095`
+   → proxy port Docker → container, sehingga yang terlihat oleh app adalah gateway jaringan compose (`172.x.0.1`), bukan
+   `127.0.0.1`. Gejala sebelum diperbaiki: header `X-Forwarded-Proto: https` diabaikan, URL dibuat `http://` (mixed content,
+   form login diblokir CSP `form-action`, tidak ada HSTS), dan semua pengguna terlihat dengan satu IP (rate limit bersama).
+   Perbaikan yang sudah dipasang: Nginx di dalam container memakai `real_ip` (IP klien dari `X-Forwarded-For`) dan mengirim
+   `HTTPS=on` ke PHP bila `X-Forwarded-Proto` = `https`. Kode app tidak diubah.
+   Alternatif yang lebih bersih (pilihan kamu): percayai subnet compose di app, mis.
+   `$middleware->trustProxies(at: ['127.0.0.1', '::1', '172.16.0.0/12'], headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PROTO | ...)`.
+   Kalau itu dipasang, konfigurasi Nginx container tetap aman dipakai bersama (hasilnya sama).
