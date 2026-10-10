@@ -36,16 +36,6 @@ class GeminiService
         ] : null;
     }
 
-    public function analyzeVideo(string $youtubeUrl, int $clipCount, string $layoutMode): array
-    {
-        $meta   = $this->fetchVideoMeta($youtubeUrl);
-        $prompt = $this->buildPrompt($meta, $clipCount, $layoutMode);
-
-        $clips = $this->generate($prompt, 'analyzeVideo', 0.3, 90, fn($data) => is_array($data) && $data && array_is_list($data) ? $data : null);
-
-        return array_slice($clips, 0, $clipCount);
-    }
-
     public function analyzeWithTranscript(
         array $transcript,
         int $clipCount,
@@ -341,111 +331,5 @@ class GeminiService
         $data = json_decode($body, true);
         $delay = $data['error']['details'][2]['retryDelay'] ?? '0s';
         return (int) preg_replace('/[^0-9]/', '', $delay);
-    }
-
-    private function fetchVideoMeta(string $url): array
-    {
-        $ytdlp   = $this->findBinary('yt-dlp');
-        $urlArg  = escapeshellarg($url);
-        $cookies = $this->cookiesArg();
-
-        exec("$ytdlp $cookies --dump-json --no-download -- $urlArg 2>/dev/null", $out, $code);
-
-        if ($code !== 0 || empty($out)) {
-            return ['title' => 'Unknown', 'description' => '', 'duration' => 0, 'chapters' => [], 'tags' => []];
-        }
-
-        $json = json_decode(implode('', $out), true) ?? [];
-
-        $chapters = array_slice($json['chapters'] ?? [], 0, 8);
-        $chapters = array_map(fn($c) => [
-            'title' => mb_substr($c['title'] ?? '', 0, 60),
-            'start' => (int) ($c['start_time'] ?? 0),
-        ], $chapters);
-
-        return [
-            'title'       => mb_substr($json['title'] ?? 'Unknown', 0, 150),
-            'description' => mb_substr($json['description'] ?? '', 0, 300),
-            'duration'    => (int) ($json['duration'] ?? 0),
-            'chapters'    => $chapters,
-            'tags'        => array_slice($json['tags'] ?? [], 0, 5),
-        ];
-    }
-
-    private function buildPrompt(array $meta, int $clipCount, string $layoutMode): string
-    {
-        $title    = $meta['title'];
-        $duration = $meta['duration'];
-        $desc     = $meta['description'];
-        $chapters = $meta['chapters'] ? json_encode($meta['chapters']) : 'none';
-        $tags     = $meta['tags'] ? implode(', ', $meta['tags']) : 'none';
-
-        $layoutHint = match ($layoutMode) {
-            'auto_magic'    => 'Puncak emosi, pengungkapan mengejutkan, penyampaian nilai yang jelas.',
-            'auto_split'    => 'Momen dengan dua scene berbeda atau perbandingan sebelum/sesudah.',
-            'gaussian_blur' => 'Pembicara tunggal yang jelas atau subjek fokus.',
-            'auto_reframe'  => 'Subjek pusat yang dominan cocok untuk crop vertikal.',
-            default         => '',
-        };
-
-        return <<<PROMPT
-                Kamu adalah kurator YouTube Shorts/TikTok senior. Pilih {$clipCount} segmen dengan potensi viral TERTINGGI dari video ini.
-
-                Judul: {$title}
-                Durasi total: {$duration}s
-                Deskripsi: {$desc}
-                Bab: {$chapters}
-                Tag: {$tags}
-                Hint Layout: {$layoutHint}
-
-                == KRITERIA VIRAL (prioritas utama) ==
-                1. Hook kuat di detik pertama — langsung menarik, buat penonton tidak mau skip
-                2. Momen emosi puncak — kaget, haru, tawa, euforia
-                3. Insight atau fakta mengejutkan yang belum banyak diketahui
-                4. Konflik, ketegangan, atau momen dramatis
-                5. Tips/solusi praktis padat, langsung bisa diterapkan
-                6. Kalimat bertenaga yang layak jadi viral quote
-
-                == ATURAN WAJIB ==
-                - Durasi per segmen: 45–90 detik (panjangkan jika topik belum selesai, jangan potong di tengah)
-                - end_seconds harus di titik alami: setelah kalimat selesai, setelah poin tuntas
-                - start_seconds harus tepat sebelum kalimat pembuka hook
-                - Tidak boleh tumpang tindih antar segmen
-                - Hook maksimal 10 kata, sesuai bahasa video
-
-                Kembalikan array JSON, tepat {$clipCount} item, terbaik duluan:
-                [{"start_seconds":120,"end_seconds":185,"hook":"...","caption":"...","hashtags":["#a","#b","#c"],"viral_score":9}]
-                PROMPT;
-    }
-
-    private function formatDuration(int $secs): string
-    {
-        $h = intdiv($secs, 3600);
-        $m = intdiv($secs % 3600, 60);
-        return $h > 0 ? "{$h}h {$m}m" : "{$m}m";
-    }
-
-    private function findBinary(string $name): string
-    {
-        foreach (["/usr/local/bin/$name", "/opt/homebrew/bin/$name", "/usr/bin/$name"] as $path) {
-            if (file_exists($path)) {
-                return $path;
-            }
-        }
-        return $name;
-    }
-
-    private function cookiesArg(): string
-    {
-        $candidates = [
-            config('services.ytdlp.cookies_file', ''),
-            ($_SERVER['HOME'] ?? '') . '/yt-cookies.txt',
-        ];
-        foreach ($candidates as $path) {
-            if ($path && file_exists($path)) {
-                return '--cookies ' . escapeshellarg($path);
-            }
-        }
-        return '';
     }
 }

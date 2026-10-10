@@ -377,7 +377,7 @@ Bisa. Lihat [Menambah pengguna lain](#-menambah-pengguna-lain). Untuk banyak pen
 
 ## 👩‍💻 Untuk developer
 
-Dibangun dengan **Laravel 13**, PostgreSQL, Blade + Alpine.js, Tailwind CSS 4, FFmpeg, dan yt-dlp.
+Dibangun dengan **Laravel 13**, PostgreSQL, Blade + Alpine.js, CSS biasa (Vite), FFmpeg, dan yt-dlp.
 
 ```bash
 composer dev     # web + worker + scheduler + log + vite sekaligus
