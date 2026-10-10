@@ -9,18 +9,20 @@ use Tests\TestCase;
 class HookRendererTest extends TestCase
 {
     private HookRenderer $renderer;
+
     private string $font;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->renderer = new HookRenderer(new VideoLayoutService());
-        $this->font     = $this->renderer->fontPath('Montserrat');
+        $this->renderer = new HookRenderer(new VideoLayoutService);
+        $this->font = $this->renderer->fontPath('Montserrat');
     }
 
     private function width(int $px, array $words): float
     {
         $box = imagettfbbox($px * 0.75, 0, $this->font, implode(' ', $words));
+
         return $box[2] - $box[0];
     }
 
@@ -43,7 +45,7 @@ class HookRendererTest extends TestCase
     public function test_long_hook_shrinks_to_fit_four_lines_inside_the_frame(): void
     {
         $text = 'Lupakan angka 21 hari. Ini alasannya kenapa kamu selalu gagal membangun kebiasaan baru yang benar';
-        $fit  = $this->renderer->fit($this->words($text), $this->font);
+        $fit = $this->renderer->fit($this->words($text), $this->font);
 
         $this->assertLessThan(104, $fit['size']);
         $this->assertLessThanOrEqual(4, count($fit['lines']));
@@ -56,15 +58,15 @@ class HookRendererTest extends TestCase
     public function test_lines_are_balanced_not_greedy(): void
     {
         // Greedy wrapping would leave one word alone on the last line
-        $fit    = $this->renderer->fit($this->words('Kebiasaan gagal? Coba aturan 2 menit ini sekarang juga!'), $this->font);
-        $widths = array_map(fn($l) => $this->width($fit['size'], $l), $fit['lines']);
+        $fit = $this->renderer->fit($this->words('Kebiasaan gagal? Coba aturan 2 menit ini sekarang juga!'), $this->font);
+        $widths = array_map(fn ($l) => $this->width($fit['size'], $l), $fit['lines']);
 
         $this->assertGreaterThan(0.5, min($widths) / max($widths));
     }
 
     public function test_renders_cropped_png_with_placement_on_the_frame(): void
     {
-        $out = tempnam(sys_get_temp_dir(), 'hook') . '.png';
+        $out = tempnam(sys_get_temp_dir(), 'hook').'.png';
 
         $place = $this->renderer->render('Gaji 50 juta, tetap *bokek*', [
             'background_style' => 'full', 'text_color' => '#ffffff', 'accent_color' => '#facc15',
@@ -77,7 +79,7 @@ class HookRendererTest extends TestCase
         $this->assertEqualsWithDelta(540, $place['x'] + $w / 2, 2, 'centred horizontally');
         $this->assertEqualsWithDelta(960, $place['y'] + $h / 2, 40, 'centred vertically');
 
-        $img    = imagecreatefrompng($out);
+        $img = imagecreatefrompng($out);
         $pixels = ['white' => false, 'yellow' => false];
         for ($x = 0; $x < $w; $x += 3) {
             for ($y = 0; $y < $h; $y += 3) {
@@ -86,7 +88,7 @@ class HookRendererTest extends TestCase
                     continue;
                 }
                 [$r, $g, $b] = [($c >> 16) & 0xFF, ($c >> 8) & 0xFF, $c & 0xFF];
-                $pixels['white']  = $pixels['white'] || ($r > 245 && $g > 245 && $b > 245);
+                $pixels['white'] = $pixels['white'] || ($r > 245 && $g > 245 && $b > 245);
                 $pixels['yellow'] = $pixels['yellow'] || ($r > 230 && $g > 190 && $b < 60);
             }
         }

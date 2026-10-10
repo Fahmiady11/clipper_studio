@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\ClipProject;
 use App\Models\HookSetting;
 use App\Models\User;
 use App\Models\VideoSource;
@@ -21,7 +20,7 @@ class AutopilotSettingsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         Queue::fake();
         $this->user = User::factory()->create();
     }
@@ -102,7 +101,7 @@ class AutopilotSettingsTest extends TestCase
     public function test_discovered_video_project_uses_source_look_with_ai_hook(): void
     {
         // Older sources may still hold a fixed hook text copied from a manual project
-        $source  = $this->source(['layout_type' => 'gaussian', 'hook' => ['hook_text' => 'Lama', 'is_ai_generated' => false, 'background_style' => 'none']]);
+        $source = $this->source(['layout_type' => 'gaussian', 'hook' => ['hook_text' => 'Lama', 'is_ai_generated' => false, 'background_style' => 'none']]);
         $project = app(ProjectCreator::class)->create($this->user->id, 'https://youtu.be/abcdefg', ClipSettings::forAutopilot($source->settings), $source->id);
 
         $this->assertSame('gaussian', $project->layout_type);

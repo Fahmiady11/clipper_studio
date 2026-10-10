@@ -17,7 +17,7 @@ class StorageCleanup
     public function run(int $retentionHours): array
     {
         $cutoff = now()->subHours($retentionHours)->getTimestamp();
-        $stats  = ['temp_dirs' => 0, 'cache_files' => 0, 'bytes' => 0];
+        $stats = ['temp_dirs' => 0, 'cache_files' => 0, 'bytes' => 0];
 
         foreach (glob(storage_path('app/temp/*'), GLOB_ONLYDIR) ?: [] as $dir) {
             if (filemtime($dir) > $cutoff || $this->isBusy(basename($dir))) {
@@ -44,7 +44,7 @@ class StorageCleanup
     private function isBusy(string $dirName): bool
     {
         $project = ClipProject::find($dirName);
-        if (!$project) {
+        if (! $project) {
             return false; // orphan temp dir
         }
         if ($project->status === 'processing') {
@@ -52,8 +52,8 @@ class StorageCleanup
         }
 
         return GeneratedClip::where('clip_project_id', $project->id)
-            ->where(fn($q) => $q->where('status', 'processing')
-                ->orWhere(fn($q) => $q->where('status', 'pending')->where('review_status', 'pending')))
+            ->where(fn ($q) => $q->where('status', 'processing')
+                ->orWhere(fn ($q) => $q->where('status', 'pending')->where('review_status', 'pending')))
             ->exists();
     }
 

@@ -22,9 +22,9 @@ class TiktokAccount extends Model
     protected $hidden = ['access_token', 'refresh_token'];
 
     protected $casts = [
-        'access_token'       => 'encrypted',
-        'refresh_token'      => 'encrypted',
-        'access_expires_at'  => 'datetime',
+        'access_token' => 'encrypted',
+        'refresh_token' => 'encrypted',
+        'access_expires_at' => 'datetime',
         'refresh_expires_at' => 'datetime',
     ];
 

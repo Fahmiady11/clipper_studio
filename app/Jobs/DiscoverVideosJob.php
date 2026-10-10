@@ -13,7 +13,8 @@ class DiscoverVideosJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries   = 1;
+    public int $tries = 1;
+
     public int $timeout = 300;
 
     public function __construct(public int $sourceId) {}
@@ -21,7 +22,7 @@ class DiscoverVideosJob implements ShouldQueue
     public function handle(DiscoveryService $discovery): void
     {
         $source = VideoSource::find($this->sourceId);
-        if (!$source) {
+        if (! $source) {
             return;
         }
         $discovery->run($source);
@@ -34,7 +35,7 @@ class DiscoverVideosJob implements ShouldQueue
         // Record the failure and push the next attempt to the next interval
         VideoSource::where('id', $this->sourceId)->update([
             'last_run_at' => now(),
-            'last_error'  => mb_substr($e->getMessage(), 0, 1000),
+            'last_error' => mb_substr($e->getMessage(), 0, 1000),
         ]);
     }
 }

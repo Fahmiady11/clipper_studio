@@ -16,21 +16,23 @@ class MusicLibraryTest extends TestCase
     use RefreshDatabase;
 
     private string $root;
+
     private static ?string $mp3 = null;
+
     private User $user;
 
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
-        $this->root = sys_get_temp_dir() . '/music-test-' . uniqid();
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
+        $this->root = sys_get_temp_dir().'/music-test-'.uniqid();
         mkdir($this->root);
         config(['services.music.path' => $this->root]);
         $this->user = User::factory()->create();
 
         // A real (1 s, silent) mp3 so the ffprobe audio check runs for real
-        if (!self::$mp3) {
-            self::$mp3 = sys_get_temp_dir() . '/music-test-src.mp3';
+        if (! self::$mp3) {
+            self::$mp3 = sys_get_temp_dir().'/music-test-src.mp3';
             exec(sprintf('%s -v error -y -f lavfi -i anullsrc=r=44100:cl=mono -t 1 -q:a 9 %s',
                 config('services.ffmpeg.path', 'ffmpeg'), escapeshellarg(self::$mp3)));
         }
@@ -44,8 +46,9 @@ class MusicLibraryTest extends TestCase
 
     private function mp3(string $name = 'Calm Morning - Artist.mp3'): UploadedFile
     {
-        $copy = sys_get_temp_dir() . '/' . uniqid() . '.mp3';
+        $copy = sys_get_temp_dir().'/'.uniqid().'.mp3';
         copy(self::$mp3, $copy);
+
         return new UploadedFile($copy, $name, 'audio/mpeg', null, true);
     }
 
@@ -83,12 +86,12 @@ class MusicLibraryTest extends TestCase
 
     public function test_paths_outside_the_library_are_refused(): void
     {
-        file_put_contents(dirname($this->root) . '/secret.mp3', 'x');
+        file_put_contents(dirname($this->root).'/secret.mp3', 'x');
 
-        $this->actingAs($this->user)->get('/api/music/file?path=' . urlencode('../secret.mp3'))->assertNotFound();
+        $this->actingAs($this->user)->get('/api/music/file?path='.urlencode('../secret.mp3'))->assertNotFound();
         $this->actingAs($this->user)->deleteJson('/api/music', ['path' => '../secret.mp3'])->assertNotFound();
-        $this->assertFileExists(dirname($this->root) . '/secret.mp3');
-        @unlink(dirname($this->root) . '/secret.mp3');
+        $this->assertFileExists(dirname($this->root).'/secret.mp3');
+        @unlink(dirname($this->root).'/secret.mp3');
     }
 
     public function test_move_mood_and_delete_keep_credit_rows_in_sync(): void

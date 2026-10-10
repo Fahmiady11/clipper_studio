@@ -24,8 +24,8 @@ class SubtitlePositionTest extends TestCase
 
     public function test_dragged_position_centres_every_line_at_that_height(): void
     {
-        $ass   = $this->ass(30);
-        $lines = array_filter(explode("\n", $ass), fn($l) => str_starts_with($l, 'Dialogue:'));
+        $ass = $this->ass(30);
+        $lines = array_filter(explode("\n", $ass), fn ($l) => str_starts_with($l, 'Dialogue:'));
 
         $this->assertNotEmpty($lines);
         foreach ($lines as $line) {

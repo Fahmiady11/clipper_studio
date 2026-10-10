@@ -15,7 +15,7 @@ class MetaController extends Controller
         $request->validate(['url' => ['required', 'string', 'max:500']]);
 
         $url = YoutubeUrl::canonical($request->string('url')->toString());
-        if (!$url) {
+        if (! $url) {
             return response()->json(['error' => 'Link YouTube tidak valid.'], 422);
         }
         $log = Log::channel('clipper_api');
@@ -24,9 +24,9 @@ class MetaController extends Controller
             $meta = $ytdlp->getMetadata($url);
 
             $log->info('Meta fetched', [
-                'user_id'  => $request->user()?->id,
-                'url'      => $url,
-                'title'    => $meta['title'],
+                'user_id' => $request->user()?->id,
+                'url' => $url,
+                'title' => $meta['title'],
                 'duration' => $meta['duration_seconds'],
             ]);
 
@@ -34,8 +34,8 @@ class MetaController extends Controller
         } catch (\RuntimeException $e) {
             $log->warning('Meta fetch failed', [
                 'user_id' => $request->user()?->id,
-                'url'     => $url,
-                'error'   => $e->getMessage(),
+                'url' => $url,
+                'error' => $e->getMessage(),
             ]);
 
             // Full yt-dlp output stays in the log; it can contain server paths and cookie locations

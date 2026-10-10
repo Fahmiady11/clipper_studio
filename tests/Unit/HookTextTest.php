@@ -22,7 +22,7 @@ class HookTextTest extends TestCase
     public function test_long_ai_hook_is_cut_at_a_clause_not_mid_word(): void
     {
         $long = 'Kakek ini menikah 60 tahun, tapi kenapa masih terlihat sangat mencintai? Rahasianya: dia mencintai w';
-        $out  = HookText::clean($long, shorten: true);
+        $out = HookText::clean($long, shorten: true);
 
         $this->assertSame('Kakek ini menikah 60 tahun…', $out);
         $this->assertLessThanOrEqual(HookText::AI_MAX_CHARS + 1, mb_strlen($out));

@@ -18,24 +18,31 @@ use RuntimeException;
  */
 class HookRenderer
 {
-    public const WIDTH  = 1080;
+    public const WIDTH = 1080;
+
     public const HEIGHT = 1920;
 
     private const SUPERSAMPLE = 2;   // draw at 2× and scale down for smooth edges
-    private const MAX_WIDTH   = 900; // widest text line, px
-    private const MAX_LINES   = 4;
-    private const SIZE_MAX    = 104; // font size in px; shrinks until the text fits
-    private const SIZE_MIN    = 52;
+
+    private const MAX_WIDTH = 900; // widest text line, px
+
+    private const MAX_LINES = 4;
+
+    private const SIZE_MAX = 104; // font size in px; shrinks until the text fits
+
+    private const SIZE_MIN = 52;
+
     private const LINE_HEIGHT = 1.2; // × font size
-    private const MARGIN      = 24;  // transparent border kept around the cropped block
+
+    private const MARGIN = 24;  // transparent border kept around the cropped block
 
     // Heaviest weight we bundle per family: hooks should hit harder than subtitles
     private const FONTS = [
         'Montserrat' => 'Montserrat-ExtraBold.ttf',
-        'Roboto'     => 'Roboto-Black.ttf',
-        'Oswald'     => 'Oswald-Bold.ttf',
+        'Roboto' => 'Roboto-Black.ttf',
+        'Oswald' => 'Oswald-Bold.ttf',
         'Bebas Neue' => 'BebasNeue-Regular.ttf',
-        'Arial'      => 'Arial-Bold.ttf',
+        'Arial' => 'Arial-Bold.ttf',
     ];
 
     // Condensed faces look small at the same px size; scale them up
@@ -44,15 +51,15 @@ class HookRenderer
     public function __construct(private VideoLayoutService $layout) {}
 
     /**
-     * @param array{text_color?: string, accent_color?: string, background_style?: string, position?: string, font_family?: string} $settings
+     * @param  array{text_color?: string, accent_color?: string, background_style?: string, position?: string, font_family?: string}  $settings
      * @return array{x: int, y: int, w: int, h: int} where the PNG sits on the 1080×1920 frame
      */
     public function render(string $text, array $settings, string $outPath): array
     {
         $family = $settings['font_family'] ?? 'Montserrat';
-        $font   = $this->fontPath($family);
-        $style  = $settings['background_style'] ?? 'full';
-        $color  = $this->rgb($settings['text_color'] ?? '#ffffff');
+        $font = $this->fontPath($family);
+        $style = $settings['background_style'] ?? 'full';
+        $color = $this->rgb($settings['text_color'] ?? '#ffffff');
         $accent = $this->rgb($settings['accent_color'] ?? '#facc15');
 
         $text = HookText::clean($text) ?? '';
@@ -60,17 +67,17 @@ class HookRenderer
             $text = mb_strtoupper($text); // all-caps display face, matches the preview
         }
         $tokens = HookText::tokens($text);
-        $words  = array_column($tokens, 0);
+        $words = array_column($tokens, 0);
 
         ['size' => $size, 'lines' => $lines] = $this->fit($words, $font, self::FONT_SCALE[$family] ?? 1.0);
 
-        $s      = self::SUPERSAMPLE;
+        $s = self::SUPERSAMPLE;
         $canvas = $this->transparentCanvas(self::WIDTH * $s, self::HEIGHT * $s);
-        $px     = $size * $s;
-        $lineH  = $px * self::LINE_HEIGHT;
-        $capH   = $this->capHeight($font, $px);
-        $padX   = $style === 'full' ? $px * 0.34 : $px * 0.52;
-        $padY   = $style === 'full' ? 0.0 : $px * 0.38;
+        $px = $size * $s;
+        $lineH = $px * self::LINE_HEIGHT;
+        $capH = $this->capHeight($font, $px);
+        $padX = $style === 'full' ? $px * 0.34 : $px * 0.52;
+        $padY = $style === 'full' ? 0.0 : $px * 0.38;
         $blockH = count($lines) * $lineH + 2 * $padY;
         $blockY = $this->blockTop($settings['position'] ?? 'center', $blockH / $s) * $s;
         $shadow = $px * 0.08;
@@ -80,30 +87,30 @@ class HookRenderer
         // (a word's own side bearing — the "j" in "juta" — must not shift it).
         $placed = [];
         $widths = [];
-        $i      = 0;
+        $i = 0;
         foreach ($lines as $n => $lineWords) {
-            $lineBox    = $this->bbox($font, $px, implode(' ', $lineWords));
+            $lineBox = $this->bbox($font, $px, implode(' ', $lineWords));
             $widths[$n] = $lineBox[2] - $lineBox[0];
-            $origin     = (self::WIDTH * $s - $widths[$n]) / 2 - $lineBox[0];
+            $origin = (self::WIDTH * $s - $widths[$n]) / 2 - $lineBox[0];
             foreach ($lineWords as $k => $word) {
-                $prefix   = implode(' ', array_slice($lineWords, 0, $k));
-                $advance  = $prefix === '' ? 0 : $this->bbox($font, $px, $prefix . ' ')[2];
-                $wordBox  = $this->bbox($font, $px, $word);
+                $prefix = implode(' ', array_slice($lineWords, 0, $k));
+                $advance = $prefix === '' ? 0 : $this->bbox($font, $px, $prefix.' ')[2];
+                $wordBox = $this->bbox($font, $px, $word);
                 $placed[] = [
                     'line' => $n, 'word' => $word, 'em' => $tokens[$i++][1],
-                    'x'    => $origin + $advance + $wordBox[0], // left edge of the ink
-                    'w'    => $wordBox[2] - $wordBox[0],
+                    'x' => $origin + $advance + $wordBox[0], // left edge of the ink
+                    'w' => $wordBox[2] - $wordBox[0],
                 ];
             }
         }
 
-        $dark   = $this->luminance($color) < 0.45;
+        $dark = $this->luminance($color) < 0.45;
         $shadowC = [0, 0, 0, 0.35];
 
         if ($style === 'semi') {
             // One rounded box behind the whole block; light box for dark text
-            $w   = max($widths) + 2 * $padX;
-            $x   = (self::WIDTH * $s - $w) / 2;
+            $w = max($widths) + 2 * $padX;
+            $x = (self::WIDTH * $s - $w) / 2;
             $box = $dark ? [255, 255, 255, 0.9] : [12, 12, 14, 0.66];
             $this->roundedRect($canvas, $x, $blockY + $shadow, $x + $w, $blockY + $blockH + $shadow, $px * 0.4, $shadowC);
             $this->roundedRect($canvas, $x, $blockY, $x + $w, $blockY + $blockH, $px * 0.4, $box);
@@ -112,7 +119,7 @@ class HookRenderer
             // TikTok "label": a solid box per line in the chosen colour
             foreach ([$shadowC, [...$color, 1.0]] as $pass => $fill) {
                 foreach ($widths as $n => $w) {
-                    $x  = (self::WIDTH * $s - $w) / 2 - $padX;
+                    $x = (self::WIDTH * $s - $w) / 2 - $padX;
                     $y1 = $blockY + $n * $lineH + ($pass === 0 ? $shadow : 0);
                     // overlap neighbours slightly so stacked boxes read as one shape
                     $this->roundedRect($canvas, $x, $y1 - $s, $x + $w + 2 * $padX, $y1 + $lineH + $s, $px * 0.22, $fill);
@@ -136,16 +143,16 @@ class HookRenderer
 
         imagealphablending($canvas, true);
         $plainColor = $boxRgb === null ? $color : ($style === 'full' ? $this->contrast($color) : $color);
-        $emColor    = match (true) {
-            $style === 'full'                                            => $this->contrast($marker),
-            $boxRgb !== null && !$this->readable($accent, $boxRgb)       => $plainColor,
-            default                                                      => $accent,
+        $emColor = match (true) {
+            $style === 'full' => $this->contrast($marker),
+            $boxRgb !== null && ! $this->readable($accent, $boxRgb) => $plainColor,
+            default => $accent,
         };
         $outline = $dark ? [255, 255, 255] : [0, 0, 0];
 
         foreach ($placed as $p) {
             $baseline = $blockY + $padY + ($p['line'] + 0.5) * $lineH + $capH / 2;
-            $fill     = $p['em'] ? $emColor : $plainColor;
+            $fill = $p['em'] ? $emColor : $plainColor;
             if ($style === 'none') {
                 $this->drawOutlined($canvas, $font, $px, $p['x'], $baseline, $p['word'], $fill, $outline);
             } else {
@@ -154,18 +161,18 @@ class HookRenderer
         }
 
         // Crop to the block (+ margin for outline/shadow) so ffmpeg can scale it around its own centre
-        $half  = (max($widths) + 2 * $padX) / 2 + ($style === 'none' ? $px * 0.12 : 0);
-        $x1    = max(0, (int) floor((self::WIDTH * $s / 2 - $half) / $s) - self::MARGIN);
-        $x2    = min(self::WIDTH, (int) ceil((self::WIDTH * $s / 2 + $half) / $s) + self::MARGIN);
-        $y1    = max(0, (int) floor(($blockY - $px * 0.12) / $s) - self::MARGIN);
-        $y2    = min(self::HEIGHT, (int) ceil(($blockY + $blockH + $shadow + $px * 0.12) / $s) + self::MARGIN);
+        $half = (max($widths) + 2 * $padX) / 2 + ($style === 'none' ? $px * 0.12 : 0);
+        $x1 = max(0, (int) floor((self::WIDTH * $s / 2 - $half) / $s) - self::MARGIN);
+        $x2 = min(self::WIDTH, (int) ceil((self::WIDTH * $s / 2 + $half) / $s) + self::MARGIN);
+        $y1 = max(0, (int) floor(($blockY - $px * 0.12) / $s) - self::MARGIN);
+        $y2 = min(self::HEIGHT, (int) ceil(($blockY + $blockH + $shadow + $px * 0.12) / $s) + self::MARGIN);
         $place = ['x' => $x1, 'y' => $y1, 'w' => $x2 - $x1, 'h' => $y2 - $y1];
 
         $out = $this->transparentCanvas($place['w'], $place['h']);
         imagecopyresampled($out, $canvas, 0, 0, $x1 * $s, $y1 * $s, $place['w'], $place['h'], $place['w'] * $s, $place['h'] * $s);
 
-        if (!imagepng($out, $outPath)) {
-            throw new RuntimeException('Gagal menyimpan gambar hook: ' . $outPath);
+        if (! imagepng($out, $outPath)) {
+            throw new RuntimeException('Gagal menyimpan gambar hook: '.$outPath);
         }
 
         return $place;
@@ -181,8 +188,9 @@ class HookRenderer
         $runs = [];
         $prev = null;
         foreach ($placed as $p) {
-            if (!$p['em']) {
+            if (! $p['em']) {
                 $prev = null;
+
                 continue;
             }
             if ($prev !== null && $prev['line'] === $p['line']) {
@@ -198,7 +206,7 @@ class HookRenderer
 
     public function fontPath(string $family): string
     {
-        $path = $this->layout->fontsDir() . '/' . (self::FONTS[$family] ?? self::FONTS['Montserrat']);
+        $path = $this->layout->fontsDir().'/'.(self::FONTS[$family] ?? self::FONTS['Montserrat']);
 
         return file_exists($path) ? $path : $this->layout->resolveFontByFamily($family);
     }
@@ -206,7 +214,7 @@ class HookRenderer
     /**
      * Largest font size whose balanced wrap fits MAX_WIDTH in MAX_LINES lines.
      *
-     * @param list<string> $words
+     * @param  list<string>  $words
      * @return array{size: int, lines: list<list<string>>}
      */
     public function fit(array $words, string $font, float $scale = 1.0): array
@@ -252,11 +260,11 @@ class HookRenderer
     private function greedy(array $words, string $font, int $size, int $maxWidth): array
     {
         $lines = [];
-        $line  = [];
+        $line = [];
         foreach ($words as $word) {
             if ($line && $this->textWidth($font, $size, implode(' ', [...$line, $word])) > $maxWidth) {
                 $lines[] = $line;
-                $line    = [$word];
+                $line = [$word];
             } else {
                 $line[] = $word;
             }
@@ -275,15 +283,16 @@ class HookRenderer
                 return false;
             }
         }
+
         return true;
     }
 
     private function blockTop(string $position, float $blockH): float
     {
         return match ($position) {
-            'top'    => self::HEIGHT * 0.17,
+            'top' => self::HEIGHT * 0.17,
             'bottom' => self::HEIGHT * 0.74 - $blockH, // stays clear of TikTok's caption/buttons
-            default  => (self::HEIGHT - $blockH) / 2,
+            default => (self::HEIGHT - $blockH) / 2,
         };
     }
 
@@ -292,6 +301,7 @@ class HookRenderer
     private function textWidth(string $font, float $px, string $text): float
     {
         $box = $this->bbox($font, $px, $text);
+
         return $box[2] - $box[0];
     }
 
@@ -304,6 +314,7 @@ class HookRenderer
     private function capHeight(string $font, float $px): float
     {
         $box = imagettfbbox($px * 0.75, 0, $font, 'H');
+
         return $box[1] - $box[7];
     }
 
@@ -333,7 +344,7 @@ class HookRenderer
         // Blending off: overlapping pieces overwrite instead of stacking alpha
         imagealphablending($img, false);
         $c = $this->color($img, $rgba);
-        [$x1, $y1, $x2, $y2] = array_map(fn($v) => (int) round($v), [$x1, $y1, $x2, $y2]);
+        [$x1, $y1, $x2, $y2] = array_map(fn ($v) => (int) round($v), [$x1, $y1, $x2, $y2]);
         $r = (int) min(round($r), ($x2 - $x1) / 2, ($y2 - $y1) / 2);
 
         imagefilledrectangle($img, $x1 + $r, $y1, $x2 - $r, $y2, $c);
@@ -349,6 +360,7 @@ class HookRenderer
         imagealphablending($img, false);
         imagesavealpha($img, true);
         imagefill($img, 0, 0, imagecolorallocatealpha($img, 0, 0, 0, 127));
+
         return $img;
     }
 
@@ -356,6 +368,7 @@ class HookRenderer
     private function color(GdImage $img, array $rgba): int
     {
         $alpha = 127 - (int) round(127 * ($rgba[3] ?? 1.0));
+
         return imagecolorallocatealpha($img, $rgba[0], $rgba[1], $rgba[2], $alpha);
     }
 
@@ -364,8 +377,9 @@ class HookRenderer
     {
         $hex = ltrim($hex, '#');
         if (strlen($hex) === 3) {
-            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
         }
+
         return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
     }
 

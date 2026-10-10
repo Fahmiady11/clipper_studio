@@ -1,8 +1,17 @@
 <?php
 
+use App\Http\Middleware\SecurityHeaders;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Session\Middleware\StartSession;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,25 +28,25 @@ return Application::configure(basePath: dirname(__DIR__))
         // (Middleware config runs before .env is loaded, so no env() here.)
         $middleware->trustProxies(at: ['127.0.0.1', '::1']);
 
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(SecurityHeaders::class);
 
         // Allow API routes to read the web session so Auth::user() works
         // for browser-initiated fetch() calls (SPA pattern without Sanctum).
         $middleware->group('api', [
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
             // Session-cookie auth means API calls need the same CSRF check as forms
-            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            ValidateCsrfToken::class,
+            ThrottleRequests::class.':api',
+            SubstituteBindings::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // 419 = the form's CSRF token died with the session (tab left open too
         // long, or logged out in another tab). Instead of Laravel's bare
         // "Page Expired" screen, send people somewhere that works.
-        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, \Illuminate\Http\Request $request) {
+        $exceptions->render(function (HttpException $e, Request $request) {
             if ($e->getStatusCode() !== 419) {
                 return null;
             }

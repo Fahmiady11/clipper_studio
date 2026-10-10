@@ -19,8 +19,8 @@ class HookSetting extends Model
     ];
 
     protected $casts = [
-        'enabled'          => 'boolean',
-        'is_ai_generated'  => 'boolean',
+        'enabled' => 'boolean',
+        'is_ai_generated' => 'boolean',
         'duration_seconds' => 'float',
     ];
 

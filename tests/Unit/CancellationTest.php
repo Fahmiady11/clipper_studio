@@ -18,21 +18,23 @@ class CancellationTest extends TestCase
 
     public function test_cancel_kills_the_running_command_and_its_children(): void
     {
-        $marker = 'cancel-test-' . uniqid();
-        $start  = microtime(true);
+        $marker = 'cancel-test-'.uniqid();
+        $start = microtime(true);
         $checks = 0;
 
         try {
             Cancellation::watch(
-                function () use (&$checks) { return ++$checks >= 2; },
-                fn() => Cancellation::exec("sh -c 'sleep 30; echo {$marker}'")
+                function () use (&$checks) {
+                    return ++$checks >= 2;
+                },
+                fn () => Cancellation::exec("sh -c 'sleep 30; echo {$marker}'")
             );
             $this->fail('expected JobCancelled');
         } catch (JobCancelled) {
         }
 
         $this->assertLessThan(10, microtime(true) - $start);
-        exec('pgrep -f ' . escapeshellarg("sleep 30; echo {$marker}"), $left);
+        exec('pgrep -f '.escapeshellarg("sleep 30; echo {$marker}"), $left);
         $this->assertSame([], $left, 'child process killed');
     }
 
@@ -41,6 +43,6 @@ class CancellationTest extends TestCase
         Cancellation::throwIfCancelled(); // no watcher → no-op
 
         $this->expectException(JobCancelled::class);
-        Cancellation::watch(fn() => true, fn() => Cancellation::throwIfCancelled());
+        Cancellation::watch(fn () => true, fn () => Cancellation::throwIfCancelled());
     }
 }

@@ -30,10 +30,10 @@ class AutopilotTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
 
         // Fake yt-dlp: prints flat-playlist JSON lines and records its arguments
-        $this->fakeYtDlp = sys_get_temp_dir() . '/fake-ytdlp-' . uniqid();
+        $this->fakeYtDlp = sys_get_temp_dir().'/fake-ytdlp-'.uniqid();
         $lines = [
             ['id' => 'vidNew1aaaa', 'title' => 'Video baru 1', 'channel' => 'Chan', 'duration' => 1200],
             ['id' => 'vidShortaaa', 'title' => 'Terlalu pendek', 'channel' => 'Chan', 'duration' => 60],
@@ -50,7 +50,7 @@ class AutopilotTest extends TestCase
     protected function tearDown(): void
     {
         @unlink($this->fakeYtDlp);
-        @unlink($this->fakeYtDlp . '.args');
+        @unlink($this->fakeYtDlp.'.args');
         parent::tearDown();
     }
 
@@ -73,16 +73,16 @@ class AutopilotTest extends TestCase
 
     public function test_list_videos_parses_and_skips_upcoming(): void
     {
-        $videos = (new YtDlpService())->listVideos('keyword', 'podcast bisnis', 20);
+        $videos = (new YtDlpService)->listVideos('keyword', 'podcast bisnis', 20);
 
         $this->assertSame(['vidNew1aaaa', 'vidShortaaa', 'vidSeenaaaa', 'vidNew2aaaa'], array_column($videos, 'id'));
-        $this->assertStringContainsString('ytsearchdate20:podcast bisnis', file_get_contents($this->fakeYtDlp . '.args'));
+        $this->assertStringContainsString('ytsearchdate20:podcast bisnis', file_get_contents($this->fakeYtDlp.'.args'));
     }
 
     public function test_discovery_starts_projects_for_new_videos_only(): void
     {
         Queue::fake();
-        $user   = User::factory()->create();
+        $user = User::factory()->create();
         $source = $this->source($user);
         DiscoveredVideo::create(['user_id' => $user->id, 'video_id' => 'vidSeenaaaa']);
 
@@ -91,7 +91,7 @@ class AutopilotTest extends TestCase
         $this->assertCount(2, $started); // new_1 + new_2; short, seen and upcoming skipped
         $this->assertSame(
             ['https://www.youtube.com/watch?v=vidNew1aaaa', 'https://www.youtube.com/watch?v=vidNew2aaaa'],
-            array_map(fn($p) => $p->youtube_url, $started)
+            array_map(fn ($p) => $p->youtube_url, $started)
         );
         $project = $started[0]->fresh();
         $this->assertSame($source->id, $project->video_source_id);
@@ -117,8 +117,8 @@ class AutopilotTest extends TestCase
     public function test_analysis_of_autopilot_project_renders_clips_for_review(): void
     {
         Queue::fake();
-        $user    = User::factory()->create();
-        $source  = $this->source($user);
+        $user = User::factory()->create();
+        $source = $this->source($user);
         $project = ClipProject::create([
             'user_id' => $user->id, 'video_source_id' => $source->id, 'youtube_url' => 'https://youtu.be/abcdefg',
             'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto', 'status' => 'processing',
@@ -139,8 +139,8 @@ class AutopilotTest extends TestCase
 
         $clip = GeneratedClip::where('clip_project_id', $project->id)->firstOrFail();
         $this->assertSame('pending', $clip->review_status);
-        Queue::assertPushed(RenderClipJob::class, fn($job) => $job->clipId === $clip->id);
-        exec('rm -rf ' . escapeshellarg(storage_path('app/temp/' . $project->id)));
+        Queue::assertPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
+        exec('rm -rf '.escapeshellarg(storage_path('app/temp/'.$project->id)));
     }
 
     public function test_source_crud_snapshots_latest_manual_project(): void
@@ -177,14 +177,14 @@ class AutopilotTest extends TestCase
     {
         Queue::fake();
         Storage::fake();
-        $user    = User::factory()->create();
+        $user = User::factory()->create();
         $project = ClipProject::create([
             'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/abcdefg',
             'layout_type' => 'reframe', 'clip_count' => 2, 'duration_mode' => 'auto', 'status' => 'done',
         ]);
         Storage::put('clips/a.mp4', 'a');
         Storage::put('clips/b.mp4', 'b');
-        $mk = fn($path) => GeneratedClip::create([
+        $mk = fn ($path) => GeneratedClip::create([
             'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
             'topic' => 't', 'reason' => 'r', 'status' => 'done', 'review_status' => 'pending', 'output_path' => $path,
         ]);
@@ -199,7 +199,7 @@ class AutopilotTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$a->id}/approve", ['account_id' => $account->id])->assertOk();
         $this->assertSame('approved', $a->fresh()->review_status);
-        Queue::assertPushed(UploadToTikTokJob::class, fn($job) => $job->clipId === $a->id && $job->mode === 'inbox');
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $a->id && $job->mode === 'inbox');
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$b->id}/reject")->assertOk();
         $this->assertSame('rejected', $b->fresh()->review_status);

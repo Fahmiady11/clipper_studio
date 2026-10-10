@@ -14,7 +14,7 @@ class AuthFlowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
     }
 
     public function test_signed_in_user_is_sent_from_login_and_register_to_studio(): void
@@ -91,7 +91,7 @@ class AuthFlowTest extends TestCase
 
     public function test_expired_csrf_token_redirects_with_message_instead_of_page_expired(): void
     {
-        Route::post('/_expired-form', fn() => abort(419))->middleware('web');
+        Route::post('/_expired-form', fn () => abort(419))->middleware('web');
 
         $this->from('/login')->post('/_expired-form', ['email' => 'a@b.c', 'password' => 'x'])
             ->assertRedirect('/login')

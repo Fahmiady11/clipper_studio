@@ -21,13 +21,14 @@ final class Cancellation
 
     /**
      * @template T
-     * @param callable(): bool $isCancelled
-     * @param callable(): T    $work
+     *
+     * @param  callable(): bool  $isCancelled
+     * @param  callable(): T  $work
      * @return T
      */
     public static function watch(callable $isCancelled, callable $work): mixed
     {
-        $previous    = self::$check;
+        $previous = self::$check;
         self::$check = Closure::fromCallable($isCancelled);
 
         try {
@@ -40,7 +41,7 @@ final class Cancellation
     public static function throwIfCancelled(): void
     {
         if (self::$check !== null && (self::$check)()) {
-            throw new JobCancelled();
+            throw new JobCancelled;
         }
     }
 
@@ -67,11 +68,11 @@ final class Cancellation
 
             if ((self::$check)()) {
                 self::kill($process);
-                throw new JobCancelled();
+                throw new JobCancelled;
             }
         }
 
-        $output = rtrim($process->getOutput() . $process->getErrorOutput(), "\n");
+        $output = rtrim($process->getOutput().$process->getErrorOutput(), "\n");
 
         return [$process->getExitCode() ?? 1, $output === '' ? [] : explode("\n", $output)];
     }
@@ -81,7 +82,7 @@ final class Cancellation
         // The command runs under `sh -c`; terminate its children (ffmpeg spawned
         // by yt-dlp, the encoder itself) before the shell, or they keep running.
         if ($pid = $process->getPid()) {
-            exec('pkill -TERM -P ' . (int) $pid . ' 2>/dev/null');
+            exec('pkill -TERM -P '.(int) $pid.' 2>/dev/null');
         }
         $process->stop(3);
     }

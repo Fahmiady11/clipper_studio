@@ -17,7 +17,7 @@ class StoreProjectRequest extends FormRequest
     {
         return [
             'youtube_url' => ['required', 'string', 'max:500', function ($attribute, $value, $fail) {
-                if (!YoutubeUrl::canonical($value)) {
+                if (! YoutubeUrl::canonical($value)) {
                     $fail('Link YouTube tidak valid.');
                 }
             }],

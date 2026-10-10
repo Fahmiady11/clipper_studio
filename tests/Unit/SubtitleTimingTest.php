@@ -11,12 +11,14 @@ class SubtitleTimingTest extends TestCase
     private function dialogues(string $ass): array
     {
         preg_match_all('/^Dialogue: 0,([^,]+),([^,]+),Default,,0,0,0,,(.*)$/m', $ass, $m, PREG_SET_ORDER);
-        return array_map(fn($d) => ['start' => $d[1], 'end' => $d[2], 'text' => $d[3]], $m);
+
+        return array_map(fn ($d) => ['start' => $d[1], 'end' => $d[2], 'text' => $d[3]], $m);
     }
 
     private function callPrivate(object $obj, string $method, array $args): mixed
     {
         $ref = new \ReflectionMethod($obj, $method);
+
         return $ref->invokeArgs($obj, $args);
     }
 
@@ -34,11 +36,11 @@ class SubtitleTimingTest extends TestCase
             ],
         ]];
 
-        $cues = $this->dialogues((new FFmpegService())->buildAssFile($segments, ['highlight_color' => '#facc15'], 100.0));
+        $cues = $this->dialogues((new FFmpegService)->buildAssFile($segments, ['highlight_color' => '#facc15'], 100.0));
 
         // One event per word; the cue text stays, only the spoken word is coloured
         $hl = '{\1c&H15CCFA&}';
-        $r  = '{\r}';
+        $r = '{\r}';
         $this->assertSame([
             ['start' => '0:00:00.00', 'end' => '0:00:00.50', 'text' => "{$hl}satu{$r} dua"],
             ['start' => '0:00:00.50', 'end' => '0:00:01.15', 'text' => "satu {$hl}dua{$r}"],
@@ -58,7 +60,7 @@ class SubtitleTimingTest extends TestCase
             ],
         ]];
 
-        $cues = $this->dialogues((new FFmpegService())->buildAssFile($segments, [], 10.0, 2.0));
+        $cues = $this->dialogues((new FFmpegService)->buildAssFile($segments, [], 10.0, 2.0));
 
         $this->assertCount(1, $cues);
         $this->assertSame('0:00:02.50', $cues[0]['start']);
@@ -69,7 +71,7 @@ class SubtitleTimingTest extends TestCase
     {
         $segments = [['start' => 0.0, 'end' => 2.0, 'text' => 'halo semua']];
 
-        $cues = $this->dialogues((new FFmpegService())->buildAssFile($segments, []));
+        $cues = $this->dialogues((new FFmpegService)->buildAssFile($segments, []));
 
         $this->assertCount(2, $cues); // one event per word
         $this->assertSame('0:00:01.00', $cues[1]['start']);
@@ -78,8 +80,8 @@ class SubtitleTimingTest extends TestCase
 
     public function test_ass_time_never_rolls_centiseconds_to_100(): void
     {
-        $this->assertSame('0:00:02.00', $this->callPrivate(new FFmpegService(), 'toAssTime', [1.996]));
-        $this->assertSame('0:01:00.00', $this->callPrivate(new FFmpegService(), 'toAssTime', [59.999]));
+        $this->assertSame('0:00:02.00', $this->callPrivate(new FFmpegService, 'toAssTime', [1.996]));
+        $this->assertSame('0:01:00.00', $this->callPrivate(new FFmpegService, 'toAssTime', [59.999]));
     }
 
     public function test_json3_asr_captions_keep_word_offsets(): void
@@ -97,7 +99,7 @@ class SubtitleTimingTest extends TestCase
             ]],
         ]];
 
-        $segments = $this->callPrivate(new TranscriptService(), 'parseJson3', [$json3]);
+        $segments = $this->callPrivate(new TranscriptService, 'parseJson3', [$json3]);
 
         $this->assertCount(2, $segments);
         $this->assertSame('halo teman semua', $segments[0]['text']);
@@ -115,7 +117,7 @@ class SubtitleTimingTest extends TestCase
             ['tStartMs' => 0, 'dDurationMs' => 2000, 'segs' => [['utf8' => 'kalimat manual lengkap']]],
         ]];
 
-        $segments = $this->callPrivate(new TranscriptService(), 'parseJson3', [$json3]);
+        $segments = $this->callPrivate(new TranscriptService, 'parseJson3', [$json3]);
 
         $this->assertArrayNotHasKey('words', $segments[0]);
     }
@@ -132,7 +134,7 @@ class SubtitleTimingTest extends TestCase
             ['word' => 'tiga', 'start' => 2.2, 'end' => 2.6],
         ];
 
-        $out = $this->callPrivate(new TranscriptService(), 'attachGroqWords', [$segments, $words]);
+        $out = $this->callPrivate(new TranscriptService, 'attachGroqWords', [$segments, $words]);
 
         $this->assertSame(['satu', 'dua'], array_column($out[0]['words'], 'text'));
         $this->assertSame(['tiga'], array_column($out[1]['words'], 'text'));

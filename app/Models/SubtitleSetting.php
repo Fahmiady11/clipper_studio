@@ -20,7 +20,7 @@ class SubtitleSetting extends Model
     ];
 
     protected $casts = [
-        'enabled'   => 'boolean',
+        'enabled' => 'boolean',
         'position_y' => 'float',
         'font_size' => 'integer',
     ];

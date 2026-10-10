@@ -38,26 +38,26 @@ class DiscoveryService
             if (count($started) >= $source->max_per_run) {
                 break;
             }
-            if (in_array($video['id'], $seen, true) || !$this->durationOk($source, $video['duration'])) {
+            if (in_array($video['id'], $seen, true) || ! $this->durationOk($source, $video['duration'])) {
                 continue;
             }
 
             // The id comes from yt-dlp's listing output: rebuild the URL through the same
             // strict check as user links instead of trusting whatever came back
-            $url = YoutubeUrl::canonical('https://www.youtube.com/watch?v=' . $video['id']);
-            if (!$url) {
+            $url = YoutubeUrl::canonical('https://www.youtube.com/watch?v='.$video['id']);
+            if (! $url) {
                 continue;
             }
             $project = $this->creator->create($source->user_id, $url, ClipSettings::forAutopilot($source->settings), $source->id);
 
             DiscoveredVideo::create([
-                'user_id'          => $source->user_id,
-                'video_source_id'  => $source->id,
-                'video_id'         => $video['id'],
-                'title'            => mb_substr((string) $video['title'], 0, 255),
-                'channel'          => mb_substr((string) $video['channel'], 0, 255),
+                'user_id' => $source->user_id,
+                'video_source_id' => $source->id,
+                'video_id' => $video['id'],
+                'title' => mb_substr((string) $video['title'], 0, 255),
+                'channel' => mb_substr((string) $video['channel'], 0, 255),
                 'duration_seconds' => $video['duration'],
-                'clip_project_id'  => $project->id,
+                'clip_project_id' => $project->id,
             ]);
             $project->update(['video_title' => $video['title']]);
 

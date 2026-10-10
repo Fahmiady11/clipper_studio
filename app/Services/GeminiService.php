@@ -19,8 +19,10 @@ class GeminiService
     private const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
     private string $apiKey;
+
     /** @var list<string> */
     private array $models;
+
     /** @var array{url: string, key: string, models: list<string>}|null */
     private ?array $gateway;
 
@@ -31,7 +33,7 @@ class GeminiService
         $gw = config('services.llm_gateway');
         // LLM_GATEWAY_MODEL may list several models, comma separated, tried in order
         $gwModels = array_values(array_filter(array_map('trim', explode(',', (string) ($gw['model'] ?? '')))));
-        $this->gateway = !empty($gw['url']) && $gwModels ? [
+        $this->gateway = ! empty($gw['url']) && $gwModels ? [
             'url' => rtrim($gw['url'], '/'), 'key' => (string) ($gw['key'] ?? ''), 'models' => $gwModels,
         ] : null;
     }
@@ -48,9 +50,10 @@ class GeminiService
 
         $clips = $this->generate($prompt, 'analyzeTranscript', 0.3, 300, function ($data) {
             // Some models wrap the array: {"clips": [...]}
-            if (is_array($data) && !array_is_list($data)) {
-                $data = collect($data)->first(fn($v) => is_array($v) && array_is_list($v));
+            if (is_array($data) && ! array_is_list($data)) {
+                $data = collect($data)->first(fn ($v) => is_array($v) && array_is_list($v));
             }
+
             return is_array($data) && $data ? $data : null;
         });
 
@@ -79,13 +82,13 @@ class GeminiService
         PROMPT;
 
         try {
-            $data = $this->generate($prompt, 'caption', 0.7, 30, fn($d) => isset($d['caption'], $d['hashtags']) ? $d : null);
+            $data = $this->generate($prompt, 'caption', 0.7, 30, fn ($d) => isset($d['caption'], $d['hashtags']) ? $d : null);
         } catch (RuntimeException) {
             return ['caption' => '', 'hashtags' => []];
         }
 
         return [
-            'caption'  => (string) $data['caption'],
+            'caption' => (string) $data['caption'],
             'hashtags' => array_values(array_filter((array) $data['hashtags'], 'is_string')),
         ];
     }
@@ -94,12 +97,13 @@ class GeminiService
      * Ask each provider in turn until one returns JSON that $accept turns into a value.
      *
      * @template T
-     * @param callable(mixed): (T|null) $accept null = unusable answer, try the next model
+     *
+     * @param  callable(mixed): (T|null)  $accept  null = unusable answer, try the next model
      * @return T
      */
     private function generate(string $prompt, string $tag, float $temperature, int $timeout, callable $accept): mixed
     {
-        $log      = Log::channel('clipper_jobs');
+        $log = Log::channel('clipper_jobs');
         $failures = [];
 
         foreach ($this->targets() as $target) {
@@ -115,6 +119,7 @@ class GeminiService
                 } catch (\Throwable $e) {
                     $failures[$name] = 'koneksi gagal';
                     $log->warning("[LLM:{$tag}] {$name} exception", ['error' => $e->getMessage()]);
+
                     continue; // timeouts/connection resets: worth another try
                 }
 
@@ -128,21 +133,23 @@ class GeminiService
                         break; // its quota won't come back in time: next model
                     }
                     sleep(min(max(1, $wait), 30));
+
                     continue;
                 }
                 if ($status >= 500) {
                     $failures[$name] = "server sibuk ({$status})";
                     $log->warning("[LLM:{$tag}] {$name} {$status}");
+
                     continue;
                 }
-                if (!$response->ok()) {
+                if (! $response->ok()) {
                     $failures[$name] = "HTTP {$status}";
                     $log->error("[LLM:{$tag}] {$name} HTTP {$status}", ['body' => mb_substr($response->body(), 0, 300)]);
                     break;
                 }
 
-                $text   = $target['text']($response);
-                $clean  = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim((string) $text));
+                $text = $target['text']($response);
+                $clean = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim((string) $text));
                 $result = $accept(json_decode($clean, true));
                 if ($result === null) {
                     $failures[$name] = 'jawaban tidak valid';
@@ -151,11 +158,12 @@ class GeminiService
                 }
 
                 $log->info("[LLM:{$tag}] SUCCESS {$name}", ['try' => $try + 1]);
+
                 return $result;
             }
         }
 
-        if (!$failures) {
+        if (! $failures) {
             throw new RuntimeException('Tidak ada AI yang dikonfigurasi: isi LLM_GATEWAY_* atau GEMINI_API_KEY di .env.');
         }
 
@@ -170,15 +178,15 @@ class GeminiService
         foreach ($this->gateway['models'] ?? [] as $model) {
             $gw = $this->gateway;
             $targets[] = [
-                'name' => 'gateway:' . $model,
-                'call' => fn(string $prompt, float $t, int $timeout): Response => Http::timeout(max($timeout, 120))
+                'name' => 'gateway:'.$model,
+                'call' => fn (string $prompt, float $t, int $timeout): Response => Http::timeout(max($timeout, 120))
                     ->withToken($gw['key'])
-                    ->post($gw['url'] . '/chat/completions', [
-                        'model'       => $model,
-                        'messages'    => [['role' => 'user', 'content' => $prompt]],
+                    ->post($gw['url'].'/chat/completions', [
+                        'model' => $model,
+                        'messages' => [['role' => 'user', 'content' => $prompt]],
                         'temperature' => $t,
                     ]),
-                'text' => fn(Response $r) => $r->json('choices.0.message.content'),
+                'text' => fn (Response $r) => $r->json('choices.0.message.content'),
             ];
         }
 
@@ -187,13 +195,13 @@ class GeminiService
             $targets[] = [
                 'name' => $model,
                 // Key in a header, not the URL: URLs end up in exception messages and logs
-                'call' => fn(string $prompt, float $t, int $timeout): Response => Http::timeout($timeout)
+                'call' => fn (string $prompt, float $t, int $timeout): Response => Http::timeout($timeout)
                     ->withHeaders(['x-goog-api-key' => $this->apiKey])
-                    ->post(self::BASE . "{$model}:generateContent", [
-                        'contents'         => [['parts' => [['text' => $prompt]]]],
+                    ->post(self::BASE."{$model}:generateContent", [
+                        'contents' => [['parts' => [['text' => $prompt]]]],
                         'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => $t],
                     ]),
-                'text' => fn(Response $r) => $r->json('candidates.0.content.parts.0.text'),
+                'text' => fn (Response $r) => $r->json('candidates.0.content.parts.0.text'),
             ];
         }
 
@@ -205,15 +213,13 @@ class GeminiService
     {
         $values = array_values($failures);
         $hint = match (true) {
-            $values && count(array_filter($values, fn($v) => str_contains($v, 'kuota'))) === count($values)
-                => 'Kuota harian Gemini habis di semua model. Coba lagi besok, atau pakai API key berbayar / gateway.',
-            $values && count(array_filter($values, fn($v) => str_contains($v, 'sibuk') || str_contains($v, 'kuota') || str_contains($v, 'rate'))) === count($values)
-                => 'Server Gemini sedang sibuk/terbatas. Coba lagi beberapa menit lagi.',
+            $values && count(array_filter($values, fn ($v) => str_contains($v, 'kuota'))) === count($values) => 'Kuota harian Gemini habis di semua model. Coba lagi besok, atau pakai API key berbayar / gateway.',
+            $values && count(array_filter($values, fn ($v) => str_contains($v, 'sibuk') || str_contains($v, 'kuota') || str_contains($v, 'rate'))) === count($values) => 'Server Gemini sedang sibuk/terbatas. Coba lagi beberapa menit lagi.',
             default => 'AI gagal menganalisis.',
         };
-        $detail = implode(', ', array_map(fn($m, $why) => "{$m}: {$why}", array_keys($failures), $values));
+        $detail = implode(', ', array_map(fn ($m, $why) => "{$m}: {$why}", array_keys($failures), $values));
 
-        return "Gemini analisa gagal — {$hint}" . ($detail ? " ({$detail})" : '');
+        return "Gemini analisa gagal — {$hint}".($detail ? " ({$detail})" : '');
     }
 
     private function buildPromptFromTranscript(
@@ -229,8 +235,8 @@ class GeminiService
 
         // Sample evenly to max 1000 segments — keeps full coverage, reduces prompt from ~200KB to ~80KB
         if (count($segments) > 1000) {
-            $total  = count($segments);
-            $step   = $total / 1000;
+            $total = count($segments);
+            $step = $total / 1000;
             $picked = [];
             for ($i = 0; $i < 1000; $i++) {
                 $picked[] = $segments[(int) round($i * $step)];
@@ -248,9 +254,9 @@ class GeminiService
             : 'Durasi per clip: 30–90 detik (pilih optimal per momen, boleh lebih panjang jika topik belum selesai).';
 
         $layoutHint = match ($layoutType) {
-            'reframe'  => 'Subjek pusat/wajah dominan, cocok crop vertikal.',
+            'reframe' => 'Subjek pusat/wajah dominan, cocok crop vertikal.',
             'gaussian' => 'Pembicara tunggal atau subjek fokus.',
-            default    => '',
+            default => '',
         };
 
         return <<<PROMPT
@@ -330,6 +336,7 @@ class GeminiService
     {
         $data = json_decode($body, true);
         $delay = $data['error']['details'][2]['retryDelay'] ?? '0s';
+
         return (int) preg_replace('/[^0-9]/', '', $delay);
     }
 }

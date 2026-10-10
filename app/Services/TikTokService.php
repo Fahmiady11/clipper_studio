@@ -16,11 +16,13 @@ use RuntimeException;
 class TikTokService
 {
     private const AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
-    private const API           = 'https://open.tiktokapis.com/v2';
+
+    private const API = 'https://open.tiktokapis.com/v2';
 
     // Chunk rules: each chunk 5–64 MB, the last one absorbs the remainder.
     private const MAX_SINGLE_CHUNK = 64 * 1024 * 1024;
-    private const CHUNK_SIZE       = 10 * 1024 * 1024;
+
+    private const CHUNK_SIZE = 10 * 1024 * 1024;
 
     public function isConfigured(): bool
     {
@@ -31,12 +33,12 @@ class TikTokService
 
     public function authorizeUrl(string $state): string
     {
-        return self::AUTHORIZE_URL . '?' . http_build_query([
-            'client_key'    => config('services.tiktok.client_key'),
-            'scope'         => config('services.tiktok.scopes'),
+        return self::AUTHORIZE_URL.'?'.http_build_query([
+            'client_key' => config('services.tiktok.client_key'),
+            'scope' => config('services.tiktok.scopes'),
             'response_type' => 'code',
-            'redirect_uri'  => config('services.tiktok.redirect_uri'),
-            'state'         => $state,
+            'redirect_uri' => config('services.tiktok.redirect_uri'),
+            'state' => $state,
         ]);
     }
 
@@ -44,8 +46,8 @@ class TikTokService
     public function connect(int $userId, string $code): TiktokAccount
     {
         $token = $this->tokenRequest([
-            'code'         => $code,
-            'grant_type'   => 'authorization_code',
+            'code' => $code,
+            'grant_type' => 'authorization_code',
             'redirect_uri' => config('services.tiktok.redirect_uri'),
         ]);
 
@@ -55,7 +57,7 @@ class TikTokService
             ['user_id' => $userId, 'open_id' => $token['open_id']],
             $this->tokenAttributes($token) + [
                 'display_name' => $info['display_name'] ?? null,
-                'avatar_url'   => $info['avatar_url'] ?? null,
+                'avatar_url' => $info['avatar_url'] ?? null,
             ]
         );
     }
@@ -72,7 +74,7 @@ class TikTokService
         }
 
         $token = $this->tokenRequest([
-            'grant_type'    => 'refresh_token',
+            'grant_type' => 'refresh_token',
             'refresh_token' => $account->refresh_token,
         ]);
         $account->update($this->tokenAttributes($token));
@@ -94,7 +96,7 @@ class TikTokService
      * Post straight to the profile (scope video.publish). Until the app passes
      * TikTok's audit only privacy_level SELF_ONLY is accepted.
      *
-     * @param array{title: string, privacy_level: string, disable_comment: bool, disable_duet: bool, disable_stitch: bool} $postInfo
+     * @param  array{title: string, privacy_level: string, disable_comment: bool, disable_duet: bool, disable_stitch: bool}  $postInfo
      * @return string publish_id
      */
     public function directPost(TiktokAccount $account, string $path, array $postInfo): string
@@ -114,7 +116,7 @@ class TikTokService
     private function initAndUpload(TiktokAccount $account, string $endpoint, array $body, string $path): string
     {
         $size = filesize($path);
-        if (!$size) {
+        if (! $size) {
             throw new RuntimeException("Video tidak ditemukan / kosong: {$path}");
         }
 
@@ -122,16 +124,16 @@ class TikTokService
 
         $data = $this->api($this->freshToken($account), $endpoint, $body + [
             'source_info' => [
-                'source'            => 'FILE_UPLOAD',
-                'video_size'        => $size,
-                'chunk_size'        => $chunkSize,
+                'source' => 'FILE_UPLOAD',
+                'video_size' => $size,
+                'chunk_size' => $chunkSize,
                 'total_chunk_count' => $chunkCount,
             ],
         ]);
 
         $publishId = $data['publish_id'] ?? null;
         $uploadUrl = $data['upload_url'] ?? null;
-        if (!$publishId || !$uploadUrl) {
+        if (! $publishId || ! $uploadUrl) {
             throw new RuntimeException('TikTok init tidak mengembalikan publish_id/upload_url');
         }
 
@@ -139,20 +141,20 @@ class TikTokService
         try {
             for ($i = 0; $i < $chunkCount; $i++) {
                 $start = $i * $chunkSize;
-                $end   = $i === $chunkCount - 1 ? $size - 1 : $start + $chunkSize - 1;
+                $end = $i === $chunkCount - 1 ? $size - 1 : $start + $chunkSize - 1;
                 fseek($fh, $start);
                 $bytes = fread($fh, $end - $start + 1);
 
                 $res = Http::timeout(300)
                     ->withHeaders([
-                        'Content-Type'  => 'video/mp4',
+                        'Content-Type' => 'video/mp4',
                         'Content-Range' => "bytes {$start}-{$end}/{$size}",
                     ])
                     ->withBody($bytes, 'video/mp4')
                     ->put($uploadUrl);
 
-                if (!$res->successful()) {
-                    throw new RuntimeException("TikTok upload chunk {$i} gagal ({$res->status()}): " . $res->body());
+                if (! $res->successful()) {
+                    throw new RuntimeException("TikTok upload chunk {$i} gagal ({$res->status()}): ".$res->body());
                 }
             }
         } finally {
@@ -170,7 +172,7 @@ class TikTokService
         ]);
 
         return [
-            'status'      => (string) ($data['status'] ?? 'UNKNOWN'),
+            'status' => (string) ($data['status'] ?? 'UNKNOWN'),
             'fail_reason' => $data['fail_reason'] ?? null,
         ];
     }
@@ -186,13 +188,14 @@ class TikTokService
         if ($size <= self::MAX_SINGLE_CHUNK) {
             return [$size, 1];
         }
+
         return [self::CHUNK_SIZE, intdiv($size, self::CHUNK_SIZE)];
     }
 
     private function userInfo(string $accessToken): array
     {
         $res = Http::withToken($accessToken)
-            ->get(self::API . '/user/info/', ['fields' => 'open_id,display_name,avatar_url']);
+            ->get(self::API.'/user/info/', ['fields' => 'open_id,display_name,avatar_url']);
 
         return $this->unwrap($res, 'user/info')['user'] ?? [];
     }
@@ -203,7 +206,7 @@ class TikTokService
         $res = Http::withToken($accessToken)
             ->timeout(60)
             ->withBody($body ? json_encode($body) : '{}', 'application/json')
-            ->post(self::API . '/' . $endpoint);
+            ->post(self::API.'/'.$endpoint);
 
         return $this->unwrap($res, $endpoint);
     }
@@ -211,40 +214,42 @@ class TikTokService
     /** Content API responses carry {data, error: {code, message}}; code "ok" means success. */
     private function unwrap(Response $res, string $endpoint): array
     {
-        $json  = $res->json() ?? [];
+        $json = $res->json() ?? [];
         $error = $json['error'] ?? [];
-        if (!$res->successful() || (($error['code'] ?? 'ok') !== 'ok')) {
+        if (! $res->successful() || (($error['code'] ?? 'ok') !== 'ok')) {
             $msg = $error['message'] ?? $res->body();
-            throw new RuntimeException("TikTok {$endpoint} gagal ({$res->status()}): " . ($error['code'] ?? '') . ' ' . $msg);
+            throw new RuntimeException("TikTok {$endpoint} gagal ({$res->status()}): ".($error['code'] ?? '').' '.$msg);
         }
+
         return $json['data'] ?? [];
     }
 
     private function tokenRequest(array $params): array
     {
-        $res = Http::asForm()->post(self::API . '/oauth/token/', $params + [
-            'client_key'    => config('services.tiktok.client_key'),
+        $res = Http::asForm()->post(self::API.'/oauth/token/', $params + [
+            'client_key' => config('services.tiktok.client_key'),
             'client_secret' => config('services.tiktok.client_secret'),
         ]);
 
         $json = $res->json() ?? [];
-        if (!$res->successful() || empty($json['access_token'])) {
+        if (! $res->successful() || empty($json['access_token'])) {
             $msg = $json['error_description'] ?? $json['error'] ?? $res->body();
             throw new RuntimeException("TikTok token gagal ({$res->status()}): {$msg}");
         }
+
         return $json;
     }
 
     private function tokenAttributes(array $token): array
     {
         return [
-            'access_token'       => $token['access_token'],
-            'refresh_token'      => $token['refresh_token'],
-            'access_expires_at'  => now()->addSeconds((int) ($token['expires_in'] ?? 86400)),
+            'access_token' => $token['access_token'],
+            'refresh_token' => $token['refresh_token'],
+            'access_expires_at' => now()->addSeconds((int) ($token['expires_in'] ?? 86400)),
             'refresh_expires_at' => isset($token['refresh_expires_in'])
                 ? now()->addSeconds((int) $token['refresh_expires_in'])
                 : null,
-            'scope'              => $token['scope'] ?? null,
+            'scope' => $token['scope'] ?? null,
         ];
     }
 }

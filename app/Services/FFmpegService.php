@@ -9,17 +9,21 @@ use RuntimeException;
 class FFmpegService
 {
     private const MAX_CUE_WORDS = 4;    // words per subtitle cue (TikTok-style short lines)
+
     private const CUE_BREAK_GAP = 0.6;  // seconds of silence that starts a new cue
-    private const CUE_HOLD      = 0.25; // seconds a cue lingers after its last word
+
+    private const CUE_HOLD = 0.25; // seconds a cue lingers after its last word
 
     private string $bin;
+
     private string $posTag = ''; // ASS override placing every subtitle line (set by buildAssFile)
+
     private VideoLayoutService $layout;
 
     public function __construct()
     {
-        $this->bin    = config('services.ffmpeg.path', 'ffmpeg');
-        $this->layout = new VideoLayoutService();
+        $this->bin = config('services.ffmpeg.path', 'ffmpeg');
+        $this->layout = new VideoLayoutService;
     }
 
     public function cut(string $input, float $start, float $end, string $output): void
@@ -38,29 +42,29 @@ class FFmpegService
     }
 
     /**
-     * @param float|null $start When given (with $end), trim the input in the same
-     *                          re-encode pass. Seeking while transcoding is
-     *                          frame-accurate, unlike cut()'s stream copy which
-     *                          snaps back to the previous keyframe and shifts
-     *                          the clip's t=0 away from $start (subtitle drift).
+     * @param  float|null  $start  When given (with $end), trim the input in the same
+     *                             re-encode pass. Seeking while transcoding is
+     *                             frame-accurate, unlike cut()'s stream copy which
+     *                             snaps back to the previous keyframe and shifts
+     *                             the clip's t=0 away from $start (subtitle drift).
      */
     public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null): void
     {
         // Map new layout IDs to VideoLayoutService's filter method
         $layoutMap = [
-            'reframe'  => 'auto_reframe',
-            'gaussian' => 'gaussian_blur'
+            'reframe' => 'auto_reframe',
+            'gaussian' => 'gaussian_blur',
         ];
 
         $mode = $layoutMap[$layoutType] ?? 'gaussian_blur';
         $filterLabel = '[out]';
         $filterGraph = $this->layout->layoutFilter($mode, $filterLabel);
 
-        $trimIn  = '';
+        $trimIn = '';
         $trimOut = '';
         if ($start !== null && $end !== null) {
-            $trimIn  = ' -ss ' . escapeshellarg(sprintf('%.3f', $start));
-            $trimOut = ' -t ' . escapeshellarg(sprintf('%.3f', $end - $start));
+            $trimIn = ' -ss '.escapeshellarg(sprintf('%.3f', $start));
+            $trimOut = ' -t '.escapeshellarg(sprintf('%.3f', $end - $start));
         }
 
         $cmd = sprintf(
@@ -80,7 +84,7 @@ class FFmpegService
     public function burnSubtitles(string $input, string $assPath, string $output): void
     {
         $fontsdir = $this->layout->fontsDir();
-        $assFilter = 'ass=' . $assPath . ':fontsdir=' . $fontsdir;
+        $assFilter = 'ass='.$assPath.':fontsdir='.$fontsdir;
 
         $cmd = sprintf(
             '%s -y -i %s -vf %s -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart %s 2>&1',
@@ -94,39 +98,39 @@ class FFmpegService
     }
 
     /**
-     * @param float $clipStart    Absolute start of the clip in the source video.
+     * @param  float  $clipStart  Absolute start of the clip in the source video.
      *                            subtitle_json holds absolute times; subtract this
      *                            so subtitles land at clip-relative t (starting 0).
-     * @param float $hookDuration Seconds the hook overlay covers at the start.
-     *                            Segments fully inside the hook window are dropped;
-     *                            overlapping ones are clamped to start after it.
+     * @param  float  $hookDuration  Seconds the hook overlay covers at the start.
+     *                               Segments fully inside the hook window are dropped;
+     *                               overlapping ones are clamped to start after it.
      */
     public function buildAssFile(array $segments, array $subtitleSettings, float $clipStart = 0.0, float $hookDuration = 0.0): string
     {
-        $fontFamily  = $subtitleSettings['font_family'] ?? 'Montserrat';
-        $fontSize    = (int) ($subtitleSettings['font_size'] ?? 42);
-        $textColor   = $this->hexToAss($subtitleSettings['text_color'] ?? '#ffffff');
-        $hlColor     = $this->hexToAss($subtitleSettings['highlight_color'] ?? '#facc15');
-        $position    = $subtitleSettings['position'] ?? 'bottom';
-        $bgStyle     = $subtitleSettings['background_style'] ?? 'semi';
+        $fontFamily = $subtitleSettings['font_family'] ?? 'Montserrat';
+        $fontSize = (int) ($subtitleSettings['font_size'] ?? 42);
+        $textColor = $this->hexToAss($subtitleSettings['text_color'] ?? '#ffffff');
+        $hlColor = $this->hexToAss($subtitleSettings['highlight_color'] ?? '#facc15');
+        $position = $subtitleSettings['position'] ?? 'bottom';
+        $bgStyle = $subtitleSettings['background_style'] ?? 'semi';
 
         // Dragged position: every line is centred on that height (\an5 = middle-centre),
         // matching the studio preview which centres the subtitle box on the same %.
-        $positionY    = $subtitleSettings['position_y'] ?? null;
+        $positionY = $subtitleSettings['position_y'] ?? null;
         $this->posTag = $positionY === null ? '' : sprintf('{\\an5\\pos(540,%d)}',
             (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920));
 
         $alignment = match ($position) {
-            'top'    => 8,
+            'top' => 8,
             'center' => 5,
-            default  => 2,
+            default => 2,
         };
 
         // Fix 3: bottom margin raised so subtitles clear TikTok UI (~200px from bottom)
         $marginV = match ($position) {
-            'top'    => 60,
+            'top' => 60,
             'center' => 0,
-            default  => 200,
+            default => 200,
         };
 
         // Fix 5: BorderStyle=3 box mode; Shadow=0 removes double-box; Outline=18 gives padding
@@ -136,14 +140,14 @@ class FFmpegService
             default => 0,
         };
         $outlineW = $bgStyle !== 'none' ? 18 : 2;
-        $shadowW  = $bgStyle !== 'none' ? 0  : 2;
-        $backClr  = match ($bgStyle) {
-            'semi'  => '&H99000000', // ~60% opaque black
-            'full'  => '&HFF000000', // fully opaque black
+        $shadowW = $bgStyle !== 'none' ? 0 : 2;
+        $backClr = match ($bgStyle) {
+            'semi' => '&H99000000', // ~60% opaque black
+            'full' => '&HFF000000', // fully opaque black
             default => '&H00000000',
         };
 
-        $ass  = "[Script Info]\n";
+        $ass = "[Script Info]\n";
         $ass .= "ScriptType: v4.00+\n";
         $ass .= "PlayResX: 1080\nPlayResY: 1920\n";
         $ass .= "WrapStyle: 0\n\n"; // Fix 2: smart wrap prevents overflow
@@ -158,9 +162,9 @@ class FFmpegService
         // Segments with word timing (ASR captions / Groq) are cued from the real
         // word timestamps; the rest fall back to proportional splitting.
         $timedWords = [];
-        $untimed    = [];
+        $untimed = [];
         foreach ($segments as $seg) {
-            if (!empty($seg['words'])) {
+            if (! empty($seg['words'])) {
                 array_push($timedWords, ...$seg['words']);
             } else {
                 $untimed[] = $seg;
@@ -180,7 +184,7 @@ class FFmpegService
 
     private function dialogue(float $start, float $end, string $text): string
     {
-        return 'Dialogue: 0,' . $this->toAssTime($start) . ',' . $this->toAssTime($end) . ",Default,,0,0,0,,{$this->posTag}{$text}\n";
+        return 'Dialogue: 0,'.$this->toAssTime($start).','.$this->toAssTime($end).",Default,,0,0,0,,{$this->posTag}{$text}\n";
     }
 
     /**
@@ -189,23 +193,23 @@ class FFmpegService
      * base text colour (matches the studio preview). Events are back to back,
      * so the line never flickers or stacks.
      *
-     * @param array{start: float, end: float, words: array<int, array{text: string, start: float}>} $cue
+     * @param  array{start: float, end: float, words: array<int, array{text: string, start: float}>}  $cue
      */
     private function highlightDialogues(array $cue, string $hlColor): string
     {
-        $words  = $cue['words'];
-        $hl     = '{\\1c&H' . substr($hlColor, 4) . '&}'; // &H00BBGGRR -> \1c&HBBGGRR&
-        $out    = '';
+        $words = $cue['words'];
+        $hl = '{\\1c&H'.substr($hlColor, 4).'&}'; // &H00BBGGRR -> \1c&HBBGGRR&
+        $out = '';
 
         foreach ($words as $i => $active) {
             $from = $i === 0 ? $cue['start'] : $active['start'];
-            $to   = $words[$i + 1]['start'] ?? $cue['end'];
+            $to = $words[$i + 1]['start'] ?? $cue['end'];
             if ($to <= $from) {
                 continue;
             }
 
             $text = implode(' ', array_map(
-                fn($w, $j) => $j === $i ? $hl . $w['text'] . '{\\r}' : $w['text'],
+                fn ($w, $j) => $j === $i ? $hl.$w['text'].'{\\r}' : $w['text'],
                 $words,
                 array_keys($words)
             ));
@@ -227,26 +231,26 @@ class FFmpegService
         $rel = [];
         foreach ($words as $w) {
             $start = (float) $w['start'] - $clipStart;
-            $end   = (float) $w['end'] - $clipStart;
-            $text  = trim($w['text'] ?? '');
+            $end = (float) $w['end'] - $clipStart;
+            $text = trim($w['text'] ?? '');
             if ($text === '' || $end <= $hookDuration) {
                 continue; // before the clip or hidden behind the hook
             }
             $rel[] = ['start' => max($start, $hookDuration), 'end' => $end, 'text' => $text];
         }
-        usort($rel, fn($a, $b) => $a['start'] <=> $b['start']);
+        usort($rel, fn ($a, $b) => $a['start'] <=> $b['start']);
 
         $groups = [];
-        $group  = [];
+        $group = [];
         foreach ($rel as $w) {
             if ($group) {
-                $prev  = $group[count($group) - 1];
+                $prev = $group[count($group) - 1];
                 $break = count($group) >= self::MAX_CUE_WORDS
                     || $w['start'] - $prev['end'] > self::CUE_BREAK_GAP
                     || preg_match('/[.?!]$/u', $prev['text']);
                 if ($break) {
                     $groups[] = $group;
-                    $group    = [];
+                    $group = [];
                 }
             }
             $group[] = $w;
@@ -257,7 +261,7 @@ class FFmpegService
 
         $cues = [];
         foreach ($groups as $gi => $g) {
-            $start     = $g[0]['start'];
+            $start = $g[0]['start'];
             $nextStart = $groups[$gi + 1][0]['start'] ?? INF;
             // Hold briefly after the last word so short cues stay readable,
             // but never into the next cue (ASS would stack them as two rows).
@@ -277,7 +281,7 @@ class FFmpegService
         $norm = [];
         foreach ($segments as $seg) {
             $relStart = $seg['start'] - $clipStart;
-            $relEnd   = $seg['end'] - $clipStart;
+            $relEnd = $seg['end'] - $clipStart;
 
             if ($relEnd <= $hookDuration) {
                 continue; // fully hidden behind hook
@@ -310,7 +314,7 @@ class FFmpegService
                 continue;
             }
 
-            $dur    = $seg['end'] - $seg['start'];
+            $dur = $seg['end'] - $seg['start'];
             $cursor = $seg['start'];
 
             $perWord = $dur / $total;
@@ -319,7 +323,7 @@ class FFmpegService
                 $cueWords = [];
                 foreach ($chunk as $word) {
                     $cueWords[] = ['text' => $word, 'start' => $cursor];
-                    $cursor    += $perWord;
+                    $cursor += $perWord;
                 }
                 $cues[] = ['start' => $cueStart, 'end' => $cursor, 'words' => $cueWords];
             }
@@ -334,8 +338,8 @@ class FFmpegService
      * block; it pops in (scales 82% → 108% → 100% around its own centre), holds
      * for $hookDuration seconds and fades out. Audio is stream-copied.
      *
-     * @param string|null $assPath null/empty to skip subtitles
-     * @param array{image: string, x: int, y: int, w: int, h: int}|null $hook null to skip the hook overlay
+     * @param  string|null  $assPath  null/empty to skip subtitles
+     * @param  array{image: string, x: int, y: int, w: int, h: int}|null  $hook  null to skip the hook overlay
      */
     public function burnSubtitlesAndHook(
         string $input,
@@ -346,29 +350,30 @@ class FFmpegService
     ): void {
         $hasHook = $hook && $hookDuration > 0;
 
-        if (!$assPath && !$hasHook) {
+        if (! $assPath && ! $hasHook) {
             // Nothing to burn — just re-mux video as-is
             $cmd = sprintf(
                 '%s -y -i %s -c copy -movflags +faststart %s 2>&1',
                 $this->bin, escapeshellarg($input), escapeshellarg($output)
             );
             $this->exec($cmd, 'burnSubtitlesAndHook');
+
             return;
         }
 
-        $subs   = $assPath ? 'ass=' . $assPath . ':fontsdir=' . $this->layout->fontsDir() : 'null';
-        $inputs = '-i ' . escapeshellarg($input);
+        $subs = $assPath ? 'ass='.$assPath.':fontsdir='.$this->layout->fontsDir() : 'null';
+        $inputs = '-i '.escapeshellarg($input);
 
         if ($hasHook) {
             $fadeOut = min(0.25, $hookDuration / 4);
-            $pop     = 'if(lt(t,0.14),0.82+t*1.857,if(lt(t,0.26),1.08-(t-0.14)*0.6667,1))';
+            $pop = 'if(lt(t,0.14),0.82+t*1.857,if(lt(t,0.26),1.08-(t-0.14)*0.6667,1))';
             $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', $hookDuration, escapeshellarg($hook['image']));
-            $filter  = sprintf(
+            $filter = sprintf(
                 '[0:v]%s[base];'
-                . "[1:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
-                . 'fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st=%.3f:d=%.2f:alpha=1[hook];'
+                ."[1:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
+                .'fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st=%.3f:d=%.2f:alpha=1[hook];'
                 // keep the block centred on its rendered spot while it scales
-                . "[base][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[v]",
+                ."[base][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[v]",
                 $subs, $pop, $hookDuration - $fadeOut, $fadeOut,
                 $hook['x'], $hook['w'], $hook['y'], $hook['h']
             );
@@ -396,14 +401,14 @@ class FFmpegService
      * ducks a few dB (sidechain), it fades in/out at the clip edges, and a
      * limiter keeps the sum from clipping. Video is stream-copied.
      *
-     * @param int $volumePercent Music level, 0–100 (30 ≈ level with the voice).
+     * @param  int  $volumePercent  Music level, 0–100 (30 ≈ level with the voice).
      */
     public function mixMusic(string $input, string $musicPath, int $volumePercent, string $output): void
     {
         $duration = $this->probeDuration($input);
-        $gain     = max(0, min(100, $volumePercent)) / 30;
-        $fadeOut  = max(0, $duration - 1.5);
-        $norm     = 'aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo';
+        $gain = max(0, min(100, $volumePercent)) / 30;
+        $fadeOut = max(0, $duration - 1.5);
+        $norm = 'aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo';
 
         $music = sprintf(
             '[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,%s,volume=%.3f,afade=t=in:d=1,afade=t=out:st=%.3f:d=1.5',
@@ -413,8 +418,8 @@ class FFmpegService
         $filter = $this->hasAudio($input)
             ? "{$music}[m];[0:a]{$norm},asplit=2[voice][key];"
               // gentle duck (~3–5 dB) so the bed stays audible under talking
-              . '[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=15:release=350[duck];'
-              . '[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]'
+              .'[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=15:release=350[duck];'
+              .'[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]'
             : "{$music},alimiter=limit=0.95[aout]";
 
         $cmd = sprintf(
@@ -441,8 +446,9 @@ class FFmpegService
 
         $duration = (float) ($out[0] ?? 0);
         if ($code !== 0 || $duration <= 0) {
-            throw new RuntimeException('ffprobe duration failed: ' . implode("\n", $out));
+            throw new RuntimeException('ffprobe duration failed: '.implode("\n", $out));
         }
+
         return $duration;
     }
 
@@ -466,9 +472,9 @@ class FFmpegService
     public function concatVideos(array $inputs, string $output): void
     {
         $listFile = tempnam(sys_get_temp_dir(), 'ffconcat_');
-        $content  = '';
+        $content = '';
         foreach ($inputs as $f) {
-            $content .= "file '" . addslashes($f) . "'\n";
+            $content .= "file '".addslashes($f)."'\n";
         }
         file_put_contents($listFile, $content);
 
@@ -490,7 +496,7 @@ class FFmpegService
     {
         [$code, $output] = Cancellation::exec($cmd);
         if ($code !== 0) {
-            throw new RuntimeException("FFmpeg {$context} failed:\n" . implode("\n", $output));
+            throw new RuntimeException("FFmpeg {$context} failed:\n".implode("\n", $output));
         }
     }
 
@@ -498,10 +504,11 @@ class FFmpegService
     {
         // Round once on the total: rounding only the fraction turned 1.996s into "0:00:01.100"
         $total = (int) round(max($seconds, 0) * 100);
-        $h  = intdiv($total, 360000);
-        $m  = intdiv($total % 360000, 6000);
-        $s  = intdiv($total % 6000, 100);
+        $h = intdiv($total, 360000);
+        $m = intdiv($total % 360000, 6000);
+        $s = intdiv($total % 6000, 100);
         $cs = $total % 100;
+
         return sprintf('%d:%02d:%02d.%02d', $h, $m, $s, $cs);
     }
 
@@ -514,6 +521,7 @@ class FFmpegService
         $r = hexdec(substr($hex, 0, 2));
         $g = hexdec(substr($hex, 2, 2));
         $b = hexdec(substr($hex, 4, 2));
+
         return sprintf('&H00%02X%02X%02X', $b, $g, $r);
     }
 }

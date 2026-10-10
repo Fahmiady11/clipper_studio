@@ -26,7 +26,7 @@ class CancelJobTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         $this->user = User::factory()->create();
     }
 
@@ -115,7 +115,7 @@ class CancelJobTest extends TestCase
         $this->assertSame('processing', $project->status);
         $this->assertNull($project->error_msg);
         $this->assertSame(0, (int) $project->progress_stage);
-        Queue::assertPushed(AnalyzeVideoJob::class, fn($job) => $job->projectId === $project->id);
+        Queue::assertPushed(AnalyzeVideoJob::class, fn ($job) => $job->projectId === $project->id);
 
         // Only failed projects can be retried
         $this->actingAs($this->user)->postJson("/api/projects/{$project->id}/retry")->assertStatus(409);
@@ -165,7 +165,7 @@ class CancelJobTest extends TestCase
         $clip->refresh();
         $this->assertSame('Hook baru!', $clip->hook_text_override);
         $this->assertNull($clip->cancelled_at);
-        Queue::assertPushed(RenderClipJob::class, fn($job) => $job->clipId === $clip->id);
+        Queue::assertPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
 
         // While it renders, another edit is refused
         $this->actingAs($this->user)->postJson("/api/clips/{$clip->id}/render", ['hook_text' => 'x'])->assertStatus(409);

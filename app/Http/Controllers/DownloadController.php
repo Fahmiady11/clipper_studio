@@ -15,8 +15,8 @@ class DownloadController extends Controller
 
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
         abort_if($clip->status !== 'done', 404, 'Clip not ready.');
-        abort_if(!$clip->output_path || !Storage::exists($clip->output_path), 404, 'File not found.');
+        abort_if(! $clip->output_path || ! Storage::exists($clip->output_path), 404, 'File not found.');
 
-        return Storage::download($clip->output_path, 'clip_' . $clipId . '.mp4');
+        return Storage::download($clip->output_path, 'clip_'.$clipId.'.mp4');
     }
 }

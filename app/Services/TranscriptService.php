@@ -14,7 +14,7 @@ class TranscriptService
     {
         $videoId = $this->extractVideoId($youtubeUrl);
 
-        if (!$videoId) {
+        if (! $videoId) {
             throw new RuntimeException("Cannot extract video ID from: {$youtubeUrl}");
         }
 
@@ -25,11 +25,12 @@ class TranscriptService
         $log->info('[TRANSCRIPT] Trying primary: yt-dlp subtitles', ['video_id' => $videoId]);
         $result = $this->fetchViaYtDlp($youtubeUrl, $videoId);
 
-        if (!empty($result['items'])) {
+        if (! empty($result['items'])) {
             $log->info('[TRANSCRIPT] PRIMARY used: yt-dlp subtitles', [
                 'language' => $result['language'],
                 'segments' => count($result['items']),
             ]);
+
             return ['language' => $result['language'], 'segments' => $result['items']];
         }
 
@@ -38,7 +39,7 @@ class TranscriptService
         // Fallback: Groq Whisper on the downloaded video file
         if ($videoPath && file_exists($videoPath)) {
             $groqResult = $this->fallbackGroq($videoPath);
-            if (!empty($groqResult['segments'])) {
+            if (! empty($groqResult['segments'])) {
                 $log->info('[TRANSCRIPT] FALLBACK used: Groq whisper-large-v3-turbo', [
                     'language' => $groqResult['language'],
                     'segments' => count($groqResult['segments']),
@@ -46,20 +47,22 @@ class TranscriptService
             } else {
                 $log->error('[TRANSCRIPT] FALLBACK also failed: Groq returned no segments');
             }
+
             return $groqResult;
         }
 
         $log->error('[TRANSCRIPT] All methods failed: no subtitles, no video file for Groq');
+
         return ['language' => 'id', 'segments' => []];
     }
 
     private function fetchViaYtDlp(string $url, string $videoId): array
     {
         set_time_limit(0); // yt-dlp subtitle fetch must not hit PHP max_execution_time
-        $bin     = config('services.ytdlp.path', 'yt-dlp');
+        $bin = config('services.ytdlp.path', 'yt-dlp');
         $browser = config('services.ytdlp.cookies_from_browser', '');
-        $cookie  = $browser ? ' --cookies-from-browser ' . escapeshellarg($browser) : '';
-        $tmpDir  = storage_path('app/temp/subs_' . $videoId);
+        $cookie = $browser ? ' --cookies-from-browser '.escapeshellarg($browser) : '';
+        $tmpDir = storage_path('app/temp/subs_'.$videoId);
         @mkdir($tmpDir, 0755, true);
 
         // Clean stale subtitle files from prior runs
@@ -68,10 +71,10 @@ class TranscriptService
         }
 
         // yt-dlp inserts the lang code: out template "sub.%(ext)s" -> "sub.id.json3"
-        $outTpl = $tmpDir . '/sub.%(ext)s';
+        $outTpl = $tmpDir.'/sub.%(ext)s';
         $cmd = sprintf(
             '%s%s --skip-download --write-auto-subs --write-subs --sub-langs %s'
-            . ' --sub-format json3 --no-playlist -o %s -- %s 2>&1',
+            .' --sub-format json3 --no-playlist -o %s -- %s 2>&1',
             $bin,
             $cookie,
             escapeshellarg('id,en'),
@@ -89,15 +92,15 @@ class TranscriptService
         $lang = 'id';
         foreach (['id', 'en'] as $l) {
             $hit = glob("{$tmpDir}/*.{$l}.json3") ?: [];
-            if (!empty($hit)) {
+            if (! empty($hit)) {
                 $file = $hit[0];
                 $lang = $l;
                 break;
             }
         }
-        if (!$file) {
+        if (! $file) {
             $any = glob("{$tmpDir}/*.json3") ?: [];
-            if (!empty($any)) {
+            if (! empty($any)) {
                 $file = $any[0];
                 if (preg_match('/\.([a-z-]+)\.json3$/', $file, $m)) {
                     $lang = $m[1];
@@ -105,11 +108,11 @@ class TranscriptService
             }
         }
 
-        if (!$file) {
+        if (! $file) {
             return [];
         }
 
-        $data  = json_decode(file_get_contents($file), true) ?: [];
+        $data = json_decode(file_get_contents($file), true) ?: [];
         $items = $this->parseJson3($data);
 
         // Cleanup
@@ -129,38 +132,38 @@ class TranscriptService
      */
     private function parseJson3(array $data): array
     {
-        $events   = $data['events'] ?? [];
+        $events = $data['events'] ?? [];
         $segments = [];
 
         foreach ($events as $event) {
-            if (!isset($event['segs'])) {
+            if (! isset($event['segs'])) {
                 continue;
             }
             $text = collect($event['segs'])->pluck('utf8')->join('');
             $text = trim(preg_replace('/\s+/', ' ', $text));
-            if (!$text) {
+            if (! $text) {
                 continue;
             }
 
             $startMs = (int) ($event['tStartMs'] ?? 0);
-            $endMs   = $startMs + (int) ($event['dDurationMs'] ?? 3000);
+            $endMs = $startMs + (int) ($event['dDurationMs'] ?? 3000);
 
             $segment = [
                 'start' => round($startMs / 1000, 2),
-                'end'   => round($endMs / 1000, 2),
-                'text'  => $text,
+                'end' => round($endMs / 1000, 2),
+                'text' => $text,
             ];
 
             // Manual captions have one seg per line and no offsets — no word timing
-            $wordSegs = array_values(array_filter($event['segs'], fn($seg) => trim($seg['utf8'] ?? '') !== ''));
+            $wordSegs = array_values(array_filter($event['segs'], fn ($seg) => trim($seg['utf8'] ?? '') !== ''));
             $hasWordTiming = count($wordSegs) > 1
-                || collect($wordSegs)->contains(fn($seg) => isset($seg['tOffsetMs']));
+                || collect($wordSegs)->contains(fn ($seg) => isset($seg['tOffsetMs']));
 
             if ($hasWordTiming) {
-                $segment['words'] = array_map(fn($seg) => [
-                    'start'  => ($startMs + (int) ($seg['tOffsetMs'] ?? 0)) / 1000,
-                    'end'    => $endMs / 1000, // tightened below
-                    'text'   => trim($seg['utf8']),
+                $segment['words'] = array_map(fn ($seg) => [
+                    'start' => ($startMs + (int) ($seg['tOffsetMs'] ?? 0)) / 1000,
+                    'end' => $endMs / 1000, // tightened below
+                    'text' => trim($seg['utf8']),
                 ], $wordSegs);
             }
 
@@ -188,13 +191,13 @@ class TranscriptService
         for ($i = 0; $i < $n; $i++) {
             [$si, $wi] = $refs[$i];
             $word = $segments[$si]['words'][$wi];
-            $end  = min($word['end'], $word['start'] + self::MAX_WORD_SECONDS);
+            $end = min($word['end'], $word['start'] + self::MAX_WORD_SECONDS);
             if ($i + 1 < $n) {
                 [$nsi, $nwi] = $refs[$i + 1];
                 $end = min($end, $segments[$nsi]['words'][$nwi]['start']);
             }
             $segments[$si]['words'][$wi]['start'] = round($word['start'], 3);
-            $segments[$si]['words'][$wi]['end']   = round(max($end, $word['start'] + 0.05), 3);
+            $segments[$si]['words'][$wi]['end'] = round(max($end, $word['start'] + 0.05), 3);
         }
 
         return $segments;
@@ -205,21 +208,23 @@ class TranscriptService
         $log = Log::channel('clipper_jobs');
 
         $groqKey = config('services.groq.api_key');
-        if (!$groqKey) {
+        if (! $groqKey) {
             $log->warning('fallbackGroq: GROQ_API_KEY not set');
+
             return ['language' => 'id', 'segments' => []];
         }
 
-        $ffmpeg   = config('services.ffmpeg.path', 'ffmpeg');
+        $ffmpeg = config('services.ffmpeg.path', 'ffmpeg');
         // MP3 at 32kbps mono ≈ 14MB/hr — fits Groq's 25MB limit even for long videos
-        $tmpAudio = sys_get_temp_dir() . '/ts_audio_' . uniqid() . '.mp3';
+        $tmpAudio = sys_get_temp_dir().'/ts_audio_'.uniqid().'.mp3';
 
         $log->info('fallbackGroq: extracting audio', ['video' => $videoPath, 'tmp' => $tmpAudio]);
         [$code, $out] = Cancellation::exec(sprintf('%s -i %s -ar 16000 -ac 1 -b:a 32k %s -y 2>&1',
             $ffmpeg, escapeshellarg($videoPath), escapeshellarg($tmpAudio)));
 
-        if ($code !== 0 || !file_exists($tmpAudio)) {
+        if ($code !== 0 || ! file_exists($tmpAudio)) {
             $log->error('fallbackGroq: ffmpeg failed', ['code' => $code, 'out' => implode("\n", $out)]);
+
             return ['language' => 'id', 'segments' => []];
         }
 
@@ -229,6 +234,7 @@ class TranscriptService
         if ($audioSize > 24 * 1024 * 1024) {
             $log->error('fallbackGroq: audio too large for Groq API', ['size_mb' => round($audioSize / 1048576, 1)]);
             @unlink($tmpAudio);
+
             return ['language' => 'id', 'segments' => []];
         }
 
@@ -245,10 +251,10 @@ class TranscriptService
         $ch = curl_init('https://api.groq.com/openai/v1/audio/transcriptions');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $body,
-            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $groqKey, 'Content-Type: ' . $contentType],
-            CURLOPT_TIMEOUT        => 300,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer '.$groqKey, 'Content-Type: '.$contentType],
+            CURLOPT_TIMEOUT => 300,
         ]);
 
         $response = curl_exec($ch);
@@ -258,17 +264,18 @@ class TranscriptService
 
         if ($httpCode !== 200) {
             $log->error('fallbackGroq: Groq API error', ['http' => $httpCode, 'body' => $response]);
+
             return ['language' => 'id', 'segments' => []];
         }
 
-        $data     = json_decode($response, true);
+        $data = json_decode($response, true);
         $segments = collect($data['segments'] ?? [])
-            ->map(fn($seg) => [
+            ->map(fn ($seg) => [
                 'start' => round((float) $seg['start'], 2),
-                'end'   => round((float) $seg['end'], 2),
-                'text'  => trim($seg['text']),
+                'end' => round((float) $seg['end'], 2),
+                'text' => trim($seg['text']),
             ])
-            ->filter(fn($s) => $s['text'] !== '')
+            ->filter(fn ($s) => $s['text'] !== '')
             ->values()
             ->all();
 
@@ -288,7 +295,7 @@ class TranscriptService
      */
     private function attachGroqWords(array $segments, array $words): array
     {
-        $si    = 0;
+        $si = 0;
         $count = count($segments);
         foreach ($words as $w) {
             $text = trim($w['word'] ?? '');
@@ -301,8 +308,8 @@ class TranscriptService
             }
             $segments[$si]['words'][] = [
                 'start' => round($start, 3),
-                'end'   => round(max((float) $w['end'], $start + 0.05), 3),
-                'text'  => $text,
+                'end' => round(max((float) $w['end'], $start + 0.05), 3),
+                'text' => $text,
             ];
         }
 
@@ -312,20 +319,20 @@ class TranscriptService
     /** @return array{0: string, 1: string} [body, content-type header value] */
     private function multipartBody(array $fields, string $fileField, string $filePath, string $fileName, string $mime): array
     {
-        $boundary = '----clipper' . bin2hex(random_bytes(8));
-        $body     = '';
+        $boundary = '----clipper'.bin2hex(random_bytes(8));
+        $body = '';
         foreach ($fields as [$name, $value]) {
             $body .= "--{$boundary}\r\n"
-                . "Content-Disposition: form-data; name=\"{$name}\"\r\n\r\n"
-                . "{$value}\r\n";
+                ."Content-Disposition: form-data; name=\"{$name}\"\r\n\r\n"
+                ."{$value}\r\n";
         }
         $body .= "--{$boundary}\r\n"
-            . "Content-Disposition: form-data; name=\"{$fileField}\"; filename=\"{$fileName}\"\r\n"
-            . "Content-Type: {$mime}\r\n\r\n"
-            . file_get_contents($filePath) . "\r\n"
-            . "--{$boundary}--\r\n";
+            ."Content-Disposition: form-data; name=\"{$fileField}\"; filename=\"{$fileName}\"\r\n"
+            ."Content-Type: {$mime}\r\n\r\n"
+            .file_get_contents($filePath)."\r\n"
+            ."--{$boundary}--\r\n";
 
-        return [$body, 'multipart/form-data; boundary=' . $boundary];
+        return [$body, 'multipart/form-data; boundary='.$boundary];
     }
 
     private function extractVideoId(string $url): ?string
@@ -333,6 +340,7 @@ class TranscriptService
         if (preg_match('/(?:watch\?v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{6,})/', $url, $m)) {
             return $m[1];
         }
+
         return null;
     }
 }

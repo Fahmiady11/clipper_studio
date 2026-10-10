@@ -36,7 +36,7 @@ return [
     ],
 
     'gemini' => [
-        'key'    => env('GEMINI_API_KEY'),
+        'key' => env('GEMINI_API_KEY'),
         // Tried in order; each has its own (free-tier) quota, so a longer list survives a spent one
         'models' => explode(',', env('GEMINI_MODELS',
             'gemini-2.5-flash,gemini-3.5-flash,gemini-2.5-flash-lite,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-flash-lite-latest')),
@@ -45,14 +45,14 @@ return [
     // Optional OpenAI-compatible gateway (e.g. OmniRoute) tried before the Gemini API key.
     // LLM_GATEWAY_URL is the base that ends in /v1; leave empty to use Gemini directly.
     'llm_gateway' => [
-        'url'   => env('LLM_GATEWAY_URL'),
-        'key'   => env('LLM_GATEWAY_KEY'),
+        'url' => env('LLM_GATEWAY_URL'),
+        'key' => env('LLM_GATEWAY_KEY'),
         'model' => env('LLM_GATEWAY_MODEL'),
     ],
 
     'ytdlp' => [
-        'path'                 => env('YTDLP_PATH', 'yt-dlp'),
-        'cookies_file'         => env('YTDLP_COOKIES', ''),         // path to Netscape cookies.txt
+        'path' => env('YTDLP_PATH', 'yt-dlp'),
+        'cookies_file' => env('YTDLP_COOKIES', ''),         // path to Netscape cookies.txt
         'cookies_from_browser' => env('YTDLP_COOKIES_BROWSER', ''), // browser name (chrome/safari/firefox)
     ],
 
@@ -61,11 +61,11 @@ return [
     ],
 
     'tiktok' => [
-        'client_key'    => env('TIKTOK_CLIENT_KEY'),
+        'client_key' => env('TIKTOK_CLIENT_KEY'),
         'client_secret' => env('TIKTOK_CLIENT_SECRET'),
         // Must match a Redirect URI registered on the TikTok app (HTTPS, e.g. an ngrok URL + /tiktok/callback)
-        'redirect_uri'  => env('TIKTOK_REDIRECT_URI'),
-        'scopes'        => env('TIKTOK_SCOPES', 'user.info.basic,video.upload'),
+        'redirect_uri' => env('TIKTOK_REDIRECT_URI'),
+        'scopes' => env('TIKTOK_SCOPES', 'user.info.basic,video.upload'),
     ],
 
     'clipper' => [

@@ -11,8 +11,8 @@ use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class ProjectController extends Controller
 {
@@ -20,22 +20,22 @@ class ProjectController extends Controller
 
     public function store(StoreProjectRequest $request, ProjectCreator $creator): JsonResponse
     {
-        $data    = $request->validated();
+        $data = $request->validated();
         // Only ever store/hand yt-dlp a URL we rebuilt from the video id
         $project = $creator->create(Auth::id(), YoutubeUrl::canonical($data['youtube_url']), $data);
         $this->ensureQueueWorkerRunning();
 
         Log::channel('clipper_api')->info('Project created, AnalyzeVideoJob dispatched', [
             'project_id' => $project->id,
-            'user_id'    => Auth::id(),
-            'url'        => $project->youtube_url,
-            'layout'     => $project->layout_type,
+            'user_id' => Auth::id(),
+            'url' => $project->youtube_url,
+            'layout' => $project->layout_type,
             'clip_count' => $project->clip_count,
         ]);
 
         return response()->json([
             'project_id' => $project->id,
-            'status'     => $project->status,
+            'status' => $project->status,
         ], 201);
     }
 
@@ -44,18 +44,18 @@ class ProjectController extends Controller
         // Studio history only; autopilot projects live in the review queue on /autopilot
         $projects = ClipProject::where('user_id', Auth::id())
             ->whereNull('video_source_id')
-            ->with(['generatedClips' => fn($q) => $q->where('status', 'done')->orderBy('ranking')])
+            ->with(['generatedClips' => fn ($q) => $q->where('status', 'done')->orderBy('ranking')])
             ->orderByDesc('created_at')
             ->limit(50)
             ->get();
 
-        return response()->json($projects->map(fn($p) => [
-            'project_id'       => $p->id,
-            'title'            => $p->video_title,
-            'thumbnail_url'    => $p->thumbnail_url,
-            'layout_type'      => $p->layout_type,
-            'status'           => $p->status,
-            'created_at'       => $p->created_at->toISOString(),
+        return response()->json($projects->map(fn ($p) => [
+            'project_id' => $p->id,
+            'title' => $p->video_title,
+            'thumbnail_url' => $p->thumbnail_url,
+            'layout_type' => $p->layout_type,
+            'status' => $p->status,
+            'created_at' => $p->created_at->toISOString(),
             'rendered_clip_id' => $p->generatedClips->first()?->id,
         ]));
     }
@@ -76,7 +76,7 @@ class ProjectController extends Controller
     public function destroyAll(): JsonResponse
     {
         $projects = ClipProject::where('user_id', Auth::id())->whereNull('video_source_id')->get();
-        $projects->each(fn(ClipProject $p) => $this->deleteProject($p));
+        $projects->each(fn (ClipProject $p) => $this->deleteProject($p));
 
         Log::channel('clipper_api')->info('History cleared', ['user_id' => Auth::id(), 'projects' => $projects->count()]);
 
@@ -94,7 +94,7 @@ class ProjectController extends Controller
 
         // Rendered MP4s and the per-project source copy (video_cache keeps its own)
         Storage::deleteDirectory("clips/{$project->user_id}/{$project->id}");
-        File::deleteDirectory(storage_path('app/temp/' . $project->id));
+        File::deleteDirectory(storage_path('app/temp/'.$project->id));
     }
 
     public function cancel(string $projectId): JsonResponse
@@ -105,9 +105,9 @@ class ProjectController extends Controller
 
         // The job polls cancelled_at, stops yt-dlp/ffmpeg mid-run and exits quietly
         $project->update([
-            'status'           => 'failed',
-            'cancelled_at'     => now(),
-            'error_msg'        => 'Dibatalkan oleh pengguna.',
+            'status' => 'failed',
+            'cancelled_at' => now(),
+            'error_msg' => 'Dibatalkan oleh pengguna.',
             'progress_message' => 'Dibatalkan',
         ]);
 
@@ -126,11 +126,11 @@ class ProjectController extends Controller
 
         $project->generatedClips()->delete(); // a half-saved set from the failed run
         $project->update([
-            'status'           => 'processing',
-            'progress_stage'   => 0,
+            'status' => 'processing',
+            'progress_stage' => 0,
             'progress_message' => 'Diulang — menunggu antrian…',
-            'error_msg'        => null,
-            'cancelled_at'     => null,
+            'error_msg' => null,
+            'cancelled_at' => null,
         ]);
         AnalyzeVideoJob::dispatch($project->id);
         $this->ensureQueueWorkerRunning();
@@ -144,26 +144,26 @@ class ProjectController extends Controller
             ->where('user_id', Auth::id())
             ->findOrFail($projectId);
 
-        $clips = $project->generatedClips->map(fn($c) => [
-            'id'             => $c->id,
-            'ranking'        => $c->ranking,
-            'start_seconds'  => $c->start_seconds,
-            'end_seconds'    => $c->end_seconds,
-            'topic'          => $c->topic,
-            'reason'         => $c->reason,
+        $clips = $project->generatedClips->map(fn ($c) => [
+            'id' => $c->id,
+            'ranking' => $c->ranking,
+            'start_seconds' => $c->start_seconds,
+            'end_seconds' => $c->end_seconds,
+            'topic' => $c->topic,
+            'reason' => $c->reason,
             'viral_potential' => $c->viral_potential,
-            'hook_text'      => $c->hook_text,
-            'status'         => $c->status,
+            'hook_text' => $c->hook_text,
+            'status' => $c->status,
         ]);
 
         return response()->json([
-            'project_id'       => $project->id,
-            'status'           => $project->status,
-            'progress_stage'   => $project->progress_stage,
+            'project_id' => $project->id,
+            'status' => $project->status,
+            'progress_stage' => $project->progress_stage,
             'progress_message' => $project->progress_message,
-            'error_msg'        => $project->error_msg,
-            'cancelled'        => $project->cancelled_at !== null,
-            'clips'      => $clips,
+            'error_msg' => $project->error_msg,
+            'cancelled' => $project->cancelled_at !== null,
+            'clips' => $clips,
         ]);
     }
 }

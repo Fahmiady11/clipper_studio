@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 class ClipProject extends Model
 {
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -37,20 +38,20 @@ class ClipProject extends Model
     ];
 
     protected $casts = [
-        'clip_count'       => 'integer',
+        'clip_count' => 'integer',
         'duration_seconds' => 'integer',
-        'min_duration'     => 'integer',
-        'max_duration'     => 'integer',
-        'music_enabled'    => 'boolean',
-        'music_volume'     => 'integer',
-        'cancelled_at'     => 'datetime',
+        'min_duration' => 'integer',
+        'max_duration' => 'integer',
+        'music_enabled' => 'boolean',
+        'music_volume' => 'integer',
+        'cancelled_at' => 'datetime',
     ];
 
     protected static function boot(): void
     {
         parent::boot();
         static::creating(function ($model) {
-            if (!$model->id) {
+            if (! $model->id) {
                 $model->id = (string) Str::uuid();
             }
         });

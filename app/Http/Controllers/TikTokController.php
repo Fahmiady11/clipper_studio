@@ -23,7 +23,7 @@ class TikTokController extends Controller
 
     public function connect(Request $request): RedirectResponse
     {
-        if (!$this->tiktok->isConfigured()) {
+        if (! $this->tiktok->isConfigured()) {
             return redirect('/?tiktok=not_configured');
         }
 
@@ -36,10 +36,10 @@ class TikTokController extends Controller
     public function callback(Request $request): RedirectResponse
     {
         $expected = $request->session()->pull('tiktok_oauth_state');
-        if (!$expected || !hash_equals($expected, (string) $request->query('state'))) {
+        if (! $expected || ! hash_equals($expected, (string) $request->query('state'))) {
             return redirect('/?tiktok=invalid_state');
         }
-        if ($request->query('error') || !$request->query('code')) {
+        if ($request->query('error') || ! $request->query('code')) {
             return redirect('/?tiktok=denied');
         }
 
@@ -47,6 +47,7 @@ class TikTokController extends Controller
             $this->tiktok->connect(Auth::id(), (string) $request->query('code'));
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('TikTok connect failed', ['error' => $e->getMessage()]);
+
             return redirect('/?tiktok=error');
         }
 
@@ -57,7 +58,7 @@ class TikTokController extends Controller
     {
         return response()->json([
             'configured' => $this->tiktok->isConfigured(),
-            'accounts'   => TiktokAccount::where('user_id', Auth::id())
+            'accounts' => TiktokAccount::where('user_id', Auth::id())
                 ->orderBy('display_name')
                 ->get(['id', 'display_name', 'avatar_url']),
         ]);
@@ -85,19 +86,19 @@ class TikTokController extends Controller
     public function upload(Request $request, string $clipId): JsonResponse
     {
         $data = $request->validate([
-            'account_id'      => ['required', 'integer'],
-            'mode'            => ['sometimes', 'in:inbox,direct'],
-            'title'           => ['exclude_unless:mode,direct', 'nullable', 'string', 'max:2200'],
-            'privacy_level'   => ['exclude_unless:mode,direct', 'required', 'in:PUBLIC_TO_EVERYONE,MUTUAL_FOLLOW_FRIENDS,FOLLOWER_OF_CREATOR,SELF_ONLY'],
+            'account_id' => ['required', 'integer'],
+            'mode' => ['sometimes', 'in:inbox,direct'],
+            'title' => ['exclude_unless:mode,direct', 'nullable', 'string', 'max:2200'],
+            'privacy_level' => ['exclude_unless:mode,direct', 'required', 'in:PUBLIC_TO_EVERYONE,MUTUAL_FOLLOW_FRIENDS,FOLLOWER_OF_CREATOR,SELF_ONLY'],
             'disable_comment' => ['exclude_unless:mode,direct', 'boolean'],
-            'disable_duet'    => ['exclude_unless:mode,direct', 'boolean'],
-            'disable_stitch'  => ['exclude_unless:mode,direct', 'boolean'],
+            'disable_duet' => ['exclude_unless:mode,direct', 'boolean'],
+            'disable_stitch' => ['exclude_unless:mode,direct', 'boolean'],
         ]);
-        $mode    = $data['mode'] ?? 'inbox';
-        $clip    = $this->ownedClip($clipId);
+        $mode = $data['mode'] ?? 'inbox';
+        $clip = $this->ownedClip($clipId);
         $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']);
 
-        abort_if($clip->status !== 'done' || !$clip->output_path, 422, 'Clip belum selesai dirender.');
+        abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
         $scope = $mode === 'direct' ? 'video.publish' : 'video.upload';
         abort_unless($account->hasScope($scope), 422, TiktokAccount::scopeMessage($scope));
 
@@ -108,15 +109,15 @@ class TikTokController extends Controller
         $clip->update([
             'tiktok_account_id' => $account->id,
             'tiktok_publish_id' => null,
-            'tiktok_status'     => 'queued',
-            'tiktok_error'      => null,
+            'tiktok_status' => 'queued',
+            'tiktok_error' => null,
         ]);
         $postInfo = $mode === 'direct' ? [
-            'title'           => $data['title'] ?? '',
-            'privacy_level'   => $data['privacy_level'],
+            'title' => $data['title'] ?? '',
+            'privacy_level' => $data['privacy_level'],
             'disable_comment' => (bool) ($data['disable_comment'] ?? false),
-            'disable_duet'    => (bool) ($data['disable_duet'] ?? false),
-            'disable_stitch'  => (bool) ($data['disable_stitch'] ?? false),
+            'disable_duet' => (bool) ($data['disable_duet'] ?? false),
+            'disable_stitch' => (bool) ($data['disable_stitch'] ?? false),
         ] : [];
         UploadToTikTokJob::dispatch($clip->id, $account->id, $mode, $postInfo);
         $this->ensureQueueWorkerRunning();
@@ -133,10 +134,10 @@ class TikTokController extends Controller
             try {
                 // Scoped to the user too: never use someone else's tokens, even via a stale id
                 $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($clip->tiktok_account_id);
-                $status  = $this->tiktok->publishStatus($account, $clip->tiktok_publish_id);
+                $status = $this->tiktok->publishStatus($account, $clip->tiktok_publish_id);
                 $clip->update([
                     'tiktok_status' => UploadToTikTokJob::mapStatus($status['status']),
-                    'tiktok_error'  => $status['fail_reason'],
+                    'tiktok_error' => $status['fail_reason'],
                 ]);
             } catch (Throwable $e) {
                 Log::channel('clipper_api')->warning('TikTok status refresh failed', ['error' => $e->getMessage()]);
@@ -158,8 +159,8 @@ class TikTokController extends Controller
     {
         return response()->json([
             'clip_id' => $clip->id,
-            'status'  => $clip->tiktok_status,
-            'error'   => $clip->tiktok_error,
+            'status' => $clip->tiktok_status,
+            'error' => $clip->tiktok_error,
         ]);
     }
 }

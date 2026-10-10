@@ -382,6 +382,7 @@ Dibangun dengan **Laravel 13**, PostgreSQL, Blade + Alpine.js, CSS biasa (Vite),
 ```bash
 composer dev     # web + worker + scheduler + log + vite sekaligus
 composer test    # jalankan semua test (SQLite in-memory, tidak menyentuh database asli)
+composer lint    # rapikan gaya kode (Laravel Pint) — jalankan sebelum commit
 ```
 
 ### Struktur kode

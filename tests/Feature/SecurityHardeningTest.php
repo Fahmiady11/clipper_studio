@@ -2,7 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\UploadToTikTokJob;
+use App\Models\ClipProject;
+use App\Models\GeneratedClip;
+use App\Models\TiktokAccount;
 use App\Models\User;
+use App\Services\TikTokService;
 use App\Support\YoutubeUrl;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,7 +21,7 @@ class SecurityHardeningTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
     }
 
     public function test_responses_carry_security_headers(): void
@@ -47,8 +52,12 @@ class SecurityHardeningTest extends TestCase
         $this->actingAs(User::factory()->create());
 
         // Tests normally skip CSRF; switch the real check back on for this request
-        $this->app->instance(ValidateCsrfToken::class, new class($this->app, $this->app['encrypter']) extends ValidateCsrfToken {
-            protected function runningUnitTests(): bool { return false; }
+        $this->app->instance(ValidateCsrfToken::class, new class($this->app, $this->app['encrypter']) extends ValidateCsrfToken
+        {
+            protected function runningUnitTests(): bool
+            {
+                return false;
+            }
         });
 
         $this->postJson('/api/projects', [])->assertStatus(419);
@@ -121,7 +130,7 @@ class SecurityHardeningTest extends TestCase
     {
         $this->actingAs(User::factory()->create());
 
-        $this->get('/api/music/file?path=' . urlencode("chill/a.mp3\0.png"))->assertNotFound();
+        $this->get('/api/music/file?path='.urlencode("chill/a.mp3\0.png"))->assertNotFound();
     }
 
     public function test_rejected_clip_cannot_be_approved_and_job_rechecks_ownership(): void
@@ -129,15 +138,15 @@ class SecurityHardeningTest extends TestCase
         Queue::fake();
         $owner = User::factory()->create();
         $other = User::factory()->create();
-        $project = \App\Models\ClipProject::create([
+        $project = ClipProject::create([
             'user_id' => $owner->id, 'youtube_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
             'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto', 'status' => 'done',
         ]);
-        $clip = \App\Models\GeneratedClip::create([
+        $clip = GeneratedClip::create([
             'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
             'topic' => 'T', 'reason' => 'R', 'viral_potential' => 'tinggi', 'status' => 'done', 'review_status' => 'rejected',
         ]);
-        $account = \App\Models\TiktokAccount::create([
+        $account = TiktokAccount::create([
             'user_id' => $owner->id, 'open_id' => 'o1', 'access_token' => 'a', 'refresh_token' => 'r', 'scope' => 'video.upload', 'access_expires_at' => now()->addDay(), 'refresh_expires_at' => now()->addYear(),
         ]);
 
@@ -146,12 +155,12 @@ class SecurityHardeningTest extends TestCase
         Queue::assertNothingPushed();
 
         // A job built by hand with someone else's account refuses to upload
-        $foreign = \App\Models\TiktokAccount::create([
+        $foreign = TiktokAccount::create([
             'user_id' => $other->id, 'open_id' => 'o2', 'access_token' => 'a', 'refresh_token' => 'r', 'scope' => 'video.upload', 'access_expires_at' => now()->addDay(), 'refresh_expires_at' => now()->addYear(),
         ]);
         $clip->update(['review_status' => 'approved', 'output_path' => 'clips/x.mp4']);
         $this->expectException(\RuntimeException::class);
-        (new \App\Jobs\UploadToTikTokJob($clip->id, $foreign->id))->handle($this->mock(\App\Services\TikTokService::class));
+        (new UploadToTikTokJob($clip->id, $foreign->id))->handle($this->mock(TikTokService::class));
     }
 
     public function test_project_and_meta_reject_injected_links(): void
@@ -164,7 +173,7 @@ class SecurityHardeningTest extends TestCase
             'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto',
         ])->assertUnprocessable()->assertJsonValidationErrors('youtube_url');
 
-        $this->getJson('/api/meta?url=' . urlencode('--exec=id #youtube.com/watch?v=abcdefghijk'))->assertUnprocessable();
+        $this->getJson('/api/meta?url='.urlencode('--exec=id #youtube.com/watch?v=abcdefghijk'))->assertUnprocessable();
         Queue::assertNothingPushed();
     }
 
@@ -178,6 +187,6 @@ class SecurityHardeningTest extends TestCase
             'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto',
         ])->assertCreated();
 
-        $this->assertSame('https://www.youtube.com/watch?v=dQw4w9WgXcQ', \App\Models\ClipProject::first()->youtube_url);
+        $this->assertSame('https://www.youtube.com/watch?v=dQw4w9WgXcQ', ClipProject::first()->youtube_url);
     }
 }

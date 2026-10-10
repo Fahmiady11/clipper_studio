@@ -55,10 +55,10 @@ return new class extends Migration
             DB::statement('ALTER TABLE clip_jobs DROP CONSTRAINT IF EXISTS clip_jobs_status_check');
             DB::statement('ALTER TABLE clip_jobs ALTER COLUMN status TYPE VARCHAR(20)');
 
-            if (!Schema::hasIndex('clip_jobs', 'clip_jobs_status_index')) {
+            if (! Schema::hasIndex('clip_jobs', 'clip_jobs_status_index')) {
                 DB::statement('CREATE INDEX clip_jobs_status_index ON clip_jobs (status)');
             }
-            if (!Schema::hasIndex('clip_jobs', 'clip_jobs_batch_id_index')) {
+            if (! Schema::hasIndex('clip_jobs', 'clip_jobs_batch_id_index')) {
                 DB::statement('CREATE INDEX clip_jobs_batch_id_index ON clip_jobs (batch_id)');
             }
         }

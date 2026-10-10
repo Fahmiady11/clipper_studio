@@ -22,7 +22,7 @@ class StorageCleanupTest extends TestCase
     protected function tearDown(): void
     {
         foreach ($this->paths as $p) {
-            exec('rm -rf ' . escapeshellarg($p));
+            exec('rm -rf '.escapeshellarg($p));
         }
         parent::tearDown();
     }
@@ -37,9 +37,9 @@ class StorageCleanupTest extends TestCase
 
     private function tempDir(string $name, int $ageHours): string
     {
-        $dir = storage_path('app/temp/' . $name);
+        $dir = storage_path('app/temp/'.$name);
         @mkdir($dir, 0755, true);
-        file_put_contents($dir . '/video.mp4', str_repeat('v', 1024));
+        file_put_contents($dir.'/video.mp4', str_repeat('v', 1024));
         touch($dir, time() - $ageHours * 3600);
         $this->paths[] = $dir;
 
@@ -48,17 +48,17 @@ class StorageCleanupTest extends TestCase
 
     public function test_removes_old_idle_sources_and_keeps_busy_or_recent(): void
     {
-        $old      = $this->project();
-        $busy     = $this->project('processing');
-        $recent   = $this->project();
-        $queued   = $this->project();
+        $old = $this->project();
+        $busy = $this->project('processing');
+        $recent = $this->project();
+        $queued = $this->project();
         GeneratedClip::create([
             'clip_project_id' => $queued->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 10,
             'topic' => 't', 'reason' => 'r', 'status' => 'pending', 'review_status' => 'pending',
         ]);
 
-        $oldDir    = $this->tempDir($old->id, 100);
-        $busyDir   = $this->tempDir($busy->id, 100);
+        $oldDir = $this->tempDir($old->id, 100);
+        $busyDir = $this->tempDir($busy->id, 100);
         $recentDir = $this->tempDir($recent->id, 1);
         $queuedDir = $this->tempDir($queued->id, 100);
         $orphanDir = $this->tempDir('orphan-dir', 100);
@@ -85,7 +85,7 @@ class StorageCleanupTest extends TestCase
 
         // ctime can't be backdated with touch(); the cache file only goes once both times are old
         clearstatcache();
-        $this->assertSame(filectime($oldCache) < time() - 72 * 3600, !file_exists($oldCache));
+        $this->assertSame(filectime($oldCache) < time() - 72 * 3600, ! file_exists($oldCache));
     }
 
     public function test_cleanup_command_runs(): void
@@ -101,16 +101,16 @@ class StorageCleanupTest extends TestCase
             'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 5, 'end_seconds' => 20,
             'topic' => 't', 'reason' => 'r', 'status' => 'pending',
         ]);
-        $this->paths[] = storage_path('app/temp/' . $project->id);
+        $this->paths[] = storage_path('app/temp/'.$project->id);
 
         $ytdlp = $this->mock(YtDlpService::class);
         $ytdlp->shouldReceive('download')->once()
             ->with('https://youtu.be/abcdefg', storage_path("app/temp/{$project->id}/video.mp4"))
-            ->andReturnUsing(fn($url, $path) => file_put_contents($path, 'src'));
+            ->andReturnUsing(fn ($url, $path) => file_put_contents($path, 'src'));
 
         $ffmpeg = $this->mock(FFmpegService::class);
         $ffmpeg->shouldReceive('applyLayout')->once()
-            ->andReturnUsing(fn($in, $layout, $out) => file_put_contents($out, 'rendered'));
+            ->andReturnUsing(fn ($in, $layout, $out) => file_put_contents($out, 'rendered'));
 
         $this->app->call([new RenderClipJob($clip->id), 'handle']);
 

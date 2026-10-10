@@ -23,22 +23,22 @@ class TikTokTest extends TestCase
     {
         parent::setUp();
         config([
-            'app.key'                      => 'base64:' . base64_encode(str_repeat('k', 32)),
-            'services.tiktok.client_key'    => 'ck',
+            'app.key' => 'base64:'.base64_encode(str_repeat('k', 32)),
+            'services.tiktok.client_key' => 'ck',
             'services.tiktok.client_secret' => 'cs',
-            'services.tiktok.redirect_uri'  => 'https://example.test/tiktok/callback',
+            'services.tiktok.redirect_uri' => 'https://example.test/tiktok/callback',
         ]);
     }
 
     private function account(User $user, array $attrs = []): TiktokAccount
     {
         return TiktokAccount::create($attrs + [
-            'user_id'            => $user->id,
-            'open_id'            => 'open-1',
-            'display_name'       => 'Creator',
-            'access_token'       => 'at-old',
-            'refresh_token'      => 'rt-old',
-            'access_expires_at'  => now()->addDay(),
+            'user_id' => $user->id,
+            'open_id' => 'open-1',
+            'display_name' => 'Creator',
+            'access_token' => 'at-old',
+            'refresh_token' => 'rt-old',
+            'access_expires_at' => now()->addDay(),
             'refresh_expires_at' => now()->addDays(300),
         ]);
     }
@@ -88,7 +88,7 @@ class TikTokTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get('/tiktok/callback?code=abc&state=' . $q['state'])
+            ->get('/tiktok/callback?code=abc&state='.$q['state'])
             ->assertRedirect('/?tiktok=connected');
 
         $account = TiktokAccount::firstOrFail();
@@ -116,14 +116,14 @@ class TikTokTest extends TestCase
         ])]);
 
         $this->assertSame('at-new', app(TikTokService::class)->freshToken($account));
-        Http::assertSent(fn(Request $r) => $r['grant_type'] === 'refresh_token' && $r['refresh_token'] === 'rt-old');
+        Http::assertSent(fn (Request $r) => $r['grant_type'] === 'refresh_token' && $r['refresh_token'] === 'rt-old');
         $this->assertSame('rt-new', $account->fresh()->refresh_token);
     }
 
     public function test_upload_to_inbox_inits_and_puts_file(): void
     {
         $account = $this->account(User::factory()->create());
-        $path    = tempnam(sys_get_temp_dir(), 'vid');
+        $path = tempnam(sys_get_temp_dir(), 'vid');
         file_put_contents($path, str_repeat('x', 1000));
 
         Http::fake([
@@ -136,10 +136,10 @@ class TikTokTest extends TestCase
 
         $this->assertSame('pub-1', app(TikTokService::class)->uploadToInbox($account, $path));
 
-        Http::assertSent(fn(Request $r) => str_contains($r->url(), 'inbox/video/init')
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'inbox/video/init')
             && $r->hasHeader('Authorization', 'Bearer at-old')
             && $r['source_info'] === ['source' => 'FILE_UPLOAD', 'video_size' => 1000, 'chunk_size' => 1000, 'total_chunk_count' => 1]);
-        Http::assertSent(fn(Request $r) => $r->method() === 'PUT'
+        Http::assertSent(fn (Request $r) => $r->method() === 'PUT'
             && $r->hasHeader('Content-Range', 'bytes 0-999/1000')
             && strlen($r->body()) === 1000);
         @unlink($path);
@@ -159,9 +159,9 @@ class TikTokTest extends TestCase
     public function test_upload_endpoint_queues_job_for_own_account_only(): void
     {
         Queue::fake();
-        $user  = User::factory()->create();
-        $clip  = $this->doneClip($user);
-        $mine  = $this->account($user);
+        $user = User::factory()->create();
+        $clip = $this->doneClip($user);
+        $mine = $this->account($user);
         $other = $this->account(User::factory()->create(), ['open_id' => 'open-2']);
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", ['account_id' => $other->id])
@@ -169,14 +169,14 @@ class TikTokTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", ['account_id' => $mine->id])
             ->assertOk()->assertJson(['status' => 'queued']);
-        Queue::assertPushed(UploadToTikTokJob::class, fn($job) => $job->clipId === $clip->id && $job->accountId === $mine->id);
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $clip->id && $job->accountId === $mine->id);
     }
 
     public function test_upload_rejects_account_without_video_upload_scope(): void
     {
         Queue::fake();
-        $user    = User::factory()->create();
-        $clip    = $this->doneClip($user);
+        $user = User::factory()->create();
+        $clip = $this->doneClip($user);
         $account = $this->account($user, ['scope' => 'user.info.basic']);
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", ['account_id' => $account->id])
@@ -187,7 +187,7 @@ class TikTokTest extends TestCase
     public function test_direct_post_sends_post_info(): void
     {
         $account = $this->account(User::factory()->create());
-        $path    = tempnam(sys_get_temp_dir(), 'vid');
+        $path = tempnam(sys_get_temp_dir(), 'vid');
         file_put_contents($path, str_repeat('x', 500));
 
         Http::fake([
@@ -201,7 +201,7 @@ class TikTokTest extends TestCase
         $postInfo = ['title' => 'halo #fyp', 'privacy_level' => 'SELF_ONLY', 'disable_comment' => false, 'disable_duet' => true, 'disable_stitch' => true];
         $this->assertSame('pub-d', app(TikTokService::class)->directPost($account, $path, $postInfo));
 
-        Http::assertSent(fn(Request $r) => str_ends_with($r->url(), '/post/publish/video/init/')
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/post/publish/video/init/')
             && $r['post_info'] === $postInfo
             && $r['source_info']['video_size'] === 500);
         @unlink($path);
@@ -209,7 +209,7 @@ class TikTokTest extends TestCase
 
     public function test_creator_info_posts_empty_json_object(): void
     {
-        $user    = User::factory()->create();
+        $user = User::factory()->create();
         $account = $this->account($user, ['scope' => 'user.info.basic,video.upload,video.publish']);
         Http::fake(['open.tiktokapis.com/v2/post/publish/creator_info/query/' => Http::response([
             'data' => ['creator_nickname' => 'Creator', 'privacy_level_options' => ['SELF_ONLY']],
@@ -218,7 +218,7 @@ class TikTokTest extends TestCase
 
         $this->actingAs($user)->getJson("/api/tiktok/accounts/{$account->id}/creator-info")
             ->assertOk()->assertJson(['creator_nickname' => 'Creator']);
-        Http::assertSent(fn(Request $r) => $r->body() === '{}');
+        Http::assertSent(fn (Request $r) => $r->body() === '{}');
     }
 
     public function test_direct_upload_requires_privacy_and_publish_scope(): void
@@ -241,14 +241,14 @@ class TikTokTest extends TestCase
             'title' => 'caption', 'disable_comment' => true, 'disable_duet' => true, 'disable_stitch' => false,
         ])->assertOk();
 
-        Queue::assertPushed(UploadToTikTokJob::class, fn($job) => $job->mode === 'direct'
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->mode === 'direct'
             && $job->postInfo === ['title' => 'caption', 'privacy_level' => 'SELF_ONLY', 'disable_comment' => true, 'disable_duet' => true, 'disable_stitch' => false]);
     }
 
     public function test_direct_job_records_published_status(): void
     {
-        $user    = User::factory()->create();
-        $clip    = $this->doneClip($user);
+        $user = User::factory()->create();
+        $clip = $this->doneClip($user);
         $account = $this->account($user);
 
         $svc = $this->mock(TikTokService::class);
@@ -264,8 +264,8 @@ class TikTokTest extends TestCase
 
     public function test_job_uploads_and_records_inbox_status(): void
     {
-        $user    = User::factory()->create();
-        $clip    = $this->doneClip($user);
+        $user = User::factory()->create();
+        $clip = $this->doneClip($user);
         $account = $this->account($user);
 
         $svc = $this->mock(TikTokService::class);

@@ -15,10 +15,10 @@ class GeminiServiceTest extends TestCase
     {
         parent::setUp();
         config([
-            'services.gemini.key'          => 'k',
-            'services.gemini.models'       => ['model-a', 'model-b', 'model-c'],
+            'services.gemini.key' => 'k',
+            'services.gemini.models' => ['model-a', 'model-b', 'model-c'],
             'services.gemini.retry_pauses' => [0, 0],
-            'services.llm_gateway'         => ['url' => null, 'key' => null, 'model' => null],
+            'services.llm_gateway' => ['url' => null, 'key' => null, 'model' => null],
         ]);
     }
 
@@ -43,7 +43,7 @@ class GeminiServiceTest extends TestCase
 
         $this->assertSame('Sisi *gelap* kota', $clips[0]['hook_text']);
         // The API key travels in a header, never in the URL (URLs leak into logs)
-        Http::assertSent(fn($r) => $r->hasHeader('x-goog-api-key', 'k') && !str_contains($r->url(), 'key='));
+        Http::assertSent(fn ($r) => $r->hasHeader('x-goog-api-key', 'k') && ! str_contains($r->url(), 'key='));
         Http::assertSentCount(3); // a once (no waiting on a daily quota), b twice
     }
 
@@ -51,11 +51,11 @@ class GeminiServiceTest extends TestCase
     {
         config(['services.llm_gateway' => ['url' => 'http://gw.test/v1/', 'key' => 'secret', 'model' => 'gemini-pro']]);
         Http::fake([
-            'gw.test/*' => Http::response(['choices' => [['message' => ['content' => "```json\n" . self::CLIPS . "\n```"]]]]),
+            'gw.test/*' => Http::response(['choices' => [['message' => ['content' => "```json\n".self::CLIPS."\n```"]]]]),
         ]);
 
         $this->assertCount(1, $this->analyze());
-        Http::assertSent(fn($r) => $r->url() === 'http://gw.test/v1/chat/completions'
+        Http::assertSent(fn ($r) => $r->url() === 'http://gw.test/v1/chat/completions'
             && $r->hasHeader('Authorization', 'Bearer secret')
             && $r['model'] === 'gemini-pro');
         Http::assertSentCount(1);
@@ -73,7 +73,7 @@ class GeminiServiceTest extends TestCase
         ]);
 
         $this->assertCount(1, $this->analyze());
-        Http::assertSent(fn($r) => $r['model'] === 'flash');
+        Http::assertSent(fn ($r) => $r['model'] === 'flash');
     }
 
     public function test_without_gemini_key_only_the_gateway_is_used(): void
@@ -85,12 +85,12 @@ class GeminiServiceTest extends TestCase
             $this->analyze();
         } catch (RuntimeException) {
         }
-        Http::assertNotSent(fn($r) => str_contains($r->url(), 'generativelanguage'));
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), 'generativelanguage'));
     }
 
     public function test_wrapped_array_is_accepted(): void
     {
-        Http::fake(['*' => Http::response($this->ok('{"clips":' . self::CLIPS . '}'))]);
+        Http::fake(['*' => Http::response($this->ok('{"clips":'.self::CLIPS.'}'))]);
 
         $this->assertSame(1, $this->analyze()[0]['ranking']);
     }

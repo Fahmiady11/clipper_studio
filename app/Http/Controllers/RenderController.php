@@ -31,7 +31,7 @@ class RenderController extends Controller
         }
 
         // Already done or in-flight — return current status, frontend will poll
-        if (!$rerender && in_array($clip->status, ['done', 'processing'])) {
+        if (! $rerender && in_array($clip->status, ['done', 'processing'])) {
             return response()->json(['clip_id' => $clip->id, 'status' => $clip->status]);
         }
 
@@ -53,8 +53,8 @@ class RenderController extends Controller
         // Back to "not rendered" so it can be picked again; the job sees
         // cancelled_at, kills ffmpeg and exits without touching the status.
         $clip->update([
-            'status'       => $clip->output_path ? 'done' : 'pending',
-            'error_msg'    => null,
+            'status' => $clip->output_path ? 'done' : 'pending',
+            'error_msg' => null,
             'cancelled_at' => now(),
         ]);
 
@@ -68,12 +68,12 @@ class RenderController extends Controller
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
 
         return response()->json([
-            'clip_id'     => $clip->id,
-            'status'      => $clip->status,
-            'error_msg'   => $clip->error_msg,
+            'clip_id' => $clip->id,
+            'status' => $clip->status,
+            'error_msg' => $clip->error_msg,
             'output_path' => $clip->output_path,
             // Music was requested but the library had nothing to pick from
-            'music_missing' => $clip->status === 'done' && $clip->clipProject->music_enabled && !$clip->music_track,
+            'music_missing' => $clip->status === 'done' && $clip->clipProject->music_enabled && ! $clip->music_track,
             'download_url' => $clip->status === 'done'
                 ? url("/api/clips/{$clip->id}/download")
                 : null,
@@ -88,18 +88,18 @@ class RenderController extends Controller
 
         // CC BY music must be credited: added on every read so an edited credit shows up
         $credit = $music->creditFor($clip->music_track);
-        $withCredit = fn(string $caption) => $credit ? rtrim($caption) . "\n\n🎵 {$credit}" : $caption;
+        $withCredit = fn (string $caption) => $credit ? rtrim($caption)."\n\n🎵 {$credit}" : $caption;
 
         // Return cached caption if already generated
         if ($clip->caption !== null) {
             return response()->json([
-                'caption'      => $withCredit($clip->caption),
-                'hashtags'     => $clip->hashtags_json ?? [],
+                'caption' => $withCredit($clip->caption),
+                'hashtags' => $clip->hashtags_json ?? [],
                 'music_credit' => $credit,
             ]);
         }
 
-        $lang     = $clip->clipProject->transcript?->language ?? 'id';
+        $lang = $clip->clipProject->transcript?->language ?? 'id';
         $segments = $clip->subtitle_json ?? [];
 
         $result = $gemini->generateCaption(
@@ -110,13 +110,13 @@ class RenderController extends Controller
         );
 
         $clip->update([
-            'caption'       => $result['caption'],
+            'caption' => $result['caption'],
             'hashtags_json' => $result['hashtags'],
         ]);
 
         return response()->json([
-            'caption'      => $withCredit($result['caption']),
-            'hashtags'     => $result['hashtags'],
+            'caption' => $withCredit($result['caption']),
+            'hashtags' => $result['hashtags'],
             'music_credit' => $credit,
         ]);
     }

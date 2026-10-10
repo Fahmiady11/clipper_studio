@@ -18,7 +18,7 @@ final class YoutubeUrl
     public static function videoId(?string $url): ?string
     {
         $parts = self::parse($url);
-        if (!$parts) {
+        if (! $parts) {
             return null;
         }
         [$host, $path, $query] = $parts;
@@ -63,10 +63,10 @@ final class YoutubeUrl
         }
 
         $parts = self::parse($value);
-        if (!$parts || !in_array($parts[0], self::HOSTS, true)) {
+        if (! $parts || ! in_array($parts[0], self::HOSTS, true)) {
             return null;
         }
-        if (preg_match('#^/(@[A-Za-z0-9._-]{3,100}|channel/UC[A-Za-z0-9_-]{20,30}|c/[A-Za-z0-9._-]{1,100}|user/[A-Za-z0-9._-]{1,100})(?:/(?:videos|streams|shorts))?/?$#D', $parts[1], $m) && !str_contains($parts[1], '/.')) {
+        if (preg_match('#^/(@[A-Za-z0-9._-]{3,100}|channel/UC[A-Za-z0-9_-]{20,30}|c/[A-Za-z0-9._-]{1,100}|user/[A-Za-z0-9._-]{1,100})(?:/(?:videos|streams|shorts))?/?$#D', $parts[1], $m) && ! str_contains($parts[1], '/.')) {
             return "https://www.youtube.com/{$m[1]}";
         }
 
@@ -80,12 +80,12 @@ final class YoutubeUrl
         if ($url === '' || strlen($url) > 500 || preg_match('/\s/', $url)) {
             return null;
         }
-        if (!preg_match('#^https?://#i', $url)) {
-            $url = 'https://' . $url; // "youtu.be/…" pasted without a scheme
+        if (! preg_match('#^https?://#i', $url)) {
+            $url = 'https://'.$url; // "youtu.be/…" pasted without a scheme
         }
 
         $p = parse_url($url);
-        if (!$p || empty($p['host']) || isset($p['user']) || isset($p['pass']) || isset($p['port'])) {
+        if (! $p || empty($p['host']) || isset($p['user']) || isset($p['pass']) || isset($p['port'])) {
             return null;
         }
 

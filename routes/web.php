@@ -25,9 +25,9 @@ Route::post('/logout', [LogoutController::class, 'destroy'])->name('logout');
 Route::middleware('auth')->group(function () {
     // no-store: after logout the Back button must not show these pages from cache
     Route::middleware('cache.headers:no_store;private')->group(function () {
-        Route::get('/', fn() => view('studio'))->name('home');
-        Route::get('/autopilot', fn() => view('autopilot'))->name('autopilot');
-        Route::get('/music', fn() => view('music'))->name('music');
+        Route::get('/', fn () => view('studio'))->name('home');
+        Route::get('/autopilot', fn () => view('autopilot'))->name('autopilot');
+        Route::get('/music', fn () => view('music'))->name('music');
     });
 
     // TikTok OAuth (redirect URI registered on the TikTok app → /tiktok/callback)

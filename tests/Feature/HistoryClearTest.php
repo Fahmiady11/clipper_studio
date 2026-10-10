@@ -23,7 +23,7 @@ class HistoryClearTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         Storage::fake();
         $this->user = User::factory()->create();
     }
@@ -48,8 +48,8 @@ class HistoryClearTest extends TestCase
     {
         $a = $this->project();
         $b = $this->project(['status' => 'processing']);
-        $source  = VideoSource::create(['user_id' => $this->user->id, 'type' => 'channel', 'value' => '@chan', 'settings' => []]);
-        $auto    = $this->project(['video_source_id' => $source->id]);
+        $source = VideoSource::create(['user_id' => $this->user->id, 'type' => 'channel', 'value' => '@chan', 'settings' => []]);
+        $auto = $this->project(['video_source_id' => $source->id]);
         $foreign = $this->project(['user_id' => User::factory()->create()->id]);
 
         $this->actingAs($this->user)->deleteJson('/api/projects')->assertOk()->assertJson(['deleted' => 2]);

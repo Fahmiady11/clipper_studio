@@ -18,7 +18,7 @@ class QueueSafetyTest extends TestCase
         $retryAfter = config('queue.connections.database.retry_after');
 
         foreach (glob(app_path('Jobs/*.php')) as $file) {
-            $class = 'App\\Jobs\\' . basename($file, '.php');
+            $class = 'App\\Jobs\\'.basename($file, '.php');
             $timeout = (new \ReflectionClass($class))->getDefaultProperties()['timeout'] ?? 60;
             $this->assertGreaterThan($timeout, $retryAfter, "{$class} timeout {$timeout}s >= retry_after {$retryAfter}s");
         }
@@ -27,7 +27,7 @@ class QueueSafetyTest extends TestCase
     public function test_heavy_jobs_never_run_twice_in_parallel(): void
     {
         $analyze = (new AnalyzeVideoJob('p-1'))->middleware()[0];
-        $render  = (new RenderClipJob('c-1'))->middleware()[0];
+        $render = (new RenderClipJob('c-1'))->middleware()[0];
 
         $this->assertInstanceOf(WithoutOverlapping::class, $analyze);
         $this->assertSame('analyze:p-1', $analyze->key);

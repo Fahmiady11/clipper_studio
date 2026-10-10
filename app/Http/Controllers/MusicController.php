@@ -35,14 +35,14 @@ class MusicController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'file'    => ['required', 'file', 'max:51200', 'extensions:' . implode(',', MusicService::EXTENSIONS)],
-            'mood'    => ['required', Rule::in(MusicService::MOODS)],
+            'file' => ['required', 'file', 'max:51200', 'extensions:'.implode(',', MusicService::EXTENSIONS)],
+            'mood' => ['required', Rule::in(MusicService::MOODS)],
             'license' => ['required', Rule::in(MusicTrack::LICENSES)],
-            'credit'  => ['nullable', 'string', 'max:500', 'required_if:license,cc-by'],
+            'credit' => ['nullable', 'string', 'max:500', 'required_if:license,cc-by'],
         ], [
             'credit.required_if' => 'Lagu CC BY wajib diberi kredit (salin teks atribusi dari YouTube Audio Library).',
-            'file.extensions'    => 'Format harus mp3, m4a, aac, wav, atau ogg.',
-            'file.max'           => 'Ukuran file maksimal 50 MB.',
+            'file.extensions' => 'Format harus mp3, m4a, aac, wav, atau ogg.',
+            'file.max' => 'Ukuran file maksimal 50 MB.',
         ]);
 
         abort_unless($this->music->isAudio($data['file']->getRealPath()), 422, 'File ini bukan audio yang bisa dibaca.');
@@ -50,7 +50,7 @@ class MusicController extends Controller
         $path = $this->music->store($data['file'], $data['mood']);
         MusicTrack::updateOrCreate(['path' => $path], [
             'license' => $data['license'],
-            'credit'  => isset($data['credit']) ? trim($data['credit']) : null,
+            'credit' => isset($data['credit']) ? trim($data['credit']) : null,
         ]);
 
         return response()->json(['path' => $path], 201);
@@ -59,10 +59,10 @@ class MusicController extends Controller
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'path'    => ['required', 'string'],
-            'mood'    => ['sometimes', Rule::in(MusicService::MOODS)],
+            'path' => ['required', 'string'],
+            'mood' => ['sometimes', Rule::in(MusicService::MOODS)],
             'license' => ['sometimes', Rule::in(MusicTrack::LICENSES)],
-            'credit'  => ['sometimes', 'nullable', 'string', 'max:500'],
+            'credit' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
         $path = $this->resolve($data['path']);
@@ -74,7 +74,7 @@ class MusicController extends Controller
         if ($fields) {
             $track = MusicTrack::firstOrNew(['path' => $path]);
             $track->fill($fields);
-            abort_if($track->license !== 'free' && !trim((string) $track->credit), 422, 'Lagu CC BY wajib diberi kredit.');
+            abort_if($track->license !== 'free' && ! trim((string) $track->credit), 422, 'Lagu CC BY wajib diberi kredit.');
             $track->save();
         }
 

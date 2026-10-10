@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 class GeneratedClip extends Model
 {
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -39,19 +40,19 @@ class GeneratedClip extends Model
     ];
 
     protected $casts = [
-        'ranking'       => 'integer',
+        'ranking' => 'integer',
         'start_seconds' => 'float',
-        'end_seconds'   => 'float',
-        'subtitle_json'  => 'array',
-        'hashtags_json'  => 'array',
-        'cancelled_at'   => 'datetime',
+        'end_seconds' => 'float',
+        'subtitle_json' => 'array',
+        'hashtags_json' => 'array',
+        'cancelled_at' => 'datetime',
     ];
 
     protected static function boot(): void
     {
         parent::boot();
         static::creating(function ($model) {
-            if (!$model->id) {
+            if (! $model->id) {
                 $model->id = (string) Str::uuid();
             }
         });

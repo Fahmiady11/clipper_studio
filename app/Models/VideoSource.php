@@ -23,13 +23,13 @@ class VideoSource extends Model
     ];
 
     protected $casts = [
-        'enabled'           => 'boolean',
-        'interval_hours'    => 'integer',
-        'max_per_run'       => 'integer',
+        'enabled' => 'boolean',
+        'interval_hours' => 'integer',
+        'max_per_run' => 'integer',
         'min_video_seconds' => 'integer',
         'max_video_seconds' => 'integer',
-        'settings'          => 'array',
-        'last_run_at'       => 'datetime',
+        'settings' => 'array',
+        'last_run_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -45,6 +45,6 @@ class VideoSource extends Model
     public function isDue(): bool
     {
         return $this->enabled
-            && (!$this->last_run_at || $this->last_run_at->addHours($this->interval_hours)->isPast());
+            && (! $this->last_run_at || $this->last_run_at->addHours($this->interval_hours)->isPast());
     }
 }

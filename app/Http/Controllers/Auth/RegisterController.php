@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,15 +21,15 @@ class RegisterController extends Controller
             return true;
         }
         try {
-            return !User::query()->exists();
-        } catch (\Illuminate\Database\QueryException) {
+            return ! User::query()->exists();
+        } catch (QueryException) {
             return false; // database not migrated yet: keep sign-up closed rather than error
         }
     }
 
     public function show(): View|RedirectResponse
     {
-        if (!self::open()) {
+        if (! self::open()) {
             return redirect()->route('login')->with('status', 'Pendaftaran akun baru ditutup. Hubungi admin.');
         }
 
@@ -40,14 +41,14 @@ class RegisterController extends Controller
         abort_unless(self::open(), 403, 'Pendaftaran akun baru ditutup.');
 
         $data = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
         $user = User::create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
+            'name' => $data['name'],
+            'email' => $data['email'],
             'password' => Hash::make($data['password']),
         ]);
 

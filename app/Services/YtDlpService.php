@@ -8,6 +8,7 @@ use RuntimeException;
 class YtDlpService
 {
     private string $bin;
+
     private string $cookieArg;
 
     public function __construct()
@@ -17,12 +18,12 @@ class YtDlpService
         // Browser cookies (YTDLP_COOKIES_BROWSER) are always fresh; prefer them.
         // Fall back to cookies file (YTDLP_COOKIES) only when no browser is set.
         $cookieBrowser = config('services.ytdlp.cookies_from_browser', '');
-        $cookieFile    = config('services.ytdlp.cookies_file', '');
+        $cookieFile = config('services.ytdlp.cookies_file', '');
 
         if ($cookieBrowser) {
-            $this->cookieArg = ' --cookies-from-browser ' . escapeshellarg($cookieBrowser);
+            $this->cookieArg = ' --cookies-from-browser '.escapeshellarg($cookieBrowser);
         } elseif ($cookieFile && file_exists($cookieFile)) {
-            $this->cookieArg = ' --cookies ' . escapeshellarg($cookieFile);
+            $this->cookieArg = ' --cookies '.escapeshellarg($cookieFile);
         } else {
             $this->cookieArg = '';
         }
@@ -36,21 +37,21 @@ class YtDlpService
         exec($cmd, $output, $code);
 
         if ($code !== 0) {
-            throw new RuntimeException('yt-dlp metadata failed: ' . implode("\n", $output));
+            throw new RuntimeException('yt-dlp metadata failed: '.implode("\n", $output));
         }
 
-        $jsonLine = collect($output)->first(fn($l) => str_starts_with(trim($l), '{'));
+        $jsonLine = collect($output)->first(fn ($l) => str_starts_with(trim($l), '{'));
         $json = $jsonLine ? json_decode($jsonLine, true) : null;
-        if (!$json) {
-            throw new RuntimeException('yt-dlp returned invalid JSON. Output: ' . implode("\n", $output));
+        if (! $json) {
+            throw new RuntimeException('yt-dlp returned invalid JSON. Output: '.implode("\n", $output));
         }
 
         return [
-            'title'            => $json['title'] ?? 'Unknown',
+            'title' => $json['title'] ?? 'Unknown',
             'duration_seconds' => (int) ($json['duration'] ?? 0),
-            'thumbnail_url'    => $json['thumbnail'] ?? null,
-            'channel'          => $json['uploader'] ?? $json['channel'] ?? 'Unknown',
-            'language'         => $json['language'] ?? 'id',
+            'thumbnail_url' => $json['thumbnail'] ?? null,
+            'channel' => $json['uploader'] ?? $json['channel'] ?? 'Unknown',
+            'language' => $json['language'] ?? 'id',
         ];
     }
 
@@ -80,19 +81,19 @@ class YtDlpService
         $videos = [];
         foreach ($output as $line) {
             $json = str_starts_with(trim($line), '{') ? json_decode($line, true) : null;
-            if (!$json || empty($json['id']) || ($json['live_status'] ?? null) === 'is_upcoming') {
+            if (! $json || empty($json['id']) || ($json['live_status'] ?? null) === 'is_upcoming') {
                 continue;
             }
             $videos[] = [
-                'id'       => $json['id'],
-                'title'    => $json['title'] ?? null,
-                'channel'  => $json['channel'] ?? $json['uploader'] ?? null,
+                'id' => $json['id'],
+                'title' => $json['title'] ?? null,
+                'channel' => $json['channel'] ?? $json['uploader'] ?? null,
                 'duration' => isset($json['duration']) ? (int) $json['duration'] : null,
             ];
         }
 
         if ($code !== 0 && empty($videos)) {
-            throw new RuntimeException('yt-dlp listing failed: ' . implode("\n", array_slice($output, -5)));
+            throw new RuntimeException('yt-dlp listing failed: '.implode("\n", array_slice($output, -5)));
         }
 
         return $videos;
@@ -102,12 +103,12 @@ class YtDlpService
     public static function channelVideosUrl(string $value): string
     {
         $value = trim($value);
-        if (!str_starts_with($value, 'http')) {
-            $value = 'https://www.youtube.com/' . (str_starts_with($value, '@') ? $value : '@' . $value);
+        if (! str_starts_with($value, 'http')) {
+            $value = 'https://www.youtube.com/'.(str_starts_with($value, '@') ? $value : '@'.$value);
         }
         $value = rtrim($value, '/');
 
-        return preg_match('#/(videos|streams|shorts)$#', $value) ? $value : $value . '/videos';
+        return preg_match('#/(videos|streams|shorts)$#', $value) ? $value : $value.'/videos';
     }
 
     public function download(string $url, string $outPath): void
@@ -120,18 +121,19 @@ class YtDlpService
         if ($videoId) {
             $cached = $this->cachedPath($videoId);
             if (file_exists($cached) && filesize($cached) > 1024 * 1024) {
-                if (!is_dir(dirname($outPath))) {
+                if (! is_dir(dirname($outPath))) {
                     @mkdir(dirname($outPath), 0755, true);
                 }
                 // Hard-link to avoid duplicating disk space; fall back to copy
-                if (!@link($cached, $outPath)) {
+                if (! @link($cached, $outPath)) {
                     copy($cached, $outPath);
                 }
+
                 return;
             }
         }
 
-        $dir  = dirname($outPath);
+        $dir = dirname($outPath);
         $base = pathinfo($outPath, PATHINFO_FILENAME);
 
         // Remove stale partial/intermediate files from any previous failed attempt
@@ -145,17 +147,17 @@ class YtDlpService
         $cmd = sprintf(
             '%s%s'
             // 720p H264: ~half the size of 1080p, sufficient quality for 9:16 clips.
-            . ' -f "bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]'
-            . '/best[vcodec^=avc1][height<=720]'
-            . '/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"'
-            . ' --concurrent-fragments 4'  // bypass YouTube per-connection throttle
-            . ' --merge-output-format mp4'
-            . ' --no-continue'
-            . ' --force-overwrites'
-            . ' --no-part'
-            . ' -o %s'
-            . ' -- %s'
-            . ' 2>&1',
+            .' -f "bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]'
+            .'/best[vcodec^=avc1][height<=720]'
+            .'/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"'
+            .' --concurrent-fragments 4'  // bypass YouTube per-connection throttle
+            .' --merge-output-format mp4'
+            .' --no-continue'
+            .' --force-overwrites'
+            .' --no-part'
+            .' -o %s'
+            .' -- %s'
+            .' 2>&1',
             $this->bin,
             $this->cookieArg,
             escapeshellarg($outPath),
@@ -165,11 +167,11 @@ class YtDlpService
         [$code, $output] = Cancellation::exec($cmd);
 
         if ($code !== 0) {
-            throw new RuntimeException('yt-dlp download failed: ' . implode("\n", $output));
+            throw new RuntimeException('yt-dlp download failed: '.implode("\n", $output));
         }
 
-        if (!file_exists($outPath)) {
-            throw new RuntimeException('yt-dlp finished but output file not found: ' . $outPath);
+        if (! file_exists($outPath)) {
+            throw new RuntimeException('yt-dlp finished but output file not found: '.$outPath);
         }
 
         // Store in cache for future projects using the same URL
@@ -182,7 +184,7 @@ class YtDlpService
 
     private function cachedPath(string $videoId): string
     {
-        return storage_path('app/video_cache/' . $videoId . '.mp4');
+        return storage_path('app/video_cache/'.$videoId.'.mp4');
     }
 
     private function extractVideoId(string $url): ?string
@@ -190,6 +192,7 @@ class YtDlpService
         if (preg_match('/(?:watch\?v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{6,})/', $url, $m)) {
             return $m[1];
         }
+
         return null;
     }
 }

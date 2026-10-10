@@ -28,6 +28,7 @@ class MusicService
     public static function normalizeMood(?string $mood): ?string
     {
         $mood = strtolower(trim((string) $mood));
+
         return in_array($mood, self::MOODS, true) ? $mood : null;
     }
 
@@ -38,11 +39,11 @@ class MusicService
      */
     public function pickTrack(?string $mood, string $seed): ?string
     {
-        $tracks = $mood ? $this->tracksIn($this->root . '/' . $mood) : [];
+        $tracks = $mood ? $this->tracksIn($this->root.'/'.$mood) : [];
         if (empty($tracks)) {
             $tracks = [];
             foreach (self::MOODS as $m) {
-                array_push($tracks, ...$this->tracksIn($this->root . '/' . $m));
+                array_push($tracks, ...$this->tracksIn($this->root.'/'.$m));
             }
             array_push($tracks, ...$this->tracksIn($this->root));
         }
@@ -51,6 +52,7 @@ class MusicService
         }
 
         sort($tracks);
+
         return $tracks[crc32($seed) % count($tracks)];
     }
 
@@ -65,10 +67,11 @@ class MusicService
     {
         // Accept the root as configured or resolved (/var vs /private/var on macOS)
         foreach (array_filter([$this->root, realpath($this->root)]) as $root) {
-            if (str_starts_with($absolute, $root . '/')) {
+            if (str_starts_with($absolute, $root.'/')) {
                 return substr($absolute, strlen($root) + 1);
             }
         }
+
         return ltrim(basename($absolute), '/');
     }
 
@@ -80,26 +83,27 @@ class MusicService
     public function library(): array
     {
         $credits = MusicTrack::all()->keyBy('path');
-        $out     = [];
+        $out = [];
         foreach ([...self::MOODS, null] as $mood) {
             foreach ($this->tracksIn($mood ? "{$this->root}/{$mood}" : $this->root) as $file) {
-                $rel   = $this->relative($file);
-                $row   = $credits->get($rel);
+                $rel = $this->relative($file);
+                $row = $credits->get($rel);
                 $out[] = [
                     'path' => $rel, 'mood' => $mood, 'name' => basename($file), 'size' => filesize($file),
                     'license' => $row?->license, 'credit' => $row?->credit,
                 ];
             }
         }
+
         return $out;
     }
 
     /** Store an uploaded file in the mood's folder (never overwriting) and return its relative path. */
     public function store(UploadedFile $file, ?string $mood): string
     {
-        $ext  = strtolower($file->getClientOriginalExtension());
+        $ext = strtolower($file->getClientOriginalExtension());
         $base = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'track';
-        $dir  = $mood ? "{$this->root}/{$mood}" : $this->root;
+        $dir = $mood ? "{$this->root}/{$mood}" : $this->root;
         @mkdir($dir, 0755, true);
 
         $name = "{$base}.{$ext}";
@@ -115,7 +119,7 @@ class MusicService
     public function move(string $path, ?string $mood): string
     {
         $from = $this->absolute($path);
-        $dir  = $mood ? "{$this->root}/{$mood}" : $this->root;
+        $dir = $mood ? "{$this->root}/{$mood}" : $this->root;
         @mkdir($dir, 0755, true);
 
         $name = basename($from);
@@ -140,7 +144,7 @@ class MusicService
     /** Credit to print in captions for a clip's track, when it has one. */
     public function creditFor(?string $path): ?string
     {
-        if (!$path) {
+        if (! $path) {
             return null;
         }
         $credit = MusicTrack::where('path', $path)->value('credit');
@@ -158,13 +162,14 @@ class MusicService
         if ($path === '' || str_contains($path, "\0")) {
             throw new InvalidArgumentException('Lagu tidak ditemukan di library.');
         }
-        $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $real = realpath($this->root . '/' . $path);
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $real = realpath($this->root.'/'.$path);
         $root = realpath($this->root);
 
-        if (!$real || !$root || !str_starts_with($real, $root . '/') || !in_array($ext, self::EXTENSIONS, true) || !is_file($real)) {
+        if (! $real || ! $root || ! str_starts_with($real, $root.'/') || ! in_array($ext, self::EXTENSIONS, true) || ! is_file($real)) {
             throw new InvalidArgumentException('Lagu tidak ditemukan di library.');
         }
+
         return $real;
     }
 
@@ -180,7 +185,7 @@ class MusicService
 
     private function tracksIn(string $dir): array
     {
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             return [];
         }
         $files = [];
@@ -190,6 +195,7 @@ class MusicService
                 $files[] = "{$dir}/{$f}";
             }
         }
+
         return $files;
     }
 }

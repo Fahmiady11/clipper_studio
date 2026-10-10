@@ -22,13 +22,13 @@ trait EnsuresQueueWorker
         // Any worker counts (queue:work, or queue:listen from `composer dev`),
         // so we never stack a second worker onto the same jobs.
         exec("pgrep -f 'artisan queue:(work|listen)' 2>/dev/null", $pids);
-        if (!empty($pids)) {
+        if (! empty($pids)) {
             return;
         }
 
-        $php     = PHP_BINARY;
+        $php = PHP_BINARY;
         $artisan = base_path('artisan');
-        $log     = storage_path('logs/queue-worker.log');
+        $log = storage_path('logs/queue-worker.log');
 
         // --timeout covers the longest job (AnalyzeVideoJob, 1h); jobs also set their own
         exec("nohup {$php} {$artisan} queue:work --timeout=3600 --memory=512 --sleep=1 >> {$log} 2>&1 &");

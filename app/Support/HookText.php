@@ -10,6 +10,7 @@ final class HookText
 {
     /** AI hooks longer than this are cut back (the prompt asks for ≤ 5 words / 30 chars). */
     public const AI_MAX_WORDS = 5;
+
     public const AI_MAX_CHARS = 36;
 
     // Words a cut hook must not end on ("Tour paling aneh di…" → "Tour paling aneh…")
@@ -58,14 +59,14 @@ final class HookText
         $inside = false;
 
         foreach (preg_split('/\s+/u', trim($text)) ?: [] as $word) {
-            $opens  = str_starts_with($word, '*');
+            $opens = str_starts_with($word, '*');
             $closes = mb_strlen($word) > 1 && str_ends_with($word, '*');
-            $clean  = str_replace('*', '', $word);
+            $clean = str_replace('*', '', $word);
 
             if ($clean !== '') {
                 $tokens[] = [$clean, $inside || $opens];
             }
-            if ($opens && !$closes) {
+            if ($opens && ! $closes) {
                 $inside = true;
             } elseif ($closes) {
                 $inside = false;
@@ -88,8 +89,8 @@ final class HookText
     private static function shorten(string $text, int $max, int $maxWords): string
     {
         $words = preg_split('/\s+/u', $text);
-        $kept  = [];
-        $best  = null; // longest prefix that ends a clause (?, !, ,, :, —)
+        $kept = [];
+        $best = null; // longest prefix that ends a clause (?, !, ,, :, —)
 
         foreach ($words as $word) {
             $candidate = implode(' ', [...$kept, $word]);
@@ -105,7 +106,7 @@ final class HookText
         if ($best && count($best) >= 2) {
             $cut = $best;
         } else {
-            $cut  = $kept;
+            $cut = $kept;
             $next = $words[count($kept)] ?? '';
             // Don't split a name ("New | York"): drop its first half too
             if ($cut && self::capitalised($next) && self::capitalised(end($cut))) {
@@ -122,6 +123,6 @@ final class HookText
             $out .= '*';
         }
 
-        return preg_match('/[?!]$/u', $out) ? $out : $out . '…';
+        return preg_match('/[?!]$/u', $out) ? $out : $out.'…';
     }
 }

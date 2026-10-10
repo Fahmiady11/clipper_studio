@@ -20,14 +20,15 @@ class LoginController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
-            'email'    => ['required', 'string', 'email'],
+            'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
         ]);
 
         // 5 wrong passwords per email+IP, then a cool-down
-        $key = 'login:' . Str::lower($credentials['email']) . '|' . $request->ip();
+        $key = 'login:'.Str::lower($credentials['email']).'|'.$request->ip();
         if (RateLimiter::tooManyAttempts($key, 5)) {
             $minutes = (int) ceil(RateLimiter::availableIn($key) / 60);
+
             return back()->withErrors([
                 'email' => "Terlalu banyak percobaan. Coba lagi dalam {$minutes} menit.",
             ])->onlyInput('email');
@@ -39,9 +40,9 @@ class LoginController extends Controller
 
             // Only return to a page; a video/API URL that bounced to login would open raw
             $intended = $request->session()->pull('url.intended');
-            $path     = (string) parse_url((string) $intended, PHP_URL_PATH);
+            $path = (string) parse_url((string) $intended, PHP_URL_PATH);
 
-            return redirect()->to($intended && !str_starts_with($path, '/api/') ? $intended : route('home'));
+            return redirect()->to($intended && ! str_starts_with($path, '/api/') ? $intended : route('home'));
         }
 
         RateLimiter::hit($key, 60);

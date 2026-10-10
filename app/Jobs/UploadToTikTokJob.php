@@ -15,7 +15,8 @@ class UploadToTikTokJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries   = 1; // a retry would create a second draft
+    public int $tries = 1; // a retry would create a second draft
+
     public int $timeout = 600;
 
     private const POLL_ATTEMPTS = 10;
@@ -23,8 +24,8 @@ class UploadToTikTokJob implements ShouldQueue
     public int $pollSeconds = 6;
 
     /**
-     * @param string $mode     'inbox' (draft) or 'direct' (post to profile)
-     * @param array  $postInfo direct only: title, privacy_level, disable_* flags
+     * @param  string  $mode  'inbox' (draft) or 'direct' (post to profile)
+     * @param  array  $postInfo  direct only: title, privacy_level, disable_* flags
      */
     public function __construct(
         public string $clipId,
@@ -35,8 +36,8 @@ class UploadToTikTokJob implements ShouldQueue
 
     public function handle(TikTokService $tiktok): void
     {
-        $log     = Log::channel('clipper_jobs');
-        $clip    = GeneratedClip::with('clipProject')->findOrFail($this->clipId);
+        $log = Log::channel('clipper_jobs');
+        $clip = GeneratedClip::with('clipProject')->findOrFail($this->clipId);
         $account = TiktokAccount::findOrFail($this->accountId);
 
         // Re-check at run time: the clip may have been rejected/re-rendered/deleted since
@@ -44,14 +45,14 @@ class UploadToTikTokJob implements ShouldQueue
         if ($account->user_id !== $clip->clipProject?->user_id) {
             throw new \RuntimeException('Akun TikTok bukan milik pemilik clip.');
         }
-        if ($clip->status !== 'done' || !$clip->output_path || !Storage::exists($clip->output_path)) {
+        if ($clip->status !== 'done' || ! $clip->output_path || ! Storage::exists($clip->output_path)) {
             throw new \RuntimeException('File clip tidak tersedia (mungkin ditolak atau sedang dirender ulang).');
         }
 
         $clip->update(['tiktok_status' => 'uploading', 'tiktok_error' => null]);
         $log->info('TikTok upload started', ['clip_id' => $clip->id, 'account' => $account->display_name, 'mode' => $this->mode]);
 
-        $path      = Storage::path($clip->output_path);
+        $path = Storage::path($clip->output_path);
         $publishId = $this->mode === 'direct'
             ? $tiktok->directPost($account, $path, $this->postInfo)
             : $tiktok->uploadToInbox($account, $path);
@@ -66,6 +67,7 @@ class UploadToTikTokJob implements ShouldQueue
             if ($mapped !== 'processing') {
                 $clip->update(['tiktok_status' => $mapped, 'tiktok_error' => $status['fail_reason']]);
                 $log->info('TikTok upload finished', ['clip_id' => $clip->id, 'status' => $status]);
+
                 return;
             }
         }
@@ -77,9 +79,9 @@ class UploadToTikTokJob implements ShouldQueue
     {
         return match ($tiktokStatus) {
             'SEND_TO_USER_INBOX' => 'inbox',
-            'PUBLISH_COMPLETE'   => 'published',
-            'FAILED'             => 'failed',
-            default              => 'processing',
+            'PUBLISH_COMPLETE' => 'published',
+            'FAILED' => 'failed',
+            default => 'processing',
         };
     }
 
@@ -87,12 +89,12 @@ class UploadToTikTokJob implements ShouldQueue
     {
         Log::channel('clipper_jobs')->error('TikTok upload failed', [
             'clip_id' => $this->clipId,
-            'error'   => $e->getMessage(),
+            'error' => $e->getMessage(),
         ]);
 
         GeneratedClip::where('id', $this->clipId)->update([
             'tiktok_status' => 'failed',
-            'tiktok_error'  => mb_substr($e->getMessage(), 0, 1000),
+            'tiktok_error' => mb_substr($e->getMessage(), 0, 1000),
         ]);
     }
 }

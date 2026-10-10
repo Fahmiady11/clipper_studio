@@ -49,8 +49,8 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('generated_clips', fn(Blueprint $t) => $t->dropColumn('review_status'));
-        Schema::table('clip_projects', fn(Blueprint $t) => $t->dropColumn('video_source_id'));
+        Schema::table('generated_clips', fn (Blueprint $t) => $t->dropColumn('review_status'));
+        Schema::table('clip_projects', fn (Blueprint $t) => $t->dropColumn('video_source_id'));
         Schema::dropIfExists('discovered_videos');
         Schema::dropIfExists('video_sources');
     }
