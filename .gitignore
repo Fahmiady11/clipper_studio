@@ -28,3 +28,6 @@ Thumbs.db
 
 # Security audit notes (describe weak spots) — keep out of the repo
 /audit-context
+
+# Deploy DB dumps (deploy.sh)
+/backups

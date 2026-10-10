@@ -1,0 +1,77 @@
+# Production stack for Clipper Studio. Driven by deploy.sh; see spec §4.3.
+#   APP_SHA=<sha> docker compose -p clipper -f docker-compose.prod.yml --env-file .env <cmd>
+# .env (never committed) feeds app/queue/scheduler and the postgres credentials.
+# WARNING: `down -v` deletes the database, storage and whisper model volumes.
+name: clipper
+
+x-app: &app
+  image: clipper-app:${APP_SHA:?APP_SHA must be set to the git sha}
+  env_file:
+    - path: .env
+      required: false   # deploy.sh refuses to run without it; optional here so `config` lints anywhere
+  volumes:
+    - storage:/var/www/html/storage
+    - whisper-models:/usr/local/share/whisper-cpp
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:${CLIPPER_PORT:-8095}:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/up"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  queue:
+    <<: *app
+    pull_policy: never
+    # No --tries/--timeout: per-job $tries/$timeout apply (retry_after=3700 in config/queue.php).
+    command: ["php", "artisan", "queue:work", "--sleep=3"]
+    stop_signal: SIGTERM
+    stop_grace_period: 65m
+
+  scheduler:
+    <<: *app
+    pull_policy: never
+    command: ["php", "artisan", "schedule:work"]
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-clipper}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot helper used by deploy.sh to put the whisper model into its volume.
+  # Reuses postgres:17 (already on the host) so it works before the app image is built.
+  whisper-model:
+    image: postgres:17
+    profiles: ["tools"]
+    entrypoint: ["sh", "-c"]
+    command: ["true"]
+    volumes:
+      - whisper-models:/models
+
+volumes:
+  storage:
+  whisper-models:
+  pgdata:
