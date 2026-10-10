@@ -43,14 +43,20 @@ main() {
         die "APP_KEY is empty or missing in $CLIPPER_DIR/.env"
     fi
 
-    # One deploy at a time per project (manual run vs. CI).
-    exec 9>"/tmp/clipper-deploy-$COMPOSE_PROJECT_NAME.lock"
-    flock -n 9 || die "another deploy of $COMPOSE_PROJECT_NAME is running"
+    # One deploy at a time per project (manual run vs. CI). After the checkout
+    # the script re-execs the deploy.sh of <sha> itself, so changes to this
+    # file apply to the same deploy; the lock (fd 9) is inherited across exec.
+    if [[ ${CLIPPER_DEPLOY_STAGE:-} != checked-out ]]; then
+        exec 9>"/tmp/clipper-deploy-$COMPOSE_PROJECT_NAME.lock"
+        flock -n 9 || die "another deploy of $COMPOSE_PROJECT_NAME is running"
 
-    log "checkout $sha"
-    git fetch --quiet origin
-    git cat-file -e "$sha^{commit}" 2>/dev/null || die "commit $sha not found after fetch"
-    git checkout --force --quiet "$sha"
+        log "checkout $sha"
+        git fetch --quiet origin
+        git cat-file -e "$sha^{commit}" 2>/dev/null || die "commit $sha not found after fetch"
+        git checkout --force --quiet "$sha"
+        CLIPPER_DEPLOY_STAGE=checked-out exec "$CLIPPER_DIR/deploy.sh" "$sha"
+    fi
+    [[ $(git rev-parse HEAD) == "$sha" ]] || die "HEAD is not $sha"
 
     ensure_whisper_model "$model_url"
 
