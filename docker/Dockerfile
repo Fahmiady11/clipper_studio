@@ -54,10 +54,11 @@ ARG DENO_VERSION
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx supervisor ffmpeg curl ca-certificates unzip postgresql-client libgomp1 \
-        libpq-dev libicu-dev libzip-dev \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql intl zip opcache pcntl \
-    && apt-get purge -y --auto-remove libpq-dev libicu-dev libzip-dev \
-    && apt-get install -y --no-install-recommends libpq5 libicu72 libzip4 \
+        libpq-dev libicu-dev libzip-dev libfreetype6-dev libjpeg-dev libwebp-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql intl zip opcache pcntl gd \
+    && apt-get purge -y --auto-remove libpq-dev libicu-dev libzip-dev libfreetype6-dev libjpeg-dev libwebp-dev \
+    && apt-get install -y --no-install-recommends libpq5 libicu72 libzip4 libfreetype6 libjpeg62-turbo libwebp7 libpng16-16 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
