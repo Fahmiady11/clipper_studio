@@ -81,7 +81,11 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 80
+    # Secrets live in the `production` Environment, which only `main` may use.
+    environment: production
+    # 65m queue grace period + build + margin. deploy.sh keeps running on the
+    # VPS even if this job is cancelled or times out (it runs detached).
+    timeout-minutes: 100
     concurrency:
       group: deploy-prod
       cancel-in-progress: false
