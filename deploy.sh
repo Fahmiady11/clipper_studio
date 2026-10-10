@@ -37,6 +37,11 @@ main() {
     if ! grep -Eq '^DB_PASSWORD=.+' .env; then
         die "DB_PASSWORD is empty or missing in $CLIPPER_DIR/.env"
     fi
+    # /up does not need APP_KEY, so the health check would pass without one
+    # while every real page returns 500. Refuse before touching anything.
+    if ! grep -Eq '^APP_KEY=.+' .env; then
+        die "APP_KEY is empty or missing in $CLIPPER_DIR/.env"
+    fi
 
     # One deploy at a time per project (manual run vs. CI).
     exec 9>"/tmp/clipper-deploy-$COMPOSE_PROJECT_NAME.lock"
