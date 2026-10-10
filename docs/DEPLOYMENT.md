@@ -66,7 +66,7 @@ Aturan pemicu:
    9. `php artisan migrate --force`;
    10. health check `http://127.0.0.1:8095/up` maksimal 30 detik; gagal = tampilkan 50 baris log `app`, workflow merah;
    11. `up -d queue`, yang me-restart worker dan **menunggu job video yang sedang jalan selesai** (sampai 65 menit);
-   12. hapus image lama (simpan 3 tag `clipper-app` terbaru) dan cache build Docker yang lebih tua dari 7 hari.
+   12. hapus image lama (simpan 3 tag `clipper-app` terbaru) dan cache build Docker yang lebih tua dari 7 hari. **Catatan:** cache build tidak bisa dipilah per project, jadi pembersihan ini berlaku untuk **seluruh VPS** (project lain juga). Yang dihapus hanya cache build lama yang tidak terpakai — bukan image, container, atau volume — paling buruk build project lain jadi sedikit lebih lama sekali.
 6. Workflow hijau = versi baru live.
 
 ## 3. Penjelasan tiap file (dan kenapa)
@@ -146,7 +146,7 @@ Setelah tersimpan, nilai secret tidak bisa dilihat lagi (hanya bisa ditimpa). Se
 
 Saat ini kunci deploy (`restrict`) masih bisa menjalankan **perintah apa saja** sebagai user `deploy`, dan `deploy` ada di grup `docker` (setara root). Kalau kunci itu bocor, penyerang praktis menguasai VPS. Pengaman tambahan: kunci itu dipaksa (*forced command*) hanya boleh menjalankan `/srv/clipper/deploy.sh <sha 40 karakter>`. Ini **belum dipasang**; pasang sendiri kalau mau. Semua langkah dari **root** di VPS.
 
-1. Buat skrip gerbang, milik root, mode 0755:
+1. Buat skrip gerbang, milik root, mode 0755. **Salin dari tampilan GitHub/preview**, bukan dari file `.md` mentah — di file mentah blok ini berindentasi 3 spasi, sehingga `#!/bin/bash` dan penutup `EOF` ikut terindentasi dan heredoc tidak tertutup:
 
    ```bash
    cat > /usr/local/bin/clipper-deploy-gate <<'EOF'
@@ -154,6 +154,7 @@ Saat ini kunci deploy (`restrict`) masih bisa menjalankan **perintah apa saja** 
    # Forced command for the GitHub Actions deploy key (authorized_keys command="...").
    # Allows exactly: /srv/clipper/deploy.sh <40-char lowercase hex sha>
    set -euo pipefail
+   export LC_ALL=C
    cmd=${SSH_ORIGINAL_COMMAND:-}
    if [[ $cmd =~ ^/srv/clipper/deploy\.sh\ ([0-9a-f]{40})$ ]]; then
        exec /srv/clipper/deploy.sh "${BASH_REMATCH[1]}"
@@ -455,7 +456,7 @@ curl -i https://clipper.asfahmidev.com/up # lewat Nginx host + TLS
 > Flag `-v` **MENGHAPUS SEMUA DATA**: volume `pgdata` (database), `storage` (video, cookies, hasil render), dan `whisper-models`. Tidak bisa dikembalikan, kecuali dari backup `.sql.gz` (database saja; file di `storage` tidak ada backup-nya).
 > `docker compose ... down` tanpa `-v` aman (data tetap di volume). Begitu juga `docker volume rm clipper_*` dan `docker system prune --volumes`: jangan.
 
-- **Server ini juga melayani situs lain** (tldraw, omniroute, dll.). Jangan `docker stop`/`rm`/`prune` sembarangan; hanya sentuh container, image, dan volume berawalan `clipper`.
+- **Server ini juga melayani situs lain** (tldraw, omniroute, dll.). Jangan `docker stop`/`rm`/`prune` sembarangan; hanya sentuh container, image, dan volume berawalan `clipper`. (Satu-satunya pengecualian otomatis: `deploy.sh` membersihkan cache build Docker >7 hari untuk seluruh host — lihat §2 langkah 12.)
 - **Jangan commit `.env`** atau kunci SSH. `.env` produksi hanya ada di VPS dengan mode 600.
 - **Jangan jalankan `deploy.sh` sebagai root** (lihat 6.1).
 - **Perubahan Nginx host**: wajib `nginx -t` lolos sebelum `systemctl reload nginx`; jangan ubah file site lain.

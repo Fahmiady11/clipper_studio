@@ -134,13 +134,13 @@ run_detached() {
     # The wrapper writes the exit code even if the checked-out deploy.sh is an
     # older version that knows nothing about status files (rollback).
     # shellcheck disable=SC2016  # $0..$2 expand in the wrapper shell
-    setsid nohup bash -c 'CLIPPER_DEPLOY_STAGE=worker "$0" "$1"; rc=$?
+    setsid -w nohup bash -c 'CLIPPER_DEPLOY_STAGE=worker "$0" "$1"; rc=$?
         echo "$rc" >"$2.part" && mv -f "$2.part" "$2"; exit "$rc"' \
         "$CLIPPER_DIR/deploy.sh" "$sha" "$base.status" </dev/null >>"$base.log" 2>&1 &
     pid=$!
     log "deploy runs detached (pid $pid); log $base.log"
 
-    trap 'kill "$tail_pid" 2>/dev/null
+    trap 'kill "${tail_pid:-}" 2>/dev/null
           echo "[deploy] stopped following; the deploy continues in the background. Log: $base.log, exit code: $base.status" >&2
           exit 130' HUP INT TERM
     tail -n +1 -f --pid="$pid" "$base.log" &
