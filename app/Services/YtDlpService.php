@@ -57,7 +57,8 @@ class YtDlpService
 
     /**
      * List candidate videos without downloading: a channel's latest uploads or
-     * the newest search results for a keyword.
+     * the top search results for a keyword (yt-dlp dropped the date-sorted
+     * ytsearchdate prefix; already-processed videos are skipped by the caller).
      *
      * @return array<int, array{id: string, title: ?string, channel: ?string, duration: ?int}>
      */
@@ -66,7 +67,7 @@ class YtDlpService
         set_time_limit(0);
 
         $target = $type === 'keyword'
-            ? "ytsearchdate{$limit}:{$value}"
+            ? "ytsearch{$limit}:{$value}"
             : self::channelVideosUrl($value);
 
         $cmd = sprintf(

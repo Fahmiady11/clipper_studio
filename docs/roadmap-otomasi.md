@@ -70,7 +70,7 @@ Halaman **/autopilot** (link "Autopilot" di topbar studio):
 
 1. **Sumber video** — tambah *channel* (`@handle` atau URL channel) atau *keyword*. Per sumber: interval cek (jam), maks video per cek, rentang durasi video.
    Tampilan klip (layout, jumlah klip, subtitle, hook, musik) di-*snapshot* dari project manual terakhir saat sumber dibuat; kalau belum ada project, hook ditulis AI.
-2. Scheduler (`routes/console.php`, tiap 10 menit) mengirim `DiscoverVideosJob` untuk sumber yang sudah jatuh tempo → `yt-dlp --flat-playlist` (channel: tab `/videos`; keyword: `ytsearchdate`) → video baru yang lolos filter durasi dibuatkan project.
+2. Scheduler (`routes/console.php`, tiap 10 menit) mengirim `DiscoverVideosJob` untuk sumber yang sudah jatuh tempo → `yt-dlp --flat-playlist` (channel: tab `/videos`; keyword: `ytsearch`) → video baru yang lolos filter durasi dibuatkan project.
    Video yang pernah diproses tidak akan diproses lagi (`discovered_videos`, unik per user).
 3. Analisis Gemini seperti biasa, lalu **semua klip langsung dirender** dan masuk **Antrian review** (`review_status = pending`).
 4. **Approve** → upload ke TikTok (draft/inbox) ke akun yang dipilih. **Reject** → file klip dihapus.

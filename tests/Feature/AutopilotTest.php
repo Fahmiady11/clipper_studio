@@ -76,7 +76,7 @@ class AutopilotTest extends TestCase
         $videos = (new YtDlpService)->listVideos('keyword', 'podcast bisnis', 20);
 
         $this->assertSame(['vidNew1aaaa', 'vidShortaaa', 'vidSeenaaaa', 'vidNew2aaaa'], array_column($videos, 'id'));
-        $this->assertStringContainsString('ytsearchdate20:podcast bisnis', file_get_contents($this->fakeYtDlp.'.args'));
+        $this->assertStringContainsString('ytsearch20:podcast bisnis', file_get_contents($this->fakeYtDlp.'.args'));
     }
 
     public function test_discovery_starts_projects_for_new_videos_only(): void
