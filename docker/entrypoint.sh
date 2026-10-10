@@ -23,6 +23,6 @@ fi
 # Daemon (supervisord) stays root; other commands (queue:work, schedule:work, ...)
 # run as www-data so files they create in storage stay writable by php-fpm.
 if [ "$(id -u)" = "0" ] && [ "${1:-}" != "supervisord" ]; then
-    exec runuser -u www-data -- "$@"
+    exec setpriv --reuid=www-data --regid=www-data --init-groups -- "$@"
 fi
 exec "$@"
