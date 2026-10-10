@@ -54,9 +54,6 @@ class DiscoveryService
                 'user_id' => $source->user_id,
                 'video_source_id' => $source->id,
                 'video_id' => $video['id'],
-                'title' => mb_substr((string) $video['title'], 0, 255),
-                'channel' => mb_substr((string) $video['channel'], 0, 255),
-                'duration_seconds' => $video['duration'],
                 'clip_project_id' => $project->id,
             ]);
             $project->update(['video_title' => $video['title']]);

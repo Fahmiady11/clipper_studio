@@ -11,9 +11,6 @@ class DiscoveredVideo extends Model
         'user_id',
         'video_source_id',
         'video_id',
-        'title',
-        'channel',
-        'duration_seconds',
         'clip_project_id',
     ];
 
