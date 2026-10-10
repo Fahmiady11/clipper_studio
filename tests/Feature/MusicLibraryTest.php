@@ -94,6 +94,21 @@ class MusicLibraryTest extends TestCase
         @unlink(dirname($this->root).'/secret.mp3');
     }
 
+    public function test_files_are_served_as_audio_even_when_the_content_looks_like_html(): void
+    {
+        // ffprobe still finds the mp3 frames after a large HTML prefix, while content
+        // sniffing (finfo) only reads the start and would call it text/html (stored XSS)
+        mkdir($this->root.'/chill');
+        $html = '<html><script>alert(document.domain)</script><!--'.str_repeat('A', 1100 * 1024).'-->';
+        file_put_contents($this->root.'/chill/poly.mp3', $html.file_get_contents(self::$mp3));
+
+        $response = $this->actingAs($this->user)->get('/api/music/file?path='.urlencode('chill/poly.mp3'));
+
+        $response->assertOk();
+        $this->assertSame('audio/mpeg', $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('sandbox', (string) $response->headers->get('Content-Security-Policy'));
+    }
+
     public function test_move_mood_and_delete_keep_credit_rows_in_sync(): void
     {
         mkdir("{$this->root}/chill");

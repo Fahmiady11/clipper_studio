@@ -18,6 +18,15 @@ class MusicService
 
     public const EXTENSIONS = ['mp3', 'm4a', 'aac', 'wav', 'ogg'];
 
+    /** Served Content-Type per extension; never sniffed from the (user-uploaded) bytes. */
+    public const MIME_TYPES = [
+        'mp3' => 'audio/mpeg',
+        'm4a' => 'audio/mp4',
+        'aac' => 'audio/aac',
+        'wav' => 'audio/wav',
+        'ogg' => 'audio/ogg',
+    ];
+
     private string $root;
 
     public function __construct(?string $root = null)

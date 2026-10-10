@@ -24,8 +24,11 @@ class SecurityHeaders
         $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
         $headers->set('Cross-Origin-Opener-Policy', 'same-origin');
         // frame-ancestors/base-uri/form-action only: the pages use inline scripts and
-        // Alpine from a CDN, so a script-src policy would need 'unsafe-*' anyway
-        $headers->set('Content-Security-Policy', "frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://www.tiktok.com; object-src 'none'");
+        // Alpine from a CDN, so a script-src policy would need 'unsafe-*' anyway.
+        // A stricter policy set by the controller (e.g. for uploaded files) is kept.
+        if (! $headers->has('Content-Security-Policy')) {
+            $headers->set('Content-Security-Policy', "frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://www.tiktok.com; object-src 'none'");
+        }
         if ($request->isSecure()) {
             $headers->set('Strict-Transport-Security', 'max-age=31536000');
         }

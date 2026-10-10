@@ -96,7 +96,12 @@ class MusicController extends Controller
             abort(404);
         }
 
-        return response()->file($file);
+        // Uploads only have to contain an audio stream, so the bytes may also look like
+        // HTML; a sniffed text/html response would run script on our origin (stored XSS)
+        return response()->file($file, [
+            'Content-Type' => MusicService::MIME_TYPES[strtolower(pathinfo($file, PATHINFO_EXTENSION))],
+            'Content-Security-Policy' => "sandbox; default-src 'none'; media-src 'self'; frame-ancestors 'none'",
+        ]);
     }
 
     /** Validate a library path from the client; 404 for anything outside the library. */
