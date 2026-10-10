@@ -134,7 +134,7 @@ Urutan:
 1. Isi 3 GitHub Secrets (bagian 4.1).
 2. Perbaiki masalah aplikasi yang membuat test merah (lihat peringatan di bawah), push ke `ci-cd-setup`, buka PR, pastikan job `test` hijau.
 3. Merge `ci-cd-setup` ke `main`. Ini memicu workflow; job `deploy` akan gagal (file belum ada di VPS) atau tidak jalan karena test merah. **Itu wajar.**
-4. Seseorang dengan akses **root** di VPS menjalankan **sekali**:
+4. Seseorang dengan akses **root** di VPS menjalankan **sekali** (dari root, satu baris):
 
    ```bash
    sudo -u deploy git -C /srv/clipper pull --ff-only
@@ -144,13 +144,24 @@ Urutan:
 5. Di GitHub: **Actions** → pilih run terakhir di `main` → **Re-run jobs** (Re-run all jobs). Build pertama lama (kompilasi whisper.cpp, unduh model ~140 MB); build berikutnya jauh lebih cepat karena cache layer Docker.
 6. Cek hasil: `curl -i https://clipper.asfahmidev.com/up` harus `200`.
 
-> **Test akan MERAH sampai kamu memperbaiki masalah aplikasi** yang dicatat di [`docs/superpowers/feedback/2026-10-10-app-feedback.md`](superpowers/feedback/2026-10-10-app-feedback.md), terutama butir 3: `app/Services/StorageCleanup.php:46` (`ClipProject::find($dirName)` dengan nama folder non-UUID meledak di PostgreSQL: `invalid input syntax for type uuid`). Saran perbaikan 1 baris ada di file itu. Job `deploy` hanya jalan setelah `test` hijau, jadi **tidak ada deploy otomatis sampai ini beres**. Lihat juga butir lain di file itu, mis. ekstensi GD dan build Vite (sudah ditangani di Dockerfile dan workflow, tapi baca catatannya).
+> **Test akan MERAH sampai kamu memperbaiki masalah aplikasi** yang dicatat di [`docs/superpowers/feedback/2026-10-10-app-feedback.md`](superpowers/feedback/2026-10-10-app-feedback.md), terutama butir 3: `app/Services/StorageCleanup.php:46` (`ClipProject::find($dirName)` dengan nama folder non-UUID meledak di PostgreSQL: `invalid input syntax for type uuid`). Saran perbaikan 1 baris ada di file itu. Job `deploy` hanya jalan setelah `test` hijau, jadi **tidak ada deploy otomatis sampai ini beres**. Di bagian atas file feedback ada daftar "Yang perlu kamu perbaiki": butir 3 wajib, sisanya opsional (`composer.json` php `^8.4`, `ext-gd`). Masalah GD dan build Vite sudah ditangani di Dockerfile dan workflow, tidak perlu aksi dari kamu.
 >
 > Kalau kamu ingin deploy dulu sebelum tes beres, jalankan manual (bagian 6.1).
 
 ## 6. Operasional harian
 
-Semua perintah di VPS. Agar singkat, di sesi SSH `deploy` pakai ini:
+### Menjadi user `deploy`
+
+User `deploy` tidak bisa dipakai login interaktif: kuncinya berawalan `restrict` (tanpa pty) dan ia tidak punya sudo. Kuncinya hanya untuk GitHub Actions. Jadi **cara kamu bekerja** adalah:
+
+1. SSH ke VPS sebagai **root**: `ssh root@46.250.228.35`.
+2. Pindah ke `deploy`: `sudo -u deploy -i` (atau `su - deploy`). Prompt berubah; sekarang kamu `deploy`.
+3. **Di dalam sesi `deploy` itu, jalankan perintah TANPA `sudo`.** (`sudo` di sana gagal karena `deploy` tidak punya sudo.)
+4. `exit` untuk kembali menjadi root.
+
+Konvensi dokumen ini: **semua perintah di bagian 6 dan 7 dijalankan di dalam sesi `deploy`, tanpa `sudo`**, kecuali ditandai "(dari root)". Perintah satu baris dari root dibungkus `sudo -u deploy bash -c '...'` supaya git juga berjalan sebagai `deploy` (kalau git jalan sebagai root, muncul "dubious ownership").
+
+Agar singkat, di sesi `deploy` pakai ini:
 
 ```bash
 cd /srv/clipper
@@ -162,15 +173,21 @@ dc() { docker compose -p clipper -f /srv/clipper/docker-compose.prod.yml --env-f
 
 ### 6.1 Deploy manual
 
-Masuk sebagai `deploy` dan jalankan dengan SHA 40 karakter:
+Di dalam sesi `deploy`, jalankan dengan SHA 40 karakter:
 
 ```bash
-sudo -u deploy /srv/clipper/deploy.sh <40-char-sha>
+/srv/clipper/deploy.sh <40-char-sha>
 # contoh: SHA terbaru di main
-sudo -u deploy /srv/clipper/deploy.sh "$(git -C /srv/clipper ls-remote origin refs/heads/main | cut -f1)"
+/srv/clipper/deploy.sh "$(git -C /srv/clipper ls-remote origin refs/heads/main | cut -f1)"
 ```
 
-> **JANGAN PERNAH menjalankan `deploy.sh` sebagai root.** Root akan membuat file kunci `/tmp/clipper-deploy-clipper.lock` milik root (deploy berikutnya dari CI sebagai `deploy` gagal), dan file/folder di `/srv/clipper/.git` jadi milik root sehingga git menolak dengan *"dubious ownership"*. Selalu `sudo -u deploy ...` atau login sebagai `deploy`.
+Satu baris langsung dari root (git dan deploy.sh tetap berjalan sebagai `deploy`):
+
+```bash
+sudo -u deploy bash -c '/srv/clipper/deploy.sh "$(git -C /srv/clipper ls-remote origin refs/heads/main | cut -f1)"'
+```
+
+> **JANGAN PERNAH menjalankan `deploy.sh` sebagai root.** Root akan membuat file kunci `/tmp/clipper-deploy-clipper.lock` milik root (deploy berikutnya dari CI sebagai `deploy` gagal), dan file/folder di `/srv/clipper/.git` jadi milik root sehingga git menolak dengan *"dubious ownership"*. Selalu lewat sesi `deploy` (`sudo -u deploy -i`) atau `sudo -u deploy bash -c '...'`.
 >
 > Kalau sudah terlanjur: `chown -R deploy:deploy /srv/clipper` dan `rm -f /tmp/clipper-deploy-clipper.lock` (hanya jika tidak ada deploy yang sedang berjalan).
 
@@ -181,7 +198,7 @@ Dua cara:
 1. **Lewat GitHub (disarankan):** Actions → pilih run lama yang dulu hijau → **Re-run all jobs**. Tes dijalankan lagi dulu, baru deploy SHA lama itu.
 2. **Manual lewat SSH (cepat, tanpa tes):**
    ```bash
-   sudo -u deploy /srv/clipper/deploy.sh <sha-lama>
+   /srv/clipper/deploy.sh <sha-lama>      # di sesi deploy; dari root: sudo -u deploy /srv/clipper/deploy.sh <sha-lama>
    ```
 
 Image dari 3 deploy terakhir masih tersimpan, jadi rollback ke versi itu melewati build (`image ... already exists, skipping build`) dan cepat. Versi yang lebih lama akan dibangun ulang.
@@ -221,7 +238,7 @@ Nama service di compose adalah `postgres`; user dan nama database dibaca dari en
 
 ### 6.4 Mengubah `.env`, mengisi API key
 
-1. Edit sebagai `deploy`: `nano /srv/clipper/.env` (mode 600, jangan diubah).
+1. Di sesi `deploy`: `nano /srv/clipper/.env` (mode 600, jangan diubah). Jangan edit sebagai root, supaya pemilik file tetap `deploy`.
 2. Isi `GEMINI_API_KEY`, `GROQ_API_KEY`, `LLM_GATEWAY_URL` / `LLM_GATEWAY_KEY` / `LLM_GATEWAY_MODEL`, `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`.
 3. **Config di-cache saat container start**, jadi perubahan belum terlihat sebelum container dibuat ulang:
 
@@ -230,7 +247,7 @@ Nama service di compose adalah `postgres`; user dan nama database dibaca dari en
    dc up -d --no-deps --force-recreate app scheduler queue
    ```
 
-   (Membuat ulang `queue` menunggu job aktif selesai, sampai 65 menit.) Alternatif: deploy ulang SHA yang sama dengan `sudo -u deploy /srv/clipper/deploy.sh $APP_SHA`; compose otomatis membuat ulang container yang config/env-nya berubah.
+   (Membuat ulang `queue` menunggu job aktif selesai, sampai 65 menit.) Alternatif: deploy ulang SHA yang sama dengan `/srv/clipper/deploy.sh $APP_SHA` (di sesi `deploy`); compose otomatis membuat ulang container yang config/env-nya berubah.
 
 Aturan nilai di `.env`:
 
@@ -250,7 +267,7 @@ Aturan nilai di `.env`:
 YouTube sering menolak unduhan tanpa login. Aplikasi membaca `YTDLP_COOKIES=/var/www/html/storage/app/cookies.txt` (sudah diset di `.env` produksi, `YTDLP_COOKIES_BROWSER` kosong).
 
 1. Di browser yang sudah login YouTube, ekspor cookies ke file **`cookies.txt` format Netscape** (pakai ekstensi seperti "Get cookies.txt LOCALLY").
-2. Kirim file ke VPS (mis. `scp cookies.txt deploy@46.250.228.35:/tmp/cookies.txt` memakai kunci yang sah; atau ke direktori yang bisa dibaca `deploy`).
+2. Kirim file ke VPS sebagai root dan serahkan ke `deploy`: dari laptop `scp cookies.txt root@46.250.228.35:/tmp/cookies.txt`, lalu (dari root) `chown deploy:deploy /tmp/cookies.txt && chmod 600 /tmp/cookies.txt`. Setelah itu masuk sesi `deploy` untuk langkah 3.
 3. Salin ke volume storage lewat container `app`, lalu betulkan kepemilikan ke `www-data`:
 
    ```bash
@@ -339,7 +356,7 @@ curl -i https://clipper.asfahmidev.com/up # lewat Nginx host + TLS
 - **Jangan commit `.env`** atau kunci SSH. `.env` produksi hanya ada di VPS dengan mode 600.
 - **Jangan jalankan `deploy.sh` sebagai root** (lihat 6.1).
 - **Perubahan Nginx host**: wajib `nginx -t` lolos sebelum `systemctl reload nginx`; jangan ubah file site lain.
-- **Test merah = tidak ada deploy.** Perbaiki dulu butir di file feedback (terutama `StorageCleanup` uuid).
+- **Test merah = tidak ada deploy.** Perbaiki dulu butir wajib di file feedback (`StorageCleanup` uuid); sisanya opsional.
 - **Folder `deploy/` adalah setup lama bare-metal**, tidak ada hubungannya dengan pipeline ini.
 - Setelah mengubah `.env`, container harus dibuat ulang (6.4); nilai dengan `$` pakai kutip tunggal.
 - Backup hanya mencakup database. File video di `storage` tidak di-backup.
