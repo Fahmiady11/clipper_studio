@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\Cancellation;
 use App\Support\ClipSettings;
+use App\Support\FontMetrics;
 use RuntimeException;
 
 class FFmpegService
@@ -17,6 +18,9 @@ class FFmpegService
     private string $bin;
 
     private string $posTag = ''; // ASS override placing every subtitle line (set by buildAssFile)
+
+    /** @var array{alpha: string, font: string, size: int, cy: float}|null rounded background box (set by buildAssFile) */
+    private ?array $box = null;
 
     private VideoLayoutService $layout;
 
@@ -133,29 +137,37 @@ class FFmpegService
             default => 200,
         };
 
-        // Fix 5: BorderStyle=3 box mode; Shadow=0 removes double-box; Outline=18 gives padding
-        $boxStyle = match ($bgStyle) {
-            'semi' => 3,
-            'full' => 3,
-            default => 0,
+        // Background box is drawn as a rounded rectangle on layer 0 behind each
+        // cue (libass's BorderStyle=3 box is always square). Text sits on layer 1.
+        $this->box = match ($bgStyle) {
+            'semi' => ['alpha' => '66'], // 60% opaque black, matches the studio preview
+            'full' => ['alpha' => '1A'], // 90% opaque black
+            default => null,
         };
-        $outlineW = $bgStyle !== 'none' ? 18 : 2;
-        $shadowW = $bgStyle !== 'none' ? 0 : 2;
-        $backClr = match ($bgStyle) {
-            'semi' => '&H99000000', // ~60% opaque black
-            'full' => '&HFF000000', // fully opaque black
-            default => '&H00000000',
-        };
+        if ($this->box) {
+            $this->box += [
+                'font' => $this->layout->resolveFontByFamily($fontFamily),
+                'size' => $fontSize,
+                'cy' => $positionY === null
+                    ? match ($alignment) {
+                        8 => $marginV + $fontSize / 2,
+                        5 => 960,
+                        default => 1920 - $marginV - $fontSize / 2,
+                    }
+                    : (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920),
+            ];
+        }
+        $outlineW = $this->box ? 0 : 2;
+        $shadowW = $this->box ? 0 : 2;
 
         $ass = "[Script Info]\n";
         $ass .= "ScriptType: v4.00+\n";
         $ass .= "PlayResX: 1080\nPlayResY: 1920\n";
-        $ass .= "WrapStyle: 0\n\n"; // Fix 2: smart wrap prevents overflow
+        $ass .= "WrapStyle: 2\n\n"; // no wrapping: cues are short and scaled to fit (fitTag)
         $ass .= "[V4+ Styles]\n";
         $ass .= "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n";
-        // Fix 2: MarginL/R 40→60; Fix 5: Outline/Shadow updated; Fix 3: marginV per position
-        $ass .= "Style: Default,{$fontFamily},{$fontSize},{$textColor},{$hlColor},&H00000000,{$backClr},-1,0,0,0,100,100,0,0,{$boxStyle},{$outlineW},{$shadowW},{$alignment},60,60,{$marginV},1\n";
-        $ass .= "Style: Highlight,{$fontFamily},{$fontSize},{$hlColor},{$textColor},&H00000000,{$backClr},-1,0,0,0,100,100,0,0,{$boxStyle},{$outlineW},{$shadowW},{$alignment},60,60,{$marginV},1\n\n";
+        $ass .= "Style: Default,{$fontFamily},{$fontSize},{$textColor},{$hlColor},&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{$outlineW},{$shadowW},{$alignment},60,60,{$marginV},1\n";
+        $ass .= "Style: Highlight,{$fontFamily},{$fontSize},{$hlColor},{$textColor},&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{$outlineW},{$shadowW},{$alignment},60,60,{$marginV},1\n\n";
         $ass .= "[Events]\n";
         $ass .= "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
 
@@ -182,9 +194,43 @@ class FFmpegService
         return $ass;
     }
 
-    private function dialogue(float $start, float $end, string $text): string
+    private function dialogue(float $start, float $end, string $text, int $layer = 1): string
     {
-        return 'Dialogue: 0,'.$this->toAssTime($start).','.$this->toAssTime($end).",Default,,0,0,0,,{$this->posTag}{$text}\n";
+        return "Dialogue: {$layer},".$this->toAssTime($start).','.$this->toAssTime($end).",Default,,0,0,0,,{$text}\n";
+    }
+
+    /**
+     * Rounded rectangle behind a cue, drawn with ASS vector commands on layer 0.
+     * Sized from the measured text width; text and box share the same centre,
+     * so any small measuring error just shifts padding evenly to both sides.
+     *
+     * @return array{0: string, 1: string} [box dialogue, override tag that shrinks the text to fit]
+     */
+    private function boxFor(float $start, float $end, string $text): array
+    {
+        $padX = 30;
+        $padY = 14;
+        $maxW = 1080 - 2 * 60;
+
+        $textW = FontMetrics::textWidth($this->box['font'], $text, $this->box['size']);
+        $scale = min(1.0, ($maxW - 2 * $padX) / max(1.0, $textW));
+        $fitTag = $scale < 1.0 ? sprintf('{\\fscx%1$d\\fscy%1$d}', (int) floor($scale * 100)) : '';
+
+        $w = (int) round($textW * $scale + 2 * $padX);
+        $h = (int) round($this->box['size'] * $scale + 2 * $padY);
+        $r = min(24, intdiv($h, 2));
+        $k = (int) round($r * 0.448); // bezier offset approximating a quarter circle (1 - 0.552)
+
+        $path = "m {$r} 0 l ".($w - $r).' 0 b '.($w - $k)." 0 {$w} {$k} {$w} {$r}"
+            .' l '.$w.' '.($h - $r).' b '.$w.' '.($h - $k).' '.($w - $k).' '.$h.' '.($w - $r).' '.$h
+            .' l '.$r.' '.$h.' b '.$k.' '.$h.' 0 '.($h - $k).' 0 '.($h - $r)
+            .' l 0 '.$r.' b 0 '.$k.' '.$k.' 0 '.$r.' 0';
+
+        $x = (int) round(540 - $w / 2);
+        $y = (int) round($this->box['cy'] - $h / 2);
+        $tag = sprintf('{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H000000&\\1a&H%s&\\p1}', $x, $y, $this->box['alpha']);
+
+        return [$this->dialogue($start, $end, $tag.$path, 0), $fitTag];
     }
 
     /**
@@ -200,6 +246,11 @@ class FFmpegService
         $words = $cue['words'];
         $hl = '{\\1c&H'.substr($hlColor, 4).'&}'; // &H00BBGGRR -> \1c&HBBGGRR&
         $out = '';
+        $fitTag = '';
+
+        if ($this->box) {
+            [$out, $fitTag] = $this->boxFor($cue['start'], $cue['end'], implode(' ', array_column($words, 'text')));
+        }
 
         foreach ($words as $i => $active) {
             $from = $i === 0 ? $cue['start'] : $active['start'];
@@ -209,11 +260,11 @@ class FFmpegService
             }
 
             $text = implode(' ', array_map(
-                fn ($w, $j) => $j === $i ? $hl.$w['text'].'{\\r}' : $w['text'],
+                fn ($w, $j) => $j === $i ? $hl.$w['text'].'{\\r}'.$fitTag : $w['text'],
                 $words,
                 array_keys($words)
             ));
-            $out .= $this->dialogue($from, $to, $text);
+            $out .= $this->dialogue($from, $to, $this->posTag.$fitTag.$text);
         }
 
         return $out;

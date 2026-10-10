@@ -146,10 +146,12 @@ class YtDlpService
 
         $cmd = sprintf(
             '%s%s'
-            // 720p H264: ~half the size of 1080p, sufficient quality for 9:16 clips.
-            .' -f "bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]'
-            .'/best[vcodec^=avc1][height<=720]'
-            .'/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"'
+            // 1080p: the 9:16 reframe crops a 607px-wide strip out of a 1080p
+            // frame (only 405px from 720p, which upscaled visibly blurry).
+            // Prefer H264, fall back to VP9/AV1 at the same height.
+            .' -f "bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]'
+            .'/bestvideo[height<=1080]+bestaudio'
+            .'/best[height<=1080]/bestvideo+bestaudio/best"'
             .' --concurrent-fragments 4'  // bypass YouTube per-connection throttle
             .' --merge-output-format mp4'
             .' --no-continue'
@@ -184,7 +186,8 @@ class YtDlpService
 
     private function cachedPath(string $videoId): string
     {
-        return storage_path('app/video_cache/'.$videoId.'.mp4');
+        // Suffix = download quality; bumping it skips sources cached at the old 720p cap.
+        return storage_path('app/video_cache/'.$videoId.'-1080p.mp4');
     }
 
     private function extractVideoId(string $url): ?string

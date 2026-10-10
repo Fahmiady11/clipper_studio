@@ -25,7 +25,7 @@ class SubtitlePositionTest extends TestCase
     public function test_dragged_position_centres_every_line_at_that_height(): void
     {
         $ass = $this->ass(30);
-        $lines = array_filter(explode("\n", $ass), fn ($l) => str_starts_with($l, 'Dialogue:'));
+        $lines = array_filter(explode("\n", $ass), fn ($l) => str_starts_with($l, 'Dialogue: 1,')); // text, not box
 
         $this->assertNotEmpty($lines);
         foreach ($lines as $line) {
@@ -35,8 +35,22 @@ class SubtitlePositionTest extends TestCase
 
     public function test_preset_position_has_no_override_and_out_of_range_is_clamped(): void
     {
-        $this->assertStringNotContainsString('\pos(', $this->ass(null));
+        $this->assertDoesNotMatchRegularExpression('/^Dialogue: 1,.*\\\\pos\(/m', $this->ass(null));
         $this->assertStringContainsString('\pos(540,1824)', $this->ass(99)); // clamped to 95%
+    }
+
+    public function test_background_is_a_rounded_box_drawn_behind_the_text(): void
+    {
+        $ass = $this->ass(30);
+
+        $this->assertStringContainsString('BorderStyle', $ass);
+        $this->assertStringNotContainsString(',0,0,3,', $ass); // no square BorderStyle=3 box
+        $this->assertMatchesRegularExpression('/^Dialogue: 0,.*\\\\p1\}m \d+ 0 l .* b /m', $ass);
+
+        $none = app(FFmpegService::class)->buildAssFile(
+            [['start' => 0, 'end' => 2, 'text' => 'halo']], ['background_style' => 'none'],
+        );
+        $this->assertStringNotContainsString('\p1}', $none);
     }
 
     public function test_project_stores_position_and_rejects_off_screen_values(): void

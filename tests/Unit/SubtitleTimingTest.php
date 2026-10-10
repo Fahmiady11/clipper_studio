@@ -10,7 +10,7 @@ class SubtitleTimingTest extends TestCase
 {
     private function dialogues(string $ass): array
     {
-        preg_match_all('/^Dialogue: 0,([^,]+),([^,]+),Default,,0,0,0,,(.*)$/m', $ass, $m, PREG_SET_ORDER);
+        preg_match_all('/^Dialogue: 1,([^,]+),([^,]+),Default,,0,0,0,,(.*)$/m', $ass, $m, PREG_SET_ORDER);
 
         return array_map(fn ($d) => ['start' => $d[1], 'end' => $d[2], 'text' => $d[3]], $m);
     }

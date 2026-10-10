@@ -167,7 +167,7 @@ window.ClipPreview = (() => {
     subBoxStyle({ font, size, bg }) {
       const fill = { none: 'transparent', semi: 'rgba(0,0,0,.6)', full: 'rgba(0,0,0,.9)' }[bg] || 'transparent';
       const bare = bg === 'none';
-      return `display:inline-block;background:${fill};padding:${bare ? '0' : '6px 10px'};border-radius:${bg === 'full' ? '0' : '8px'};`
+      return `display:inline-block;background:${fill};padding:${bare ? '0' : '6px 10px'};border-radius:8px;`
         + `font-family:${FONT_STACK[font] || 'sans-serif'};font-size:${Math.round(size * 0.34)}px;font-weight:800;line-height:1.2;letter-spacing:-.01em;`
         + `text-shadow:${bare ? '0 2px 8px rgba(0,0,0,.85)' : 'none'};text-transform:${font === 'Bebas Neue' ? 'uppercase' : 'none'}`;
     },
