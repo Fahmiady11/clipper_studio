@@ -78,13 +78,22 @@ RUN set -eux; \
 COPY --from=whisper /whisper-cli /usr/local/bin/whisper-cli
 
 # PHP / FPM / nginx / supervisor config
-RUN { \
+# php.ini-production: display_errors Off, log_errors On (error_log unset -> stderr / fpm log).
+# Limits follow deploy/php-clipper.ini (memory 512M, expose_php Off); uploads match
+# nginx client_max_body_size 2g, max_execution_time matches fastcgi/fpm timeout 300.
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && { \
+        echo 'display_errors=Off'; \
+        echo 'display_startup_errors=Off'; \
+        echo 'log_errors=On'; \
+        echo 'expose_php=Off'; \
         echo 'opcache.enable=1'; \
         echo 'opcache.validate_timestamps=0'; \
         echo 'opcache.memory_consumption=128'; \
         echo 'upload_max_filesize=2G'; \
         echo 'post_max_size=2G'; \
         echo 'memory_limit=512M'; \
+        echo 'max_execution_time=300'; \
     } > /usr/local/etc/php/conf.d/zz-clipper.ini \
     && { \
         echo '[www]'; \
