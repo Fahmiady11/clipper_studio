@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
+use Illuminate\Support\Str;
 
 /**
  * Frees disk used by downloaded source videos. Rendered clips are kept.
@@ -43,6 +44,11 @@ class StorageCleanup
     /** Anything still analysing or rendering (or queued to render by autopilot) keeps its source video. */
     private function isBusy(string $dirName): bool
     {
+        // Project ids are UUIDs; any other folder name is an orphan. Postgres rejects
+        // non-UUID input for a uuid column, so don't query with it.
+        if (!Str::isUuid($dirName)) {
+            return false;
+        }
         $project = ClipProject::find($dirName);
         if (! $project) {
             return false; // orphan temp dir
