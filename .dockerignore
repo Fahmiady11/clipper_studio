@@ -23,3 +23,6 @@ deploy
 docker-compose*.yml
 backups
 /backups/
+audit-context
+logs
+/logs/

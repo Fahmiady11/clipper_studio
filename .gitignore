@@ -31,3 +31,6 @@ Thumbs.db
 
 # Deploy DB dumps (deploy.sh)
 /backups
+
+# Deploy run logs (deploy.sh)
+/logs

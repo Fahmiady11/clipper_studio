@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
-# Deploy Clipper Studio at a given commit. Run on the VPS as `deploy`:
+# Deploy Clipper Studio at a given commit. Run on the VPS as `deploy` (never root):
 #   /srv/clipper/deploy.sh <40-char git sha>
 # Exit 0 = new version is up and /up answers 200. Non-zero = failed (see output).
 # Optional env: CLIPPER_DIR (default /srv/clipper), CLIPPER_PORT (default 8095),
 # COMPOSE_PROJECT_NAME (default clipper). Safe to re-run with the same sha.
 # Order follows spec §4.4; failures before `up` leave the old version running.
+#
+# The real deploy runs detached from the caller (setsid + nohup), so a dropped
+# SSH session, a cancelled workflow or Ctrl+C cannot stop it halfway (e.g. with
+# the old queue container stopped and the new one not started). The caller only
+# follows the log and exits with the detached run's status. Per run:
+#   $CLIPPER_DIR/logs/deploy-<UTC time>-<sha7>.log     full output (newest 20 kept)
+#   $CLIPPER_DIR/logs/deploy-<UTC time>-<sha7>.status  exit code, written at the end
+#
+# TEST-ONLY env (never set these on the VPS):
+#   CLIPPER_DEPLOY_ALLOW_ROOT_FOR_TESTING=1  allow running as root, for dry runs
+#       in a scratch clone. In production root would leave root-owned files in
+#       /srv/clipper and break later deploys as `deploy`.
+#   CLIPPER_DEPLOY_SKIP_BUILDER_PRUNE=1      skip `docker builder prune`, so a dry
+#       run on a shared host does not touch other projects' build cache.
+# Internal env: CLIPPER_DEPLOY_STAGE (worker / checked-out), set by the script itself.
 
 # Everything lives in main() so bash parses the whole script before
 # `git checkout` replaces this file on disk.
@@ -17,18 +32,19 @@ main() {
         exit 2
     fi
 
+    if [[ $EUID -eq 0 && ${CLIPPER_DEPLOY_ALLOW_ROOT_FOR_TESTING:-} != 1 ]]; then
+        die "refusing to run as root (it would leave root-owned files in the repo and break later deploys). Run as deploy: sudo -u deploy $0 $sha"
+    fi
+
     CLIPPER_DIR=${CLIPPER_DIR:-/srv/clipper}
     CLIPPER_PORT=${CLIPPER_PORT:-8095}
     COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-clipper}
-    export CLIPPER_PORT COMPOSE_PROJECT_NAME
+    export CLIPPER_DIR CLIPPER_PORT COMPOSE_PROJECT_NAME
     export APP_SHA=$sha
 
     local model_url=https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
     local backup_dir=$CLIPPER_DIR/backups
-    local keep_backups=7 keep_images=3
-
-    MODEL_TMP=
-    trap 'if [[ -n $MODEL_TMP ]]; then rm -rf "$MODEL_TMP"; fi' EXIT
+    local keep_backups=7 keep_images=3 keep_logs=20
 
     cd "$CLIPPER_DIR"
     if [[ ! -f .env ]]; then
@@ -43,11 +59,22 @@ main() {
         die "APP_KEY is empty or missing in $CLIPPER_DIR/.env"
     fi
 
-    # One deploy at a time per project (manual run vs. CI). After the checkout
-    # the script re-execs the deploy.sh of <sha> itself, so changes to this
-    # file apply to the same deploy; the lock (fd 9) is inherited across exec.
-    if [[ ${CLIPPER_DEPLOY_STAGE:-} != checked-out ]]; then
-        exec 9>"/tmp/clipper-deploy-$COMPOSE_PROJECT_NAME.lock"
+    # Stages: "" (caller) starts the detached worker and follows its log;
+    # "worker" takes the lock, checks out <sha> and re-execs the deploy.sh of
+    # <sha> itself as "checked-out", so changes to this file apply to the same
+    # deploy. The lock (fd 9) is held by the worker and inherited across exec;
+    # flock releases it when the process ends, so it never goes stale.
+    case ${CLIPPER_DEPLOY_STAGE:-} in
+        '') run_detached "$sha" "$keep_logs" ;;   # does not return
+        worker | checked-out) ;;
+        *) die "unknown CLIPPER_DEPLOY_STAGE=$CLIPPER_DEPLOY_STAGE" ;;
+    esac
+
+    MODEL_TMP=
+    trap 'if [[ -n $MODEL_TMP ]]; then rm -rf "$MODEL_TMP"; fi' EXIT
+
+    if [[ $CLIPPER_DEPLOY_STAGE == worker ]]; then
+        exec 9>"$CLIPPER_DIR/.git/deploy.lock"
         flock -n 9 || die "another deploy of $COMPOSE_PROJECT_NAME is running"
 
         log "checkout $sha"
@@ -84,11 +111,55 @@ main() {
     dc up -d queue
 
     prune_images "$keep_images"
+    if [[ ${CLIPPER_DEPLOY_SKIP_BUILDER_PRUNE:-} != 1 ]]; then
+        log "prune docker build cache older than 7 days"
+        docker builder prune -f --filter until=168h >/dev/null || log "builder prune failed (ignored)"
+    fi
     log "deploy $sha OK"
 }
 
 log() { printf '[deploy %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 die() { printf '[deploy] ERROR: %s\n' "$*" >&2; exit 1; }
+
+# Start the deploy in its own session (immune to SIGHUP from a dropped SSH
+# session or a cancelled job), follow its log, exit with its status.
+run_detached() {
+    local sha=$1 keep=$2 log_dir=$CLIPPER_DIR/logs base pid tail_pid rc=0
+    mkdir -p "$log_dir"
+    chmod 0750 "$log_dir"
+    base="$log_dir/deploy-$(date -u +%Y%m%dT%H%M%SZ)-${sha:0:7}"
+    : >"$base.log"
+    prune_logs "$log_dir" "$keep"
+
+    # The wrapper writes the exit code even if the checked-out deploy.sh is an
+    # older version that knows nothing about status files (rollback).
+    # shellcheck disable=SC2016  # $0..$2 expand in the wrapper shell
+    setsid nohup bash -c 'CLIPPER_DEPLOY_STAGE=worker "$0" "$1"; rc=$?
+        echo "$rc" >"$2.part" && mv -f "$2.part" "$2"; exit "$rc"' \
+        "$CLIPPER_DIR/deploy.sh" "$sha" "$base.status" </dev/null >>"$base.log" 2>&1 &
+    pid=$!
+    log "deploy runs detached (pid $pid); log $base.log"
+
+    trap 'kill "$tail_pid" 2>/dev/null
+          echo "[deploy] stopped following; the deploy continues in the background. Log: $base.log, exit code: $base.status" >&2
+          exit 130' HUP INT TERM
+    tail -n +1 -f --pid="$pid" "$base.log" &
+    tail_pid=$!
+    wait "$tail_pid" || true
+    trap - HUP INT TERM
+
+    wait "$pid" || rc=$?
+    exit "$rc"
+}
+
+# Keep the $2 newest deploy logs (and their status files).
+prune_logs() {
+    local dir=$1 keep=$2 old
+    find "$dir" -maxdepth 1 -type f -name 'deploy-*.log' | sort -r | tail -n +"$((keep + 1))" \
+        | while IFS= read -r old; do
+            rm -f -- "$old" "${old%.log}.status"
+        done
+}
 
 dc() {
     docker compose -p "$COMPOSE_PROJECT_NAME" -f "$CLIPPER_DIR/docker-compose.prod.yml" \
@@ -121,7 +192,9 @@ ensure_whisper_model() {
     log "whisper model installed ($size bytes)"
 }
 
-# pg_dump to backups/<timestamp>-<sha>.sql.gz, keep the newest $3.
+# pg_dump to backups/<timestamp>-<sha>.sql.gz, keep the newest $3 of those.
+# Only files named by this function are rotated; manual dumps (backups/manual/
+# or any other name) are never counted or deleted.
 backup_db() {
     local dir=$1 sha=$2 keep=$3 file
     mkdir -p "$dir"
@@ -136,7 +209,7 @@ backup_db() {
     fi
     chmod 0600 "$file.part"
     mv "$file.part" "$file"
-    find "$dir" -maxdepth 1 -type f -name '*.sql.gz' | sort -r | tail -n +"$((keep + 1))" \
+    find "$dir" -maxdepth 1 -type f -name '[0-9]???????T??????Z-*.sql.gz' | sort -r | tail -n +"$((keep + 1))" \
         | while IFS= read -r old; do
             log "remove old backup $(basename "$old")"
             rm -f -- "$old"
