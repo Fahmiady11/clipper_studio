@@ -185,6 +185,14 @@ class YtDlpService
         }
     }
 
+    /** Cache file a download of this URL is (or would be) stored at; null when the URL has no video id. */
+    public function cachedPathFor(string $url): ?string
+    {
+        $videoId = $this->extractVideoId($url);
+
+        return $videoId ? $this->cachedPath($videoId) : null;
+    }
+
     private function cachedPath(string $videoId): string
     {
         // Suffix = download quality; bumping it skips sources cached at the old 720p cap.

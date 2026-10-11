@@ -11,6 +11,7 @@ use App\Models\TiktokAccount;
 use App\Models\VideoSource;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
+use App\Services\StorageCleanup;
 use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
@@ -170,13 +171,14 @@ class AutopilotController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function reject(string $clipId): JsonResponse
+    public function reject(string $clipId, StorageCleanup $cleanup): JsonResponse
     {
         $clip = $this->ownedReviewClip($clipId);
         if ($clip->output_path) {
             Storage::delete($clip->output_path); // free disk; rejected clips aren't kept
         }
         $clip->update(['review_status' => 'rejected', 'output_path' => null]);
+        $cleanup->releaseSource($clip->clipProject); // drop the source video once no clip still needs it
 
         return response()->json(['success' => true]);
     }

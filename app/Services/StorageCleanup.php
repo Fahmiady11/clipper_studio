@@ -41,6 +41,36 @@ class StorageCleanup
         return $stats;
     }
 
+    /**
+     * Free a project's source video as soon as no clip still needs it (e.g. the
+     * last unrendered autopilot clip was rejected), instead of waiting for the
+     * retention window. Removes temp/<project> and the video_cache copy — they
+     * are hard links to one file, so both must go to actually free the space.
+     * A later render or a new project with the same URL simply downloads again.
+     *
+     * @return int bytes freed (0 while the project is still busy)
+     */
+    public function releaseSource(ClipProject $project): int
+    {
+        if ($this->isBusy($project->id)) {
+            return 0;
+        }
+
+        $bytes = 0;
+        $dir = storage_path('app/temp/'.$project->id);
+        if (is_dir($dir)) {
+            $bytes += $this->removeDir($dir);
+        }
+
+        $cached = (new YtDlpService)->cachedPathFor($project->youtube_url);
+        if ($cached && is_file($cached)) {
+            $bytes += filesize($cached);
+            @unlink($cached);
+        }
+
+        return $bytes;
+    }
+
     /** Anything still analysing or rendering (or queued to render by autopilot) keeps its source video. */
     private function isBusy(string $dirName): bool
     {

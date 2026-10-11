@@ -38,8 +38,8 @@ class RenderClipJob implements ShouldQueue
     public function handle(FFmpegService $ffmpeg, MusicService $music, YtDlpService $ytdlp, HookRenderer $hooks): void
     {
         $clip = GeneratedClip::with(['clipProject.subtitleSetting', 'clipProject.hookSetting', 'clipProject.transcript'])->find($this->clipId);
-        if (! $clip || $clip->cancelled_at) {
-            return; // cancelled or deleted from history while still waiting in the queue
+        if (! $clip || $clip->cancelled_at || $clip->review_status === 'rejected') {
+            return; // cancelled, deleted from history or rejected while still waiting in the queue
         }
 
         $tempDir = storage_path('app/temp/'.$clip->clip_project_id);

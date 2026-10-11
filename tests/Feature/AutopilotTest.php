@@ -17,6 +17,7 @@ use App\Services\GeminiService;
 use App\Services\TranscriptService;
 use App\Services\YtDlpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -206,5 +207,42 @@ class AutopilotTest extends TestCase
         Storage::assertMissing('clips/b.mp4');
 
         $this->actingAs(User::factory()->create())->postJson("/api/autopilot/review/{$a->id}/reject")->assertForbidden();
+    }
+
+    public function test_rejecting_the_last_unrendered_clip_frees_the_source_video(): void
+    {
+        Queue::fake();
+        Storage::fake();
+        $user = User::factory()->create();
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/rejectTest1',
+            'layout_type' => 'reframe', 'clip_count' => 2, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        $mk = fn ($status) => GeneratedClip::create([
+            'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
+            'topic' => 't', 'reason' => 'r', 'status' => $status, 'review_status' => 'pending',
+        ]);
+        $done = $mk('done');
+        $queued = $mk('pending'); // still waiting to render: needs the source
+
+        $source = storage_path("app/temp/{$project->id}/video.mp4");
+        $cache = (new YtDlpService)->cachedPathFor($project->youtube_url);
+        @mkdir(dirname($source), 0755, true);
+        @mkdir(dirname($cache), 0755, true);
+        file_put_contents($source, 'video');
+        link($source, $cache);
+
+        try {
+            $this->actingAs($user)->postJson("/api/autopilot/review/{$done->id}/reject")->assertOk();
+            $this->assertFileExists($source);
+            $this->assertFileExists($cache);
+
+            $this->actingAs($user)->postJson("/api/autopilot/review/{$queued->id}/reject")->assertOk();
+            $this->assertDirectoryDoesNotExist(dirname($source));
+            $this->assertFileDoesNotExist($cache);
+        } finally {
+            File::deleteDirectory(dirname($source));
+            @unlink($cache);
+        }
     }
 }
