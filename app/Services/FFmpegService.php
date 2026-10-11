@@ -15,6 +15,8 @@ class FFmpegService
 
     private const CUE_HOLD = 0.25; // seconds a cue lingers after its last word
 
+    private const VOICE_LUFS = -14; // speech loudness after mixing music (TikTok/Reels level)
+
     private string $bin;
 
     private string $posTag = ''; // ASS override placing every subtitle line (set by buildAssFile)
@@ -445,30 +447,32 @@ class FFmpegService
     }
 
     /**
-     * Lay a looped music bed under the clip's audio. Every track is first
-     * loudness-normalised (−16 LUFS, about speech level), so the slider means
-     * the same thing for a quiet track and a loud one: 30% = as loud as the
-     * voice, 15% = clearly audible behind it. While someone speaks the music
-     * ducks a few dB (sidechain), it fades in/out at the clip edges, and a
+     * Lay a looped music bed under the clip's audio. The voice is brought up to
+     * −14 LUFS (TikTok/Reels loudness) and the track normalised to the same
+     * level, so the slider is the music's level relative to the voice whatever
+     * the source: 100% = as loud as the voice, 30% ≈ −10 dB, 15% ≈ −16 dB
+     * (a clear bed behind speech). While someone speaks the music ducks a
+     * further few dB (sidechain), it fades in/out at the clip edges, and a
      * limiter keeps the sum from clipping. Video is stream-copied.
      *
-     * @param  int  $volumePercent  Music level, 0–100 (30 ≈ level with the voice).
+     * @param  int  $volumePercent  Music level, 0–100, as a share of the voice level.
      */
     public function mixMusic(string $input, string $musicPath, int $volumePercent, string $output): void
     {
         $duration = $this->probeDuration($input);
-        $gain = max(0, min(100, $volumePercent)) / 30;
+        $gain = max(0, min(100, $volumePercent)) / 100;
         $fadeOut = max(0, $duration - 1.5);
         $norm = 'aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo';
+        $loud = 'loudnorm=I='.self::VOICE_LUFS.':TP=-1.5:LRA=11';
 
         $music = sprintf(
-            '[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,%s,volume=%.3f,afade=t=in:d=1,afade=t=out:st=%.3f:d=1.5',
-            $norm, $gain, $fadeOut
+            '[1:a]%s,%s,volume=%.3f,afade=t=in:d=1,afade=t=out:st=%.3f:d=1.5',
+            $loud, $norm, $gain, $fadeOut
         );
 
         $filter = $this->hasAudio($input)
-            ? "{$music}[m];[0:a]{$norm},asplit=2[voice][key];"
-              // gentle duck (~3–5 dB) so the bed stays audible under talking
+            ? "{$music}[m];[0:a]{$loud},{$norm},asplit=2[voice][key];"
+              // gentle duck (~3–5 dB) while someone talks: the level gap does most of the work
               .'[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=15:release=350[duck];'
               .'[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]'
             : "{$music},alimiter=limit=0.95[aout]";

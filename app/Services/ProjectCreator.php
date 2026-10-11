@@ -30,7 +30,7 @@ class ProjectCreator
             'max_duration' => $manual ? ($settings['max_duration'] ?? null) : null,
             'music_enabled' => $settings['music']['enabled'] ?? false,
             'music_mood' => $settings['music']['mood'] ?? null,
-            'music_volume' => $settings['music']['volume'] ?? 15,
+            'music_volume' => $settings['music']['volume'] ?? 25,
             'status' => 'processing',
         ]);
 

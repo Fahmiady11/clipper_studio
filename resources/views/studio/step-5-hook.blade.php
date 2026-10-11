@@ -92,7 +92,7 @@
             <input class="sld" type="range" min="5" max="100" step="1" x-model.number="musicVolume" />
             <span class="sld-val" x-text="musicVolume + '%'"></span>
           </div>
-          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">15% = jelas di belakang suara · 30% = sejajar suara. Musik sedikit mengecil saat ada orang bicara.</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Suara podcast otomatis dikeraskan. 20–35% = musik latar yang pas · 100% = sekeras suara. Musik sedikit mengecil saat ada orang bicara.</div>
           <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Lagu diambil dari <a href="/music" style="color:var(--teal)">library musik</a> sesuai mood; kredit lagu CC BY otomatis masuk caption.</div>
           <div class="music-warn" x-show="musicEnabled && musicLibrary && musicLibrary.total === 0">
             Library musik masih kosong — clip akan dirender <b>tanpa musik</b>. <a href="/music">Upload lagu dulu →</a>

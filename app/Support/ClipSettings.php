@@ -30,7 +30,7 @@ final class ClipSettings
             'enabled' => true, 'hook_text' => null, 'is_ai_generated' => true, 'duration_seconds' => 3.0,
             'position' => 'center', 'text_color' => '#ffffff', 'background_style' => 'full',
         ],
-        'music' => ['enabled' => false, 'mood' => null, 'volume' => 15],
+        'music' => ['enabled' => false, 'mood' => null, 'volume' => 25],
     ];
 
     /**

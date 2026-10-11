@@ -518,6 +518,7 @@
                   <span class="sld-val" x-text="ed.s.music.volume + '%'"></span>
                 </div>
               </div>
+              <div class="ap-ed-note">Suara podcast otomatis dikeraskan. 20–35% = musik latar yang pas · 100% = sekeras suara.</div>
               <div class="ap-ed-note">Lagu diambil dari <a href="/music" style="color:var(--teal)">library musik</a> sesuai mood; kredit CC BY otomatis masuk caption.</div>
               <div class="music-warn" x-show="ed.s.music.enabled && musicTotal === 0">Library musik masih kosong — clip akan dibuat <b>tanpa musik</b>. <a href="/music">Upload lagu dulu →</a></div>
             </div>

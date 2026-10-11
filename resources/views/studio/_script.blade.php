@@ -47,7 +47,7 @@ function studio() {
     subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subDragging: false,
     hookEnabled: true, hookText: 'Ingin lebih baik? Coba ini.', hookAi: false,
     hookDuration: 3, hookPos: 'center', hookTextColor: '#ffffff', hookBg: 'semi',
-    musicEnabled: false, musicMood: '', musicVolume: 15, musicLibrary: null, musicMissing: false,
+    musicEnabled: false, musicMood: '', musicVolume: 25, musicLibrary: null, musicMissing: false,
     generateStarted: false, generateProgress: 0, generateLogIdx: 0, generateTimer: null,
     generateError: null, generateLogMsg: null, generateCancelled: false, cancelling: false, retrying: false,
     projectId: null,
