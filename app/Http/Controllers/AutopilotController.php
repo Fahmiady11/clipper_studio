@@ -119,16 +119,25 @@ class AutopilotController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /** Autopilot clips, a page at a time: waiting for review first (oldest first), then the most recent decisions. */
-    public function review(MusicService $music): JsonResponse
+    /**
+     * Autopilot clips, a page at a time: waiting for review first (oldest first),
+     * then the most recent decisions. ?status=pending|approved|rejected narrows it.
+     */
+    public function review(Request $request, MusicService $music): JsonResponse
     {
+        $status = $request->validate([
+            'status' => ['nullable', 'in:pending,approved,rejected'],
+        ])['status'] ?? null;
+
         $base = GeneratedClip::query()
             ->whereNotNull('review_status')
             ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()));
 
-        $pending = (clone $base)->where('review_status', 'pending')->count();
+        $counts = (clone $base)->selectRaw('review_status, count(*) as n')->groupBy('review_status')
+            ->pluck('n', 'review_status')->map(fn ($n) => (int) $n);
 
         $page = (clone $base)
+            ->when($status, fn ($q) => $q->where('review_status', $status))
             ->with('clipProject.videoSource')
             ->orderByRaw("CASE WHEN review_status = 'pending' THEN 0 ELSE 1 END")
             ->orderByRaw("CASE WHEN review_status = 'pending' THEN created_at END")
@@ -164,7 +173,12 @@ class AutopilotController extends Controller
             'page' => $page->currentPage(),
             'last_page' => $page->lastPage(),
             'total' => $page->total(),
-            'pending' => $pending,
+            'pending' => $counts['pending'] ?? 0,
+            'counts' => [
+                'pending' => $counts['pending'] ?? 0,
+                'approved' => $counts['approved'] ?? 0,
+                'rejected' => $counts['rejected'] ?? 0,
+            ],
         ]);
     }
 

@@ -833,6 +833,11 @@ function studio() {
     // ── init ───────────────────────────────────────────────────────────────
     async init() {
       this.loadSession();
+      // The brand link on other pages (/?new=1) opens a fresh project
+      if (new URLSearchParams(location.search).has('new')) {
+        this.restart();
+        history.replaceState(null, '', location.pathname);
+      }
       this.watchAll();
       this.resumeIfNeeded();
       this.previewTick = setInterval(() => { this.previewT += 0.1; }, 100);

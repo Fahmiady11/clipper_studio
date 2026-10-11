@@ -75,11 +75,15 @@
   .ap-viral.v-tinggi { background: var(--teal-dim); color: var(--teal); }
   .ap-viral.v-sedang { background: var(--yellow-dim); color: var(--yellow); }
   .ap-reason { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; }
-  .ap-cap { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); padding: 10px 12px; }
-  .ap-cap-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
-  .ap-cap-head > div { display: flex; gap: 10px; }
-  .ap-cap-text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow-y: auto; }
-  .ap-cap-tags { margin-top: 6px; font-size: 12.5px; color: var(--teal); word-break: break-word; }
+  .ap-cap { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); padding: 12px; }
+  .ap-cap-title { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); white-space: nowrap; margin-bottom: 8px; }
+  .ap-cap-text { font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 132px; overflow-y: auto; }
+  .ap-cap-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .ap-cap-tags span { font-size: 11.5px; color: var(--teal); background: var(--teal-dim); border-radius: 999px; padding: 2px 8px; }
+  .ap-cap-copy { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ap-cap-copy button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; }
+  .ap-cap-copy button:hover { color: var(--text); border-color: var(--text-dim); }
+  .ap-cap-copy button.is-done { color: var(--teal); border-color: var(--teal); }
   .ap-cap-muted { font-size: 12.5px; color: var(--text-muted); }
   .ap-actions { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; }
   .ap-actions .btn:first-child { flex: 1; justify-content: center; }
@@ -87,6 +91,9 @@
   .ap-result.is-fail { color: #f87171; }
   .ap-result small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
 
+  .ap-filter { margin-bottom: 16px; overflow-x: auto; }
+  .ap-filter .seg { display: inline-flex; }
+  .ap-filter-n { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: .7; }
   .ap-pager { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
   .ap-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
   .ap-note { font-size: 13px; color: var(--text-muted); }
@@ -139,17 +146,7 @@
 <body>
 <div x-data="autopilot()" x-init="init()" x-cloak>
 
-  <div class="topbar">
-    <div class="brand">
-      <div class="brand-mark"></div>
-      <span class="brand-name">Clipper <span class="brand-sub">Studio</span></span>
-    </div>
-    <div class="topbar-nav">
-      <a href="/">Studio</a>
-      <a class="active" href="/autopilot">Autopilot</a>
-      @include('partials.user-menu')
-    </div>
-  </div>
+  @include('partials.topbar', ['active' => 'autopilot', 'guide' => 'autopilot'])
 
   <div class="ap-wrap">
     <div class="ap-head">
@@ -257,7 +254,18 @@
         </div>
       </div>
 
-      <div x-show="clips.length === 0" class="ap-empty">Belum ada klip dari autopilot.</div>
+      <div class="ap-filter">
+        <div class="seg">
+          <template x-for="f in REVIEW_FILTERS" :key="f.id">
+            <button type="button" :class="{ on: reviewStatus === f.id }" @click="setReviewStatus(f.id)">
+              <span x-text="f.label"></span> <span class="ap-filter-n" x-text="filterCount(f.id)"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <div x-show="clips.length === 0" class="ap-empty"
+           x-text="reviewStatus ? 'Tidak ada klip ' + REVIEW_FILTERS.find(f => f.id === reviewStatus).label.toLowerCase() + '.' : 'Belum ada klip dari autopilot.'"></div>
       <div class="ap-grid">
         <template x-for="c in clips" :key="c.id">
           <div class="ap-card">
@@ -282,19 +290,23 @@
             </div>
             <div class="ap-reason" x-show="c.reason" x-text="c.reason"></div>
             <div class="ap-cap" x-show="c.status === 'done' && c.review_status !== 'rejected'">
-              <div class="ap-cap-head">
-                <span>Caption &amp; hashtag</span>
-                <div x-show="c.caption">
-                  <button class="ap-link" type="button" @click="copyText(c.id + ':tags', c.hashtags.join(' '))"
-                          x-show="c.hashtags.length" x-text="copied === c.id + ':tags' ? 'Tersalin ✓' : 'Salin hashtag'"></button>
-                  <button class="ap-link" type="button" @click="copyText(c.id + ':all', captionText(c))"
-                          x-text="copied === c.id + ':all' ? 'Tersalin ✓' : 'Salin semua'"></button>
-                </div>
-              </div>
+              <div class="ap-cap-title">Caption &amp; hashtag</div>
               <template x-if="c.caption">
                 <div>
                   <div class="ap-cap-text" x-text="c.caption"></div>
-                  <div class="ap-cap-tags" x-show="c.hashtags.length" x-text="c.hashtags.join(' ')"></div>
+                  <div class="ap-cap-tags" x-show="c.hashtags.length">
+                    <template x-for="h in c.hashtags" :key="h"><span x-text="h"></span></template>
+                  </div>
+                  <div class="ap-cap-copy" :style="c.hashtags.length ? '' : 'grid-template-columns: 1fr'">
+                    <button type="button" :class="{ 'is-done': copied === c.id + ':all' }" @click="copyText(c.id + ':all', captionText(c))">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                      <span x-text="copied === c.id + ':all' ? 'Tersalin' : 'Salin semua'"></span>
+                    </button>
+                    <button type="button" x-show="c.hashtags.length" :class="{ 'is-done': copied === c.id + ':tags' }" @click="copyText(c.id + ':tags', c.hashtags.join(' '))">
+                      <span aria-hidden="true">#</span>
+                      <span x-text="copied === c.id + ':tags' ? 'Tersalin' : 'Salin hashtag'"></span>
+                    </button>
+                  </div>
                 </div>
               </template>
               <div class="ap-cap-muted" x-show="!c.caption && captionState[c.id] !== 'failed'">Membuat caption dengan AI…</div>
@@ -567,6 +579,11 @@ function autopilot() {
     form: { type: 'channel', value: '', interval_hours: 6, max_per_run: 1, min_minutes: 5, max_minutes: 120, settings: null },
     formError: null, timer: null, copied: '', captionState: {}, captionBusy: false,
     reviewPage: 1, reviewLastPage: 1, reviewTotal: 0, pendingCount: 0,
+    reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
+    REVIEW_FILTERS: [
+      { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
+      { id: 'approved', label: 'Disetujui' }, { id: 'rejected', label: 'Ditolak' },
+    ],
     ed: { open: false, source: null, s: null, saving: false, error: null },
     pvTab: 'hook', fontsTick: 0, subDragging: false, musicTotal: null,
     SAMPLE_HOOK: 'Rahasia nikah *60 tahun*',
@@ -640,14 +657,16 @@ function autopilot() {
     async loadClips() {
       try {
         const errors = Object.fromEntries(this.clips.filter(c => c.actionError).map(c => [c.id, c.actionError]));
-        const res = await api('/api/autopilot/review?page=' + this.reviewPage);
+        const status = this.reviewStatus;
+        const res = await api('/api/autopilot/review?page=' + this.reviewPage + (status ? '&status=' + status : ''));
+        if (status !== this.reviewStatus) return; // filter changed while loading: a newer request owns the list
         // An approve/reject can empty the last page: step back to the new last one
         if (res.data.length === 0 && res.page > 1 && res.last_page < res.page) {
           this.reviewPage = res.last_page;
           return this.loadClips();
         }
         this.clips = res.data.map(c => ({ ...c, actionError: errors[c.id] || null }));
-        Object.assign(this, { reviewLastPage: res.last_page, reviewTotal: res.total, pendingCount: res.pending });
+        Object.assign(this, { reviewLastPage: res.last_page, reviewTotal: res.total, pendingCount: res.pending, reviewCounts: res.counts });
       } catch (e) { console.error(e); }
       this.fillCaptions();
     },
@@ -661,6 +680,17 @@ function autopilot() {
         el.src = el.dataset.src;
       }, { rootMargin: '200px' });
       io.observe(el);
+    },
+    filterCount(id) {
+      const c = this.reviewCounts;
+      return id ? c[id] : c.pending + c.approved + c.rejected;
+    },
+    async setReviewStatus(id) {
+      if (id === this.reviewStatus) return;
+      this.reviewStatus = id;
+      this.reviewPage = 1;
+      this.clips = [];
+      await this.loadClips();
     },
     async goToPage(n) {
       if (n < 1 || n > this.reviewLastPage || n === this.reviewPage) return;

@@ -46,17 +46,7 @@
 </head>
 <body>
 <div x-data x-cloak>
-  <div class="topbar">
-    <div class="brand">
-      <div class="brand-mark"></div>
-      <span class="brand-name">Clipper <span class="brand-sub">Studio</span></span>
-    </div>
-    <div class="topbar-nav">
-      <a href="/">Studio</a>
-      <a href="/autopilot">Autopilot</a>
-      @include('partials.user-menu')
-    </div>
-  </div>
+  @include('partials.topbar', ['active' => null])
 
   <div class="us-wrap">
     <div class="us-head">

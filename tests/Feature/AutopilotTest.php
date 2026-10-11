@@ -324,4 +324,31 @@ class AutopilotTest extends TestCase
         $this->actingAs($user)->get("/api/clips/{$clip->id}/download")->assertOk()
             ->assertHeader('Content-Disposition', 'attachment; filename=clip_'.$clip->id.'.mp4');
     }
+
+    public function test_review_filters_by_status_and_counts_each(): void
+    {
+        $user = User::factory()->create();
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/abcdefg',
+            'layout_type' => 'reframe', 'clip_count' => 6, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        foreach (['pending', 'pending', 'pending', 'approved', 'approved', 'rejected'] as $i => $review) {
+            GeneratedClip::create([
+                'clip_project_id' => $project->id, 'ranking' => $i + 1, 'start_seconds' => 0, 'end_seconds' => 30,
+                'topic' => "clip {$i}", 'reason' => 'r', 'status' => 'done', 'review_status' => $review,
+            ]);
+        }
+
+        $counts = ['pending' => 3, 'approved' => 2, 'rejected' => 1];
+        $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
+            ->assertJsonCount(6, 'data')->assertJsonPath('counts', $counts);
+
+        foreach ($counts as $status => $n) {
+            $res = $this->actingAs($user)->getJson("/api/autopilot/review?status={$status}")->assertOk()
+                ->assertJsonCount($n, 'data')->assertJsonPath('total', $n)->assertJsonPath('counts', $counts);
+            $this->assertSame([$status], array_values(array_unique(array_column($res->json('data'), 'review_status'))));
+        }
+
+        $this->actingAs($user)->getJson('/api/autopilot/review?status=bogus')->assertUnprocessable();
+    }
 }
