@@ -107,7 +107,7 @@
   .ap-link:hover { text-decoration: underline; }
 
   /* Look editor */
-  .ap-ed { width: 100%; max-width: 980px; max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden; }
+  .ap-ed { width: 100%; min-width: 0; max-width: 980px; max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden; }
   .ap-ed-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
   .ap-ed-head h3 { margin: 0; font-size: 17px; font-weight: 600; }
   .ap-ed-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-muted); word-break: break-word; }
@@ -137,6 +137,16 @@
     .ap-ed-body { padding: 16px; }
     .ap-ed-head, .ap-ed-foot { padding: 14px 16px; }
     .ap-ed-foot .btn { flex: 1; justify-content: center; }
+    /* side-by-side pairs and long button rows don't fit a phone: stack and wrap them */
+    .ap-ed .ap-row-2 { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .ap-ed .ap-row-2 > .fblock { margin-bottom: 16px; }
+    .ap-ed .seg { display: flex; flex-wrap: wrap; }
+    .ap-ed .seg button { flex: 1 1 auto; }
+    /* keep the preview in view while scrolling through the settings */
+    .ap-ed-aside { position: sticky; top: -16px; z-index: 5; margin: -16px -16px 0; padding: 12px 16px 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    /* render at desktop size and shrink as a whole, so subtitle/hook text keeps its proportions */
+    .ap-ed-aside .phone-frame { max-width: 260px; width: 260px; zoom: .45; }
+    .ap-ed-aside .ap-ed-note { display: none; }
     .ap-wrap { padding: 28px 16px 72px; }
     .ap-head h1 { font-size: 24px; }
     .ap-form-top .btn { width: 100%; justify-content: center; }
