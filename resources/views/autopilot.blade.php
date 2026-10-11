@@ -263,7 +263,7 @@
           <div class="ap-card">
             <div class="ap-media">
               <template x-if="c.preview_url">
-                <video :src="c.preview_url" controls preload="metadata"></video>
+                <video :data-src="c.preview_url" controls preload="none" x-init="lazyVideo($el)"></video>
               </template>
               <template x-if="!c.preview_url">
                 <div class="ap-placeholder" :class="{ 'is-failed': c.status === 'failed' }">
@@ -651,6 +651,17 @@ function autopilot() {
       } catch (e) { console.error(e); }
       this.fillCaptions();
     },
+    // Attach the video only once its card nears the viewport, so a page of
+    // cards doesn't start every download at once
+    lazyVideo(el) {
+      const io = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting || !el.dataset.src) return;
+        io.disconnect();
+        el.preload = 'metadata';
+        el.src = el.dataset.src;
+      }, { rootMargin: '200px' });
+      io.observe(el);
+    },
     async goToPage(n) {
       if (n < 1 || n > this.reviewLastPage || n === this.reviewPage) return;
       this.reviewPage = n;
@@ -700,9 +711,16 @@ function autopilot() {
         await this.loadSources();
       } catch (e) { this.formError = e.message; }
     },
+    // Flip right away; put it back if the server refuses
     async toggleSource(s) {
-      await api(`/api/autopilot/sources/${s.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: !s.enabled }) });
-      s.enabled = !s.enabled;
+      const enabled = !s.enabled;
+      s.enabled = enabled;
+      try {
+        await api(`/api/autopilot/sources/${s.id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
+      } catch (e) {
+        s.enabled = !enabled;
+        this.formError = e.message;
+      }
     },
     async runSource(s) {
       await api(`/api/autopilot/sources/${s.id}/run`, { method: 'POST' });

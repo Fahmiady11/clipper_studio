@@ -301,4 +301,27 @@ class AutopilotTest extends TestCase
         $second = $this->actingAs($user)->getJson('/api/autopilot/review?page=2')->assertOk()->assertJsonCount(3, 'data');
         $this->assertSame(['pending', 'rejected', 'rejected'], array_column($second->json('data'), 'review_status'));
     }
+
+    public function test_clip_download_supports_range_requests_for_previews(): void
+    {
+        Storage::fake();
+        $user = User::factory()->create();
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'youtube_url' => 'https://youtu.be/abcdefg',
+            'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        Storage::put('clips/x.mp4', '0123456789');
+        $clip = GeneratedClip::create([
+            'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
+            'topic' => 't', 'reason' => 'r', 'status' => 'done', 'output_path' => 'clips/x.mp4',
+        ]);
+
+        $preview = $this->actingAs($user)->get("/api/clips/{$clip->id}/download?inline=1", ['Range' => 'bytes=2-5']);
+        $preview->assertStatus(206);
+        $this->assertSame('2345', $preview->streamedContent());
+        $this->assertFalse($preview->headers->has('Content-Disposition')); // played inline, not saved
+
+        $this->actingAs($user)->get("/api/clips/{$clip->id}/download")->assertOk()
+            ->assertHeader('Content-Disposition', 'attachment; filename=clip_'.$clip->id.'.mp4');
+    }
 }

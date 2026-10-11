@@ -155,7 +155,7 @@ class AutopilotController extends Controller
                     'video_title' => $c->clipProject->video_title,
                     'youtube_url' => $c->clipProject->youtube_url,
                     'source' => $c->clipProject->videoSource?->value,
-                    'preview_url' => $c->status === 'done' ? url("/api/clips/{$c->id}/download") : null,
+                    'preview_url' => $c->status === 'done' ? url("/api/clips/{$c->id}/download?inline=1") : null,
                     'tiktok_status' => $c->tiktok_status,
                     'tiktok_error' => $c->tiktok_error,
                     'music_credit' => $credit,
