@@ -29,6 +29,18 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'approved_at' => now(),
         ];
+    }
+
+    /** A sign-up still waiting for the admin's approval. */
+    public function pending(): static
+    {
+        return $this->state(fn () => ['approved_at' => null]);
+    }
+
+    public function admin(): static
+    {
+        return $this->state(fn () => ['is_admin' => true]);
     }
 }

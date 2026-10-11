@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\EnsureUserIsApproved;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -29,6 +31,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: ['127.0.0.1', '::1']);
 
         $middleware->append(SecurityHeaders::class);
+
+        $middleware->alias([
+            'approved' => EnsureUserIsApproved::class,
+            'admin' => EnsureUserIsAdmin::class,
+        ]);
 
         // Allow API routes to read the web session so Auth::user() works
         // for browser-initiated fetch() calls (SPA pattern without Sanctum).

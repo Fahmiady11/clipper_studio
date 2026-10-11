@@ -10,7 +10,7 @@ use App\Http\Controllers\TikTokController;
 use Illuminate\Support\Facades\Route;
 
 // New Studio API (auth required)
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'approved'])->group(function () {
     // Each of these starts yt-dlp / AI work: cap how often a user can fire them
     Route::get('/meta', [MetaController::class, 'show'])->middleware('throttle:20,1');
 

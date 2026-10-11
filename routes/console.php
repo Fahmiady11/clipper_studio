@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Schedule;
 
 // Autopilot: check each enabled video source whose interval has elapsed
 Schedule::call(function () {
-    VideoSource::where('enabled', true)->get()
+    // Sources of accounts whose access was revoked stay idle
+    VideoSource::where('enabled', true)->whereHas('user', fn ($q) => $q->whereNotNull('approved_at'))->get()
         ->filter->isDue()
         ->each(function ($source) {
             $source->update(['last_run_at' => now()]); // don't re-dispatch while this run is queued

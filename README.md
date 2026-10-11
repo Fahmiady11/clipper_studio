@@ -154,7 +154,7 @@ File `.env` berisi semua pengaturan. **Setiap kali `.env` diubah, restart `compo
 
 | Variabel | Penjelasan |
 |---|---|
-| `REGISTRATION_ENABLED` | `false` = hanya akun pertama yang bisa daftar (aman). `true` = siapa pun boleh daftar. |
+| `REGISTRATION_ENABLED` | `false` = hanya akun pertama (admin utama) yang bisa daftar. `true` = siapa pun boleh daftar, tapi baru bisa masuk setelah disetujui admin di menu **Pengguna**. |
 | `SESSION_SECURE_COOKIE` | `true` kalau aplikasi dibuka lewat HTTPS (ngrok/domain). |
 | `MUSIC_LIBRARY_PATH` | Lokasi file musik. Bawaan `storage/app/music`. |
 | `CLIPPER_TEMP_RETENTION_HOURS` | Video sumber yang sudah diunduh dihapus otomatis setelah sekian jam (bawaan 72). |
@@ -304,7 +304,7 @@ Secara bawaan hanya akun pertama yang bisa mendaftar. Untuk membuka pendaftaran:
 
 1. Ubah `REGISTRATION_ENABLED=true` di `.env`.
 2. Jalankan `bash deploy/deploy.sh`.
-3. Minta teman membuka `/register`. Setelah semua terdaftar, kembalikan ke `false` dan jalankan `deploy.sh` lagi.
+3. Minta teman membuka `/register`. Akunnya baru bisa masuk setelah kamu setujui di menu akun → **Pengguna** (`/admin/users`). Kalau sudah tidak menerima pendaftaran, kembalikan ke `false` dan jalankan `deploy.sh` lagi.
 
 Setiap pengguna hanya bisa melihat project, klip, dan akun TikTok miliknya sendiri.
 
@@ -330,7 +330,7 @@ Jumlah worker (render paralel) diatur di `/etc/supervisor/conf.d/clipper.conf` (
 
 ### 🔒 Keamanan yang sudah aktif
 
-- Pendaftaran bisa ditutup (`REGISTRATION_ENABLED=false`). Login dibatasi 5 percobaan per menit.
+- Pendaftaran bisa ditutup (`REGISTRATION_ENABLED=false`), dan akun baru harus disetujui admin utama (akun pertama) sebelum bisa masuk. Login dibatasi 5 percobaan per menit.
 - Semua halaman dan API wajib login, kepemilikan datanya dicek, dan semua form dilindungi CSRF.
 - Link YouTube divalidasi ketat sebelum diproses, sehingga tidak bisa disisipi perintah berbahaya.
 - Header keamanan (anti-clickjacking, nosniff, HSTS), cookie `Secure`/`HttpOnly`, dan API key tidak pernah ditulis ke URL atau log.

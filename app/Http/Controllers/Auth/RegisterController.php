@@ -46,13 +46,23 @@ class RegisterController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $user = User::create([
+        // The very first account is the main admin; everyone after waits for its approval
+        $first = ! User::query()->exists();
+
+        $user = new User([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
         ]);
+        $user->forceFill(['is_admin' => $first, 'approved_at' => $first ? now() : null])->save();
 
         event(new Registered($user));
+
+        if (! $first) {
+            return redirect()->route('login')
+                ->with('status', 'Akun berhasil dibuat. Tunggu persetujuan admin sebelum bisa masuk.');
+        }
+
         Auth::login($user);
         $request->session()->regenerate(); // new session id for the signed-in user (no fixation)
 

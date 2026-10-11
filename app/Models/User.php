@@ -21,7 +21,15 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'is_admin' => 'boolean',
+            'approved_at' => 'datetime',
         ];
+    }
+
+    /** Sign-ups can't use the app until the admin approves them. */
+    public function isApproved(): bool
+    {
+        return $this->approved_at !== null;
     }
 
     public function clipProjects(): HasMany

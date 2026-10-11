@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,7 +35,15 @@ class LoginController extends Controller
             ])->onlyInput('email');
         }
 
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+        // Right password but not approved yet: say so instead of signing in
+        $pending = false;
+        $approved = function (User $user) use (&$pending) {
+            $pending = ! $user->isApproved();
+
+            return ! $pending;
+        };
+
+        if (Auth::attemptWhen($credentials, $approved, $request->boolean('remember'))) {
             RateLimiter::clear($key);
             $request->session()->regenerate();
 
@@ -43,6 +52,12 @@ class LoginController extends Controller
             $path = (string) parse_url((string) $intended, PHP_URL_PATH);
 
             return redirect()->to($intended && ! str_starts_with($path, '/api/') ? $intended : route('home'));
+        }
+
+        if ($pending) {
+            return back()->withErrors([
+                'email' => 'Akun kamu belum disetujui admin. Coba lagi setelah disetujui.',
+            ])->onlyInput('email');
         }
 
         RateLimiter::hit($key, 60);
