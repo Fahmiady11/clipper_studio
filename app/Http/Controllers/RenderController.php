@@ -86,12 +86,11 @@ class RenderController extends Controller
 
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
 
-        // CC BY music must be credited: added on every read so an edited credit shows up
         $credit = $music->creditFor($clip->music_track);
-        $withCredit = fn (string $caption) => $credit ? rtrim($caption)."\n\n🎵 {$credit}" : $caption;
+        $withCredit = fn (string $caption) => $music->captionWithCredit($caption, $credit);
 
-        // Return cached caption if already generated
-        if ($clip->caption !== null) {
+        // Return cached caption if already generated (an empty one was a failed call: retry)
+        if ($clip->caption !== null && $clip->caption !== '') {
             return response()->json([
                 'caption' => $withCredit($clip->caption),
                 'hashtags' => $clip->hashtags_json ?? [],
@@ -109,10 +108,12 @@ class RenderController extends Controller
             $lang,
         );
 
-        $clip->update([
-            'caption' => $result['caption'],
-            'hashtags_json' => $result['hashtags'],
-        ]);
+        if ($result['caption'] !== '') {
+            $clip->update([
+                'caption' => $result['caption'],
+                'hashtags_json' => $result['hashtags'],
+            ]);
+        }
 
         return response()->json([
             'caption' => $withCredit($result['caption']),

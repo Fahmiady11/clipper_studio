@@ -196,7 +196,7 @@ class AutopilotTest extends TestCase
             'access_expires_at' => now()->addDay(), 'scope' => 'user.info.basic,video.upload',
         ]);
 
-        $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()->assertJsonCount(2);
+        $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('pending', 2);
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$a->id}/approve", ['account_id' => $account->id])->assertOk();
         $this->assertSame('approved', $a->fresh()->review_status);
@@ -244,5 +244,61 @@ class AutopilotTest extends TestCase
             File::deleteDirectory(dirname($source));
             @unlink($cache);
         }
+    }
+
+    public function test_review_lists_caption_to_copy_and_failed_caption_is_retried(): void
+    {
+        $user = User::factory()->create();
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/abcdefg',
+            'layout_type' => 'reframe', 'clip_count' => 2, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        $mk = fn (array $extra) => GeneratedClip::create($extra + [
+            'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
+            'topic' => 't', 'reason' => 'r', 'status' => 'done', 'review_status' => 'pending',
+        ]);
+        $ready = $mk(['caption' => 'Caption siap', 'hashtags_json' => ['#a', '#b']]);
+        $fresh = $mk([]);
+
+        $rows = collect($this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()->json('data'))->keyBy('id');
+        $this->assertSame('Caption siap', $rows[$ready->id]['caption']);
+        $this->assertSame(['#a', '#b'], $rows[$ready->id]['hashtags']);
+        $this->assertNull($rows[$fresh->id]['caption']);
+
+        // Gemini failed (empty caption): nothing is cached, so the next call tries again
+        $gemini = $this->mock(GeminiService::class);
+        $gemini->shouldReceive('generateCaption')->once()->andReturn(['caption' => '', 'hashtags' => []]);
+        $gemini->shouldReceive('generateCaption')->once()->andReturn(['caption' => 'Baru', 'hashtags' => ['#c']]);
+
+        $this->actingAs($user)->getJson("/api/clips/{$fresh->id}/caption")->assertOk()->assertJson(['caption' => '']);
+        $this->assertNull($fresh->fresh()->caption);
+        $this->actingAs($user)->getJson("/api/clips/{$fresh->id}/caption")->assertOk()->assertJson(['caption' => 'Baru']);
+        $this->assertSame('Baru', $fresh->fresh()->caption);
+    }
+
+    public function test_review_is_paginated_with_pending_clips_first(): void
+    {
+        $user = User::factory()->create();
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/abcdefg',
+            'layout_type' => 'reframe', 'clip_count' => 12, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        foreach (range(1, 12) as $i) {
+            GeneratedClip::create([
+                'clip_project_id' => $project->id, 'ranking' => $i, 'start_seconds' => 0, 'end_seconds' => 30,
+                'topic' => "clip {$i}", 'reason' => 'r', 'status' => 'done',
+                'review_status' => $i <= 2 ? 'rejected' : 'pending', // decided ones were created first
+            ]);
+        }
+
+        $first = $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
+            ->assertJsonCount(9, 'data')
+            ->assertJsonPath('last_page', 2)
+            ->assertJsonPath('total', 12)
+            ->assertJsonPath('pending', 10);
+        $this->assertSame(['pending'], array_unique(array_column($first->json('data'), 'review_status')));
+
+        $second = $this->actingAs($user)->getJson('/api/autopilot/review?page=2')->assertOk()->assertJsonCount(3, 'data');
+        $this->assertSame(['pending', 'rejected', 'rejected'], array_column($second->json('data'), 'review_status'));
     }
 }

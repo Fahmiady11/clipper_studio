@@ -75,12 +75,19 @@
   .ap-viral.v-tinggi { background: var(--teal-dim); color: var(--teal); }
   .ap-viral.v-sedang { background: var(--yellow-dim); color: var(--yellow); }
   .ap-reason { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; }
+  .ap-cap { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); padding: 10px 12px; }
+  .ap-cap-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
+  .ap-cap-head > div { display: flex; gap: 10px; }
+  .ap-cap-text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow-y: auto; }
+  .ap-cap-tags { margin-top: 6px; font-size: 12.5px; color: var(--teal); word-break: break-word; }
+  .ap-cap-muted { font-size: 12.5px; color: var(--text-muted); }
   .ap-actions { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; }
   .ap-actions .btn:first-child { flex: 1; justify-content: center; }
   .ap-result { margin-top: auto; padding-top: 14px; font-size: 13px; color: var(--text-muted); }
   .ap-result.is-fail { color: #f87171; }
   .ap-result small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
 
+  .ap-pager { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
   .ap-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
   .ap-note { font-size: 13px; color: var(--text-muted); }
   .ap-note a { color: var(--teal); }
@@ -227,9 +234,9 @@
     </section>
 
     {{-- ── Review queue ────────────────────────────────────────── --}}
-    <section class="ap-section">
+    <section class="ap-section" x-ref="review">
       <div class="ap-section-head">
-        <h2>Antrian review <span class="ap-count" x-text="clips.filter(c => c.review_status === 'pending').length + ' menunggu'"></span></h2>
+        <h2>Antrian review <span class="ap-count" x-text="pendingCount + ' menunggu'"></span></h2>
         <div class="ap-note">
           <template x-if="!tiktokConfigured">
             <span>Isi kredensial TikTok di <code>.env</code> untuk bisa approve ke TikTok.</span>
@@ -274,7 +281,27 @@
               <span class="ap-viral" :class="'v-' + c.viral_potential" x-text="'viral ' + c.viral_potential"></span>
             </div>
             <div class="ap-reason" x-show="c.reason" x-text="c.reason"></div>
-            <div class="ap-reason" x-show="c.music_credit" style="font-size:12px">🎵 <span x-text="c.music_credit"></span>
+            <div class="ap-cap" x-show="c.status === 'done' && c.review_status !== 'rejected'">
+              <div class="ap-cap-head">
+                <span>Caption &amp; hashtag</span>
+                <div x-show="c.caption">
+                  <button class="ap-link" type="button" @click="copyText(c.id + ':tags', c.hashtags.join(' '))"
+                          x-show="c.hashtags.length" x-text="copied === c.id + ':tags' ? 'Tersalin ✓' : 'Salin hashtag'"></button>
+                  <button class="ap-link" type="button" @click="copyText(c.id + ':all', captionText(c))"
+                          x-text="copied === c.id + ':all' ? 'Tersalin ✓' : 'Salin semua'"></button>
+                </div>
+              </div>
+              <template x-if="c.caption">
+                <div>
+                  <div class="ap-cap-text" x-text="c.caption"></div>
+                  <div class="ap-cap-tags" x-show="c.hashtags.length" x-text="c.hashtags.join(' ')"></div>
+                </div>
+              </template>
+              <div class="ap-cap-muted" x-show="!c.caption && captionState[c.id] !== 'failed'">Membuat caption dengan AI…</div>
+              <div class="ap-cap-muted" x-show="!c.caption && captionState[c.id] === 'failed'">Caption gagal dibuat.
+                <button class="ap-link" style="font-size:12.5px" type="button" @click="captionState[c.id] = null; fillCaptions()">Coba lagi</button></div>
+            </div>
+            <div class="ap-reason" x-show="c.music_credit && !c.caption" style="font-size:12px">🎵 <span x-text="c.music_credit"></span>
               <button class="ap-link" style="font-size:12px;margin-left:4px" type="button" @click="navigator.clipboard?.writeText(c.music_credit)">salin kredit</button></div>
 
             <div class="ap-actions" x-show="c.review_status === 'pending'">
@@ -289,6 +316,12 @@
             <div x-show="c.actionError" class="ap-error" style="margin-top:10px;font-size:12px" x-text="c.actionError"></div>
           </div>
         </template>
+      </div>
+
+      <div class="ap-pager" x-show="reviewLastPage > 1">
+        <button class="btn btn-ghost ap-btn" type="button" @click="goToPage(reviewPage - 1)" :disabled="reviewPage <= 1">← Sebelumnya</button>
+        <span x-text="'Halaman ' + reviewPage + ' dari ' + reviewLastPage + ' · ' + reviewTotal + ' klip'"></span>
+        <button class="btn btn-ghost ap-btn" type="button" @click="goToPage(reviewPage + 1)" :disabled="reviewPage >= reviewLastPage">Berikutnya →</button>
       </div>
     </section>
   </div>
@@ -532,7 +565,8 @@ function autopilot() {
   return {
     sources: [], clips: [], accounts: [], accountId: null, tiktokConfigured: false,
     form: { type: 'channel', value: '', interval_hours: 6, max_per_run: 1, min_minutes: 5, max_minutes: 120, settings: null },
-    formError: null, timer: null,
+    formError: null, timer: null, copied: '', captionState: {}, captionBusy: false,
+    reviewPage: 1, reviewLastPage: 1, reviewTotal: 0, pendingCount: 0,
     ed: { open: false, source: null, s: null, saving: false, error: null },
     pvTab: 'hook', fontsTick: 0, subDragging: false, musicTotal: null,
     SAMPLE_HOOK: 'Rahasia nikah *60 tahun*',
@@ -606,8 +640,48 @@ function autopilot() {
     async loadClips() {
       try {
         const errors = Object.fromEntries(this.clips.filter(c => c.actionError).map(c => [c.id, c.actionError]));
-        this.clips = (await api('/api/autopilot/review')).map(c => ({ ...c, actionError: errors[c.id] || null }));
+        const res = await api('/api/autopilot/review?page=' + this.reviewPage);
+        // An approve/reject can empty the last page: step back to the new last one
+        if (res.data.length === 0 && res.page > 1 && res.last_page < res.page) {
+          this.reviewPage = res.last_page;
+          return this.loadClips();
+        }
+        this.clips = res.data.map(c => ({ ...c, actionError: errors[c.id] || null }));
+        Object.assign(this, { reviewLastPage: res.last_page, reviewTotal: res.total, pendingCount: res.pending });
       } catch (e) { console.error(e); }
+      this.fillCaptions();
+    },
+    async goToPage(n) {
+      if (n < 1 || n > this.reviewLastPage || n === this.reviewPage) return;
+      this.reviewPage = n;
+      await this.loadClips();
+      this.$refs.review?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    // TikTok drafts carry no caption, so each rendered clip gets one to copy by hand.
+    // Generated once per clip (cached server-side), one request at a time.
+    async fillCaptions() {
+      if (this.captionBusy) return;
+      this.captionBusy = true;
+      try {
+        let c;
+        while ((c = this.clips.find(c => c.status === 'done' && c.review_status !== 'rejected' && !c.caption && !this.captionState[c.id]))) {
+          this.captionState[c.id] = 'loading';
+          try {
+            const r = await api(`/api/clips/${c.id}/caption`);
+            if (!r.caption) throw new Error('empty caption');
+            this.captionState[c.id] = 'done';
+            // the list may have been reloaded meanwhile: update the current object
+            const cur = this.clips.find(x => x.id === c.id);
+            if (cur) Object.assign(cur, { caption: r.caption, hashtags: r.hashtags || [] });
+          } catch (e) { this.captionState[c.id] = 'failed'; }
+        }
+      } finally { this.captionBusy = false; }
+    },
+    captionText(c) { return c.hashtags.length ? c.caption + '\n\n' + c.hashtags.join(' ') : c.caption; },
+    copyText(key, text) {
+      try { navigator.clipboard?.writeText(text); } catch {}
+      this.copied = key;
+      setTimeout(() => { if (this.copied === key) this.copied = ''; }, 1200);
     },
     async loadAccounts() {
       try {

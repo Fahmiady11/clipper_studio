@@ -23,6 +23,8 @@ class AutopilotController extends Controller
 {
     use EnsuresQueueWorker;
 
+    private const REVIEW_PER_PAGE = 9;
+
     public function sources(): JsonResponse
     {
         $sources = VideoSource::where('user_id', Auth::id())
@@ -117,34 +119,53 @@ class AutopilotController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /** Autopilot clips: waiting for review first, then the most recent decisions. */
+    /** Autopilot clips, a page at a time: waiting for review first (oldest first), then the most recent decisions. */
     public function review(MusicService $music): JsonResponse
     {
         $base = GeneratedClip::query()
             ->whereNotNull('review_status')
-            ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
-            ->with('clipProject.videoSource');
+            ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()));
 
-        $clips = (clone $base)->where('review_status', 'pending')->oldest()->get()
-            ->concat((clone $base)->where('review_status', '!=', 'pending')->latest('updated_at')->limit(20)->get());
+        $pending = (clone $base)->where('review_status', 'pending')->count();
 
-        return response()->json($clips->map(fn (GeneratedClip $c) => [
-            'id' => $c->id,
-            'review_status' => $c->review_status,
-            'status' => $c->status,
-            'error_msg' => $c->error_msg,
-            'topic' => $c->topic,
-            'reason' => $c->reason,
-            'viral_potential' => $c->viral_potential,
-            'duration' => round($c->durationSeconds()),
-            'video_title' => $c->clipProject->video_title,
-            'youtube_url' => $c->clipProject->youtube_url,
-            'source' => $c->clipProject->videoSource?->value,
-            'preview_url' => $c->status === 'done' ? url("/api/clips/{$c->id}/download") : null,
-            'tiktok_status' => $c->tiktok_status,
-            'tiktok_error' => $c->tiktok_error,
-            'music_credit' => $music->creditFor($c->music_track),
-        ]));
+        $page = (clone $base)
+            ->with('clipProject.videoSource')
+            ->orderByRaw("CASE WHEN review_status = 'pending' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN review_status = 'pending' THEN created_at END")
+            ->latest('updated_at')
+            ->orderBy('id') // stable order, so no clip shows on two pages
+            ->paginate(self::REVIEW_PER_PAGE);
+
+        return response()->json([
+            'data' => $page->getCollection()->map(function (GeneratedClip $c) use ($music) {
+                $credit = $music->creditFor($c->music_track);
+
+                return [
+                    'id' => $c->id,
+                    // null until generated (GET /api/clips/{id}/caption); copied by hand since TikTok drafts carry no caption
+                    'caption' => $c->caption ? $music->captionWithCredit($c->caption, $credit) : null,
+                    'hashtags' => $c->hashtags_json ?? [],
+                    'review_status' => $c->review_status,
+                    'status' => $c->status,
+                    'error_msg' => $c->error_msg,
+                    'topic' => $c->topic,
+                    'reason' => $c->reason,
+                    'viral_potential' => $c->viral_potential,
+                    'duration' => round($c->durationSeconds()),
+                    'video_title' => $c->clipProject->video_title,
+                    'youtube_url' => $c->clipProject->youtube_url,
+                    'source' => $c->clipProject->videoSource?->value,
+                    'preview_url' => $c->status === 'done' ? url("/api/clips/{$c->id}/download") : null,
+                    'tiktok_status' => $c->tiktok_status,
+                    'tiktok_error' => $c->tiktok_error,
+                    'music_credit' => $credit,
+                ];
+            }),
+            'page' => $page->currentPage(),
+            'last_page' => $page->lastPage(),
+            'total' => $page->total(),
+            'pending' => $pending,
+        ]);
     }
 
     public function approve(Request $request, string $clipId): JsonResponse

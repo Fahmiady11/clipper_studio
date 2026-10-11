@@ -161,6 +161,12 @@ class MusicService
         return $credit ? trim($credit) : null;
     }
 
+    /** CC BY music must be credited: appended on every read so an edited credit shows up. */
+    public function captionWithCredit(string $caption, ?string $credit): string
+    {
+        return $credit ? rtrim($caption)."\n\n🎵 {$credit}" : $caption;
+    }
+
     /**
      * Resolve a relative library path to an existing file inside the library.
      *
