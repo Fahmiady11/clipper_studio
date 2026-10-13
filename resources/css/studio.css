@@ -2230,6 +2230,39 @@ textarea.field {
     cursor: grabbing
 }
 
+/* Sample emoji over the subtitle preview: 210px of a 1080px frame, 40px from the text */
+.pv-emoji {
+    position: absolute;
+    left: 50%;
+    font-size: 17cqw;
+    line-height: 1;
+    pointer-events: none;
+    transform: translateX(-50%);
+    animation: pvEmojiPop 2.6s ease-out infinite
+}
+
+.pv-emoji.above {
+    bottom: calc(100% + 3.7cqw)
+}
+
+.pv-emoji.below {
+    top: calc(100% + 3.7cqw)
+}
+
+@keyframes pvEmojiPop {
+    0% { transform: translateX(-50%) scale(.5); opacity: 0 }
+    5% { transform: translateX(-50%) scale(1.05); opacity: 1 }
+    9% { transform: translateX(-50%) scale(1) }
+    38% { opacity: 1 }
+    44%, 100% { opacity: 0 }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pv-emoji {
+        animation: none
+    }
+}
+
 .pv-guides {
     position: absolute;
     inset: 0;

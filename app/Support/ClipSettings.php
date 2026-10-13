@@ -27,7 +27,7 @@ final class ClipSettings
         'subtitle' => [
             'enabled' => true, 'font_family' => 'Montserrat', 'font_size' => 56, 'text_color' => '#ffffff',
             'highlight_color' => '#facc15', 'position' => 'bottom', 'position_y' => null, 'background_style' => 'semi',
-            'style' => 'karaoke',
+            'style' => 'karaoke', 'emoji' => true,
         ],
         'hook' => [
             'enabled' => true, 'hook_text' => null, 'is_ai_generated' => true, 'duration_seconds' => 3.0,
@@ -61,6 +61,7 @@ final class ClipSettings
             'subtitle.position' => ['sometimes', 'in:top,center,bottom'],
             'subtitle.position_y' => ['sometimes', 'nullable', 'numeric', 'min:'.self::Y_MIN, 'max:'.self::Y_MAX],
             'subtitle.background_style' => ['sometimes', 'in:none,semi,full'],
+            'subtitle.emoji' => ['sometimes', 'boolean'],
             'subtitle.style' => ['sometimes', 'in:'.implode(',', self::SUBTITLE_STYLES)],
 
             'hook' => ['sometimes', 'array'],

@@ -116,6 +116,12 @@ window.ClipPreview = (() => {
       return p ? p.id : null;
     },
 
+    // Emoji sit above the subtitle, or below it when the subtitle is high (FFmpegService::emojiOverlays)
+    emojiBelow(pos, y = null) {
+      const centre = y !== null && y !== undefined && y !== '' ? Number(y) : { top: 14, center: 50 }[pos] ?? 87;
+      return centre < 57;
+    },
+
     // Words to draw for a style ([{w, active}] in, same out): "word" keeps only the spoken one
     subWords(words, style) {
       if (style !== 'word') return words;

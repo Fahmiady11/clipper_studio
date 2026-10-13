@@ -46,6 +46,7 @@ class ProjectCreator
             'position_y' => $sub['position_y'] ?? null,
             'background_style' => $sub['background_style'] ?? 'semi',
             'style' => $sub['style'] ?? 'karaoke',
+            'emoji' => $sub['emoji'] ?? true,
         ]);
 
         $hook = $settings['hook'] ?? [];
@@ -83,7 +84,7 @@ class ProjectCreator
             'duration_mode' => $project->duration_mode,
             'min_duration' => $project->min_duration,
             'max_duration' => $project->max_duration,
-            'subtitle' => $sub ? $sub->only(['enabled', 'font_family', 'font_size', 'text_color', 'highlight_color', 'position', 'position_y', 'background_style', 'style']) : [],
+            'subtitle' => $sub ? $sub->only(['enabled', 'font_family', 'font_size', 'text_color', 'highlight_color', 'position', 'position_y', 'background_style', 'style', 'emoji']) : [],
             'hook' => $hook ? $hook->only(['enabled', 'hook_text', 'is_ai_generated', 'duration_seconds', 'position', 'text_color', 'background_style']) : [],
             'music' => ['enabled' => $project->music_enabled, 'mood' => $project->music_mood, 'volume' => $project->music_volume],
         ];

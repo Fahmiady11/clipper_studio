@@ -18,10 +18,12 @@ class SubtitleSetting extends Model
         'position_y',
         'background_style',
         'style',
+        'emoji',
     ];
 
     protected $casts = [
         'enabled' => 'boolean',
+        'emoji' => 'boolean',
         'position_y' => 'float',
         'font_size' => 'integer',
     ];

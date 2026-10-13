@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\Cancellation;
 use App\Support\ClipSettings;
+use App\Support\EmojiCues;
 use App\Support\FontMetrics;
 use RuntimeException;
 
@@ -31,6 +32,12 @@ class FFmpegService
 
     /** @var array{path: string, size: int, outline: int} font used to measure cues so they fit the frame */
     private array $font = ['path' => '', 'size' => 42, 'outline' => 0];
+
+    /** Vertical centre of the subtitle line in the 1920px frame (set by buildAssFile) */
+    private float $subtitleY = 1920 - 200;
+
+    /** @var array<int, array{text: string, start: float}> clip-relative words of the last ASS built */
+    private array $cueWordList = [];
 
     private VideoLayoutService $layout;
 
@@ -158,17 +165,18 @@ class FFmpegService
             'full' => ['alpha' => '1A'], // 90% opaque black
             default => null,
         };
+        $this->subtitleY = $positionY === null
+            ? match ($alignment) {
+                8 => $marginV + $fontSize / 2,
+                5 => 960,
+                default => 1920 - $marginV - $fontSize / 2,
+            }
+        : (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920);
         if ($this->box) {
             $this->box += [
                 'font' => $this->layout->resolveFontByFamily($fontFamily),
                 'size' => $fontSize,
-                'cy' => $positionY === null
-                    ? match ($alignment) {
-                        8 => $marginV + $fontSize / 2,
-                        5 => 960,
-                        default => 1920 - $marginV - $fontSize / 2,
-                    }
-                    : (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920),
+                'cy' => $this->subtitleY,
             ];
         }
         // pop/word sit on the picture without a box, so they get a heavy outline
@@ -203,6 +211,7 @@ class FFmpegService
             $this->wordCues($timedWords, $clipStart, $hookDuration),
             $this->proportionalCues($untimed, $clipStart, $hookDuration)
         );
+        $this->cueWordList = array_merge(...array_map(fn ($c) => $c['words'], $cues ?: [['words' => []]]));
         foreach ($cues as $cue) {
             if ($this->style !== 'karaoke') {
                 foreach ($cue['words'] as &$w) {
@@ -214,6 +223,27 @@ class FFmpegService
         }
 
         return $ass;
+    }
+
+    /**
+     * Emoji to pop in over the clip, from the words of the last buildAssFile():
+     * centred, just above the subtitle (below it when the subtitle sits high).
+     *
+     * @return list<array{image: string, start: float, x: int, y: int, size: int}>
+     */
+    public function emojiOverlays(float $clipDuration): array
+    {
+        $size = 210;
+        $gap = $this->font['size'] * 0.75 + 40 + $size / 2;
+        $cy = $this->subtitleY > 1100 ? $this->subtitleY - $gap : $this->subtitleY + $gap;
+
+        return array_map(fn ($e) => [
+            'image' => EmojiCues::image($e['code']),
+            'start' => $e['start'],
+            'x' => 540 - intdiv($size, 2),
+            'y' => (int) round($cy - $size / 2),
+            'size' => $size,
+        ], EmojiCues::pick($this->cueWordList, $clipDuration));
     }
 
     private function dialogue(float $start, float $end, string $text, int $layer = 1): string
@@ -444,11 +474,12 @@ class FFmpegService
         ?string $assPath,
         ?array $hook,
         float $hookDuration,
-        string $output
+        string $output,
+        array $emojis = []
     ): void {
         $hasHook = $hook && $hookDuration > 0;
 
-        if (! $assPath && ! $hasHook) {
+        if (! $assPath && ! $hasHook && ! $emojis) {
             // Nothing to burn — just re-mux video as-is
             $cmd = sprintf(
                 '%s -y -i %s -c copy -movflags +faststart %s 2>&1',
@@ -461,23 +492,41 @@ class FFmpegService
 
         $subs = $assPath ? 'ass='.$assPath.':fontsdir='.$this->layout->fontsDir() : 'null';
         $inputs = '-i '.escapeshellarg($input);
+        $parts = ["[0:v]{$subs}[b0]"];
+        $n = 0; // inputs after the video
 
         if ($hasHook) {
             $fadeOut = min(0.25, $hookDuration / 4);
             $pop = 'if(lt(t,0.14),0.82+t*1.857,if(lt(t,0.26),1.08-(t-0.14)*0.6667,1))';
             $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', $hookDuration, escapeshellarg($hook['image']));
-            $filter = sprintf(
-                '[0:v]%s[base];'
-                ."[1:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
+            $n++;
+            $parts[] = sprintf(
+                "[%d:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
                 .'fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st=%.3f:d=%.2f:alpha=1[hook];'
                 // keep the block centred on its rendered spot while it scales
-                ."[base][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[v]",
-                $subs, $pop, $hookDuration - $fadeOut, $fadeOut,
-                $hook['x'], $hook['w'], $hook['y'], $hook['h']
+                ."[b%d][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[b%d]",
+                $n, $pop, $hookDuration - $fadeOut, $fadeOut,
+                $n - 1, $hook['x'], $hook['w'], $hook['y'], $hook['h'], $n
             );
-        } else {
-            $filter = "[0:v]{$subs}[v]";
         }
+
+        // Emoji: each image is shifted to its moment, pops in (50% -> 105% -> 100%) and fades out
+        foreach ($emojis as $e) {
+            $s = (float) $e['start'];
+            $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', EmojiCues::SHOW_FOR, escapeshellarg($e['image']));
+            $n++;
+            $pop = sprintf('if(lt(t-%1$.3f,0.12),0.5+(t-%1$.3f)*4.583,if(lt(t-%1$.3f,0.22),1.05-(t-%1$.3f-0.12)*0.5,1))', $s);
+            $parts[] = sprintf(
+                "[%d:v]setpts=PTS+%.3f/TB,format=rgba,scale=w='trunc(%d*%s)':h=-1:eval=frame,"
+                .'fade=t=in:st=%.3f:d=0.1:alpha=1,fade=t=out:st=%.3f:d=0.15:alpha=1[e%d];'
+                ."[b%d][e%d]overlay=x='%d-overlay_w/2':y='%d-overlay_h/2':eof_action=pass[b%d]",
+                $n, $s, $e['size'], $pop, $s, $s + EmojiCues::SHOW_FOR - 0.15, $n,
+                $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $n
+            );
+        }
+
+        $filter = implode(';', $parts);
+        $filter = substr($filter, 0, strrpos($filter, "[b{$n}]")).'[v]';
 
         $cmd = sprintf(
             '%s -y %s -filter_complex %s -map %s -map 0:a? -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart %s 2>&1',

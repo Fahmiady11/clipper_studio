@@ -42,6 +42,13 @@
           <div class="fhint" style="margin-top:8px" x-text="{ karaoke: 'Satu baris pendek, kata yang diucapkan berganti warna.', pop: 'HURUF BESAR dengan outline tebal, kata yang diucapkan membesar.', word: 'Satu kata besar muncul bergantian; angka & kata panjang memakai warna highlight.' }[subtitleStyle]"></div>
         </div>
         <div class="fblock">
+          <button class="tgl" :class="{ on: subtitleEmoji }" @click="subtitleEmoji = !subtitleEmoji" type="button">
+            <span class="tgl-track"></span>
+            <span class="tgl-text">Emoji otomatis</span>
+          </button>
+          <div class="fhint" style="margin-top:8px">Emoji muncul sebentar di kata kunci — uang 💰, sukses 🚀, lucu 😂, kaget 😱 — paling banyak satu tiap 3 detik.</div>
+        </div>
+        <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Font</div>
           <select class="select" x-model="subtitleFont">
             <template x-for="f in FONTS" :key="f"><option :value="f" x-text="f"></option></template>
@@ -122,6 +129,7 @@
         {{-- subtitle ON: karaoke words always visible (ignores hook state); drag to move --}}
         <div x-show="subtitleEnabled" :style="pvSubStyle()" class="pv-sub-drag" :class="{ dragging: subDragging }"
              @pointerdown="startSubDrag($event)" title="Seret untuk memindahkan subtitle">
+          <span class="pv-emoji" :class="pvEmojiBelow ? 'below' : 'above'" x-show="subtitleEmoji">🚀</span>
           <div :style="pvSubBoxStyle()">
             <template x-for="w in pvSubWords" :key="w.idx">
               <span :style="pvSubWordStyle(w)" x-text="w.w"></span>

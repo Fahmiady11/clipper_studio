@@ -6,7 +6,7 @@ function studio() {
     'url','meta',
     'layout',
     'clipCount','durationMode','minDuration','maxDuration',
-    'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle',
+    'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
     'musicEnabled','musicMood','musicVolume',
     'generateStarted','generateProgress','generateLogIdx',
@@ -44,7 +44,7 @@ function studio() {
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 56,
     subtitleTextColor: '#ffffff', subtitleHighlight: '#facc15',
-    subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subtitleStyle: 'karaoke', subDragging: false,
+    subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subtitleStyle: 'karaoke', subtitleEmoji: true, subDragging: false,
     hookEnabled: true, hookText: 'Ingin lebih baik? Coba ini.', hookAi: false,
     hookDuration: 3, hookPos: 'center', hookTextColor: '#ffffff', hookBg: 'semi',
     musicEnabled: false, musicMood: '', musicVolume: 25, musicLibrary: null, musicMissing: false,
@@ -157,6 +157,7 @@ function studio() {
       ClipPreview.dragSubtitle(e, y => { this.subtitleY = y; }, () => { this.subDragging = false; });
     },
     pvSubBoxStyle()  { return ClipPreview.subBoxStyle({ font: this.subtitleFont, size: this.subtitleSize, bg: this.subtitleBg, style: this.subtitleStyle }); },
+    get pvEmojiBelow() { return ClipPreview.emojiBelow(this.subtitlePos, this.subtitleY); },
     get pvSubWords() { return ClipPreview.subWords(this.pvSubWordsAlways, this.subtitleStyle); },
     pvSubWordStyle(w) { return ClipPreview.subWordStyle(w, { style: this.subtitleStyle, text: this.subtitleTextColor, hl: this.subtitleHighlight }); },
     get subPreset() {
@@ -407,6 +408,7 @@ function studio() {
               position_y: this.subtitleY,
               background_style: this.subtitleBg,
               style: this.subtitleStyle,
+              emoji: this.subtitleEmoji,
             },
             hook: {
               enabled: this.hookEnabled,

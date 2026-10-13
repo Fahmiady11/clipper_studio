@@ -468,6 +468,13 @@
                   </template>
                 </div>
               </div>
+              <div class="fblock">
+                <button class="tgl" :class="{ on: ed.s.subtitle.emoji }" @click="ed.s.subtitle.emoji = !ed.s.subtitle.emoji; pvTab = 'sub'" type="button">
+                  <span class="tgl-track"></span>
+                  <span class="tgl-text">Emoji otomatis</span>
+                </button>
+                <div class="ap-ed-note">Emoji muncul sebentar di kata kunci (uang 💰, sukses 🚀, lucu 😂), maks. satu tiap 3 detik.</div>
+              </div>
               <div class="ap-row-2">
                 <div class="fblock">
                   <div class="fblock-title" style="margin-bottom:10px">Font</div>
@@ -575,6 +582,7 @@
             <div x-show="pvTab === 'sub' && ed.s.subtitle.enabled" :style="ClipPreview.subStyle(ed.s.subtitle.position, ed.s.subtitle.position_y)"
                  class="pv-sub-drag" :class="{ dragging: subDragging }" title="Seret untuk memindahkan subtitle"
                  @pointerdown="subDragging = true; ClipPreview.dragSubtitle($event, y => ed.s.subtitle.position_y = y, () => subDragging = false)">
+              <span class="pv-emoji" :class="ClipPreview.emojiBelow(ed.s.subtitle.position, ed.s.subtitle.position_y) ? 'below' : 'above'" x-show="ed.s.subtitle.emoji">🚀</span>
               <div :style="ClipPreview.subBoxStyle({ font: ed.s.subtitle.font_family, size: ed.s.subtitle.font_size, bg: ed.s.subtitle.background_style, style: ed.s.subtitle.style })">
                 <template x-for="w in ClipPreview.subWords([{ w: 'Setiap', active: false }, { w: 'momen', active: false }, { w: 'adalah', active: false }, { w: 'kesempatan', active: true }], ed.s.subtitle.style)" :key="w.w">
                   <span :style="ClipPreview.subWordStyle(w, { style: ed.s.subtitle.style, text: ed.s.subtitle.text_color, hl: ed.s.subtitle.highlight_color })" x-text="w.w"></span>
@@ -660,7 +668,8 @@ function autopilot() {
       const base = source ? source.settings : this.form.settings;
       if (!base) return;
       this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), saving: false, error: null };
-      this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles existed
+      this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles / emoji existed
+      this.ed.s.subtitle.emoji ??= true;
       this.pvTab = 'hook';
     },
     async saveEditor() {

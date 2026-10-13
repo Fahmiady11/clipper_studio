@@ -171,11 +171,16 @@ class RenderClipJob implements ShouldQueue
             $log->debug('Subtitles skipped', ['enabled' => $subtitle?->enabled]);
         }
 
-        // 5. Single pass: burn subtitles + overlay hook (layer 2), audio preserved
+        // Emoji pop in over keywords of the subtitle words just built
+        $emojis = $assPath && $subtitle->emoji
+            ? $ffmpeg->emojiOverlays((float) $clip->end_seconds - (float) $clip->start_seconds)
+            : [];
+
+        // 5. Single pass: burn subtitles + overlay hook + emoji, audio preserved
         if ($assPath || $hookOverlay) {
-            $log->info('Burning overlay', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath]);
+            $log->info('Burning overlay', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis)]);
             $final = $tempDir.'/final_'.$this->clipId.'.mp4';
-            $ffmpeg->burnSubtitlesAndHook($current, $assPath, $hookOverlay, $hookDuration, $final);
+            $ffmpeg->burnSubtitlesAndHook($current, $assPath, $hookOverlay, $hookDuration, $final, $emojis);
             $current = $final;
         }
         Cancellation::throwIfCancelled();
