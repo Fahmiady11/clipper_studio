@@ -32,6 +32,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->append(SecurityHeaders::class);
 
+        // A visitor opening the site root sees what the app is; other protected pages ask to sign in
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('/') ? route('welcome') : route('login'));
+
         $middleware->alias([
             'approved' => EnsureUserIsApproved::class,
             'admin' => EnsureUserIsAdmin::class,

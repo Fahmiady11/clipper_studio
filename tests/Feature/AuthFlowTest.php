@@ -71,7 +71,7 @@ class AuthFlowTest extends TestCase
             ->assertSessionHas('status', 'Kamu sudah keluar.');
 
         $this->assertGuest();
-        $this->get('/')->assertRedirect(route('login'));
+        $this->get('/autopilot')->assertRedirect(route('login'));
     }
 
     public function test_logout_without_session_still_lands_on_login(): void

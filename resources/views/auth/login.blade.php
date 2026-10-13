@@ -99,6 +99,9 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);-webkit-font
       @endif
     </div>
   </div>
+  <div class="footer" style="font-size:12px">
+    <a href="{{ route('welcome') }}">Tentang</a> · <a href="{{ route('terms') }}">Terms of Service</a> · <a href="{{ route('privacy') }}">Privacy Policy</a>
+  </div>
 </div>
 </body>
 </html>

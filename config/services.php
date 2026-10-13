@@ -71,6 +71,8 @@ return [
     'clipper' => [
         // Downloaded source videos (temp/, video_cache/) older than this are deleted daily
         'temp_retention_hours' => (int) env('CLIPPER_TEMP_RETENTION_HOURS', 72),
+        // Shown on /terms and /privacy for questions and data requests
+        'contact_email' => env('CONTACT_EMAIL'),
     ],
 
     'music' => [

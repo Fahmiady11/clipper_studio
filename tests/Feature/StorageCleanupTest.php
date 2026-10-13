@@ -19,11 +19,25 @@ class StorageCleanupTest extends TestCase
 
     private array $paths = [];
 
+    private string $storage;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The cleanup sweeps every folder under storage/app/temp and video_cache. Point
+        // storage_path() at a throwaway dir, or a test run deletes the developer's real
+        // source videos (the test DB doesn't know their projects, so they look orphaned).
+        $this->storage = sys_get_temp_dir().'/clipper-test-storage-'.getmypid();
+        @mkdir($this->storage.'/app', 0755, true);
+        $this->app->useStoragePath($this->storage);
+    }
+
     protected function tearDown(): void
     {
         foreach ($this->paths as $p) {
             exec('rm -rf '.escapeshellarg($p));
         }
+        exec('rm -rf '.escapeshellarg($this->storage));
         parent::tearDown();
     }
 

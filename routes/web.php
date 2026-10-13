@@ -3,9 +3,15 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
 use Illuminate\Support\Facades\Route;
+
+// Public pages: what the app is, terms and privacy (linked from the TikTok app listing)
+Route::get('/welcome', [PublicPageController::class, 'welcome'])->name('welcome');
+Route::get('/terms', [PublicPageController::class, 'terms'])->name('terms');
+Route::get('/privacy', [PublicPageController::class, 'privacy'])->name('privacy');
 
 // Auth routes (public). Signed-in users hitting /login or /register go to the studio.
 Route::middleware('guest')->group(function () {

@@ -9,7 +9,7 @@ class ExampleTest extends TestCase
 {
     public function test_studio_requires_login(): void
     {
-        $this->get('/')->assertRedirect('/login');
+        $this->get('/')->assertRedirect('/welcome'); // visitors see the public landing page
     }
 
     public function test_login_page_loads(): void
