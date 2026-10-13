@@ -6,6 +6,8 @@
 ARG WHISPER_CPP_VERSION=v1.9.5
 ARG YTDLP_VERSION=2026.08.19
 ARG DENO_VERSION=v2.9.7
+ARG OPENCV_VERSION=4.10.0.84
+ARG NUMPY_VERSION=1.26.4
 
 # ---- 2. vendor: PHP dependencies (no scripts; package:discover runs in runtime) ----
 FROM composer:2 AS vendor
@@ -50,6 +52,8 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NAT
 FROM php:8.4-fpm-bookworm AS runtime
 ARG YTDLP_VERSION
 ARG DENO_VERSION
+ARG OPENCV_VERSION
+ARG NUMPY_VERSION
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -76,6 +80,15 @@ RUN set -eux; \
     rm /tmp/deno.zip
 
 COPY --from=whisper /whisper-cli /usr/local/bin/whisper-cli
+
+# Face-following reframe (resources/facetrack/face_track.py): OpenCV in its own venv
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/facetrack \
+    && /opt/facetrack/bin/pip install --no-cache-dir "opencv-python-headless==${OPENCV_VERSION}" "numpy==${NUMPY_VERSION}" \
+    && /opt/facetrack/bin/python -c "import cv2; cv2.FaceDetectorYN"
+ENV FACE_TRACK_PYTHON=/opt/facetrack/bin/python
 
 # PHP / FPM / nginx / supervisor config
 # php.ini-production: display_errors Off, log_errors On (error_log unset -> stderr / fpm log).

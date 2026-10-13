@@ -77,7 +77,7 @@ function studio() {
       { n:7, key:'pick',     label:'Pilih' },
     ],
     LAYOUTS: [
-      { id:'reframe',  title:'Reframe Wajah', sub:'Face tracking',      color:'teal',   accent:'#2dd4bf', badge:{ text:'DISARANKAN', cls:'badge-teal' },   desc:'Video di-crop 9:16, wajah selalu di tengah lewat deteksi AI.',        good:'Talking head, vlog, monolog, edukasi' },
+      { id:'reframe',  title:'Reframe Wajah', sub:'Face tracking',      color:'teal',   accent:'#2dd4bf', badge:{ text:'DISARANKAN', cls:'badge-teal' },   desc:'Video di-crop 9:16 dan kamera mengikuti wajah. Di podcast, pindah ke orang yang sedang bicara.', good:'Podcast, wawancara, talking head, vlog' },
       { id:'gaussian', title:'Gaussian',      sub:'Blurred background', color:'purple', accent:'#a78bfa', badge:null,                                        desc:'Video 16:9 di tengah, area kosong diisi duplikat blur + zoom.',      good:'Gameplay, screen recording, tutorial, olahraga' },
     ],
     FONTS: ['Arial','Roboto','Montserrat','Oswald','Bebas Neue'],

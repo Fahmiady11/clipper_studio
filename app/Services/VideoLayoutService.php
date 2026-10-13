@@ -8,10 +8,16 @@ class VideoLayoutService
      * Returns filter_complex graph for the given layout mode.
      * $outputLabel: stream label for the final video output, e.g. '[out]' or '[pre_text]'.
      */
-    public function layoutFilter(string $layoutMode, string $outputLabel = '[out]'): string
+    /**
+     * @param  list<array{0: float, 1: float, 2: float, 3: float}>|null  $track  FaceTracker pieces;
+     *                                                                           reframe follows them instead of cropping the centre
+     */
+    public function layoutFilter(string $layoutMode, string $outputLabel = '[out]', ?array $track = null): string
     {
+        $cropX = $track ? $this->trackExpression($track) : '(iw-ow)/2';
+
         return match ($layoutMode) {
-            'auto_reframe' => "[0:v]crop=ih*(9/16):ih:(iw-ih*(9/16))/2:0,scale=1080:1920:flags=lanczos,unsharp=5:5:0.6{$outputLabel}",
+            'auto_reframe' => "[0:v]crop=w=ih*9/16:h=ih:x='{$cropX}':y=0,scale=1080:1920:flags=lanczos,unsharp=5:5:0.6{$outputLabel}",
             'auto_split' => '[0:v]split=2[s1][s2];'.
                 '[s1]crop=in_w:trunc(in_h*0.55):0:0,scale=1080:960:flags=lanczos[top];'.
                 '[s2]crop=in_w:trunc(in_h*0.55):0:trunc(in_h*0.45),scale=1080:960:flags=lanczos[bot];'.
@@ -22,6 +28,26 @@ class VideoLayoutService
                 '[s2]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos[fg];'.
                 "[bg][fg]overlay=(W-w)/2:(H-h)/2{$outputLabel}",
         };
+    }
+
+    /**
+     * Crop x per frame: the crop centre is piecewise linear in t, one term per
+     * piece (gte*lt picks the active one), clamped to stay inside the frame.
+     */
+    public function trackExpression(array $track): string
+    {
+        $terms = [];
+        $last = count($track) - 1;
+        foreach (array_values($track) as $i => [$t0, $t1, $x0, $x1]) {
+            $t1 = $i === $last ? 86400.0 : $t1; // the last piece holds to the end of the clip
+            $span = sprintf('gte(t,%.3f)*lt(t,%.3f)', $t0, $t1);
+            $value = abs($x1 - $x0) < 1e-4 || $i === $last
+                ? sprintf('%.4f', $x0)
+                : sprintf('(%.4f+%.5f*(t-%.3f))', $x0, ($x1 - $x0) / max($track[$i][1] - $t0, 1e-3), $t0);
+            $terms[] = $span.'*'.$value;
+        }
+
+        return 'clip(('.implode('+', $terms).')*iw-ow/2,0,iw-ow)';
     }
 
     public function fontsDir(): string

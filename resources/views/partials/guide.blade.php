@@ -11,7 +11,7 @@
       'intro' => 'Ubah satu video YouTube jadi beberapa clip vertikal 9:16 siap TikTok: AI memilih momen terbaik, lalu kamu atur tampilannya dan render.',
       'steps' => [
         ['Tempel link YouTube', 'Tempel URL video (youtube.com/watch, youtu.be, atau /shorts), lalu klik <b>Proses Link</b>. Judul, durasi, dan channel muncul kalau link valid.'],
-        ['Pilih layout', '<b>Reframe Wajah</b> memotong bagian tengah video jadi vertikal, cocok untuk satu pembicara. <b>Gaussian</b> menaruh video utuh di tengah dengan latar blur, cocok kalau ada beberapa orang atau teks di layar.'],
+        ['Pilih layout', '<b>Reframe Wajah</b> memotong video jadi vertikal dan kameranya mengikuti wajah; di podcast pindah ke orang yang sedang bicara. <b>Gaussian</b> menaruh video utuh di tengah dengan latar blur, cocok kalau ada beberapa orang atau teks di layar.'],
         ['Atur jumlah & durasi clip', 'Tentukan berapa clip yang dicari AI. Durasi <b>Otomatis</b> membiarkan AI memilih panjang clip; <b>Manual</b> kalau kamu mau batas minimal dan maksimal sendiri (dalam detik).'],
         ['Subtitle', 'Subtitle karaoke: kata yang sedang diucapkan disorot. Pilih font, ukuran, warna, dan background. Posisi bisa dipilih atau <b>diseret langsung di preview</b>; hindari area bawah yang tertutup tombol TikTok.'],
         ['Hook & musik', 'Hook = teks pembuka 2–5 detik untuk menahan penonton. Biarkan AI menulisnya, atau tulis sendiri (apit kata dengan <code>*bintang*</code> untuk menyorotnya). Musik latar diambil dari <a href="/music">library musik</a> sesuai mood.'],

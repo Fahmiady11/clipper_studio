@@ -53,8 +53,9 @@ class FFmpegService
      *                             frame-accurate, unlike cut()'s stream copy which
      *                             snaps back to the previous keyframe and shifts
      *                             the clip's t=0 away from $start (subtitle drift).
+     * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
      */
-    public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null): void
+    public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null): void
     {
         // Map new layout IDs to VideoLayoutService's filter method
         $layoutMap = [
@@ -64,7 +65,7 @@ class FFmpegService
 
         $mode = $layoutMap[$layoutType] ?? 'gaussian_blur';
         $filterLabel = '[out]';
-        $filterGraph = $this->layout->layoutFilter($mode, $filterLabel);
+        $filterGraph = $this->layout->layoutFilter($mode, $filterLabel, $track);
 
         $trimIn = '';
         $trimOut = '';

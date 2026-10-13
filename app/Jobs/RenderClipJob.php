@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\GeneratedClip;
+use App\Services\FaceTracker;
 use App\Services\FFmpegService;
 use App\Services\HookRenderer;
 use App\Services\MusicService;
@@ -92,7 +93,13 @@ class RenderClipJob implements ShouldQueue
             'start' => $clip->start_seconds,
             'end' => $clip->end_seconds,
         ]);
-        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, (float) $clip->start_seconds, (float) $clip->end_seconds);
+        // Reframe follows the faces (and the speaker on a two-shot) when the tracker is available
+        $track = null;
+        if ($project->layout_type === 'reframe') {
+            $track = app(FaceTracker::class)->plan($srcVideo, (float) $clip->start_seconds, (float) $clip->end_seconds);
+            $log->info('Face tracking', ['pieces' => $track ? count($track) : 0]);
+        }
+        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, (float) $clip->start_seconds, (float) $clip->end_seconds, $track);
 
         $current = $step2;
         Cancellation::throwIfCancelled();

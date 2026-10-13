@@ -60,6 +60,11 @@ return [
         'path' => env('FFMPEG_PATH', 'ffmpeg'),
     ],
 
+    // Python with opencv-python-headless for face-following reframe; '' = centre crop only
+    'facetrack' => [
+        'python' => env('FACE_TRACK_PYTHON', 'python3'),
+    ],
+
     'tiktok' => [
         'client_key' => env('TIKTOK_CLIENT_KEY'),
         'client_secret' => env('TIKTOK_CLIENT_SECRET'),

@@ -197,7 +197,7 @@
       </div>
       <div class="wl-feat wl-reveal">
         <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
-        <h3>Vertical 9:16 layouts</h3><p>Face reframe for one speaker, or the full shot over a blurred background.</p>
+        <h3>Vertical 9:16 layouts</h3><p>A reframe that follows faces and cuts to whoever is talking, or the full shot over a blurred background.</p>
       </div>
       <div class="wl-feat wl-reveal">
         <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
