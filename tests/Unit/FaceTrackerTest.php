@@ -77,9 +77,10 @@ class FaceTrackerTest extends TestCase
 
     public function test_ffmpeg_renders_a_moving_crop(): void
     {
-        // Real ffmpeg run: proves the expression survives filtergraph quoting
+        // Real ffmpeg run: proves the expression survives filtergraph quoting,
+        // and that a 60fps source comes out at 30fps
         $src = $this->dir.'/src.mp4';
-        exec(sprintf('%s -v error -y -f lavfi -i testsrc=size=640x360:rate=10:duration=3 -pix_fmt yuv420p %s 2>&1',
+        exec(sprintf('%s -v error -y -f lavfi -i testsrc=size=640x360:rate=60:duration=3 -pix_fmt yuv420p %s 2>&1',
             escapeshellarg(config('services.ffmpeg.path', 'ffmpeg')), escapeshellarg($src)), $o, $code);
         if ($code !== 0) {
             $this->markTestSkipped('ffmpeg not available');
@@ -88,7 +89,7 @@ class FaceTrackerTest extends TestCase
 
         (new FFmpegService)->applyLayout($src, 'reframe', $out, 0.0, 3.0, [[0, 1, 0.2, 0.2], [1, 3, 0.4, 0.8]]);
 
-        $size = trim((string) shell_exec('ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 '.escapeshellarg($out)));
-        $this->assertSame('1080,1920', $size);
+        $size = trim((string) shell_exec('ffprobe -v error -select_streams v:0 -show_entries stream=width,height,avg_frame_rate -of csv=p=0 '.escapeshellarg($out)));
+        $this->assertSame('1080,1920,30/1', $size);
     }
 }

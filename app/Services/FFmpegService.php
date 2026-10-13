@@ -18,6 +18,15 @@ class FFmpegService
 
     private const VOICE_LUFS = -14; // speech loudness after mixing music (TikTok/Reels level)
 
+    /**
+     * The layout pass only feeds the subtitle pass, so it encodes fast at near
+     * transparent quality; the final pass spends the effort. 60fps sources are
+     * capped at 30 (what TikTok plays): half the frames to filter and encode.
+     */
+    private const ENCODE_INTERMEDIATE = '-fpsmax 30 -c:v libx264 -preset veryfast -crf 14 -pix_fmt yuv420p';
+
+    private const ENCODE_FINAL = '-fpsmax 30 -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p';
+
     private string $bin;
 
     private string $posTag = ''; // ASS override placing every subtitle line (set by buildAssFile)
@@ -81,6 +90,10 @@ class FFmpegService
         $mode = $layoutMap[$layoutType] ?? 'gaussian_blur';
         $filterLabel = '[out]';
         $filterGraph = $this->layout->layoutFilter($mode, $filterLabel, $track);
+        // Drop to 30fps before the per-frame crop/scale/sharpen, not after it
+        if ($this->probeFps($input) > 30.5) {
+            $filterGraph = preg_replace('/^\[0:v\]/', '[0:v]fps=30,', $filterGraph);
+        }
 
         $trimIn = '';
         $trimOut = '';
@@ -90,7 +103,7 @@ class FFmpegService
         }
 
         $cmd = sprintf(
-            '%s -y%s -i %s%s -filter_complex %s -map %s -map 0:a? -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y%s -i %s%s -filter_complex %s -map %s -map 0:a? '.self::ENCODE_INTERMEDIATE.' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             $trimIn,
             escapeshellarg($input),
@@ -109,7 +122,7 @@ class FFmpegService
         $assFilter = 'ass='.$assPath.':fontsdir='.$fontsdir;
 
         $cmd = sprintf(
-            '%s -y -i %s -vf %s -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y -i %s -vf %s '.self::ENCODE_FINAL.' -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($input),
             escapeshellarg($assFilter),
@@ -529,7 +542,7 @@ class FFmpegService
         $filter = substr($filter, 0, strrpos($filter, "[b{$n}]")).'[v]';
 
         $cmd = sprintf(
-            '%s -y %s -filter_complex %s -map %s -map 0:a? -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y %s -filter_complex %s -map %s -map 0:a? '.self::ENCODE_FINAL.' -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
             $inputs,
             escapeshellarg($filter),
@@ -601,6 +614,19 @@ class FFmpegService
         return $duration;
     }
 
+    private function probeFps(string $input): float
+    {
+        exec(sprintf(
+            '%s -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 %s 2>&1',
+            $this->probeBin(),
+            escapeshellarg($input)
+        ), $out, $code);
+
+        [$num, $den] = array_map('floatval', explode('/', trim($out[0] ?? '0').'/1'));
+
+        return $code === 0 && $den > 0 ? $num / $den : 0.0;
+    }
+
     private function hasAudio(string $input): bool
     {
         exec(sprintf(
@@ -628,7 +654,7 @@ class FFmpegService
         file_put_contents($listFile, $content);
 
         $cmd = sprintf(
-            '%s -y -f concat -safe 0 -i %s -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y -f concat -safe 0 -i %s '.self::ENCODE_FINAL.' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($listFile),
             escapeshellarg($output)
