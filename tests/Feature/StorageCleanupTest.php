@@ -94,12 +94,41 @@ class StorageCleanupTest extends TestCase
         $this->assertDirectoryExists($recentDir);
         $this->assertDirectoryExists($queuedDir);
         $this->assertFileExists($newCache);
+        $this->assertFileDoesNotExist($oldCache);
         $this->assertSame(2, $stats['temp_dirs']);
-        $this->assertGreaterThanOrEqual(2048, $stats['bytes']);
+        $this->assertSame(1, $stats['cache_files']);
+        $this->assertGreaterThanOrEqual(2049, $stats['bytes']);
+    }
 
-        // ctime can't be backdated with touch(); the cache file only goes once both times are old
-        clearstatcache();
-        $this->assertSame(filectime($oldCache) < time() - 72 * 3600, ! file_exists($oldCache));
+    public function test_cached_video_is_freed_in_the_same_run_as_its_temp_link(): void
+    {
+        // Removing the temp hard link bumps the cache file's ctime; that must not keep it alive
+        $idle = $this->project();
+        $busy = $this->project('processing');
+        $idleDir = $this->tempDir($idle->id, 100);
+        $busyDir = $this->tempDir($busy->id, 100);
+
+        @mkdir(storage_path('app/video_cache'), 0755, true);
+        $idleCache = storage_path('app/video_cache/idle_test_vid.mp4');
+        $busyCache = storage_path('app/video_cache/busy_test_vid.mp4');
+        foreach ([[$idleDir, $idleCache], [$busyDir, $busyCache]] as [$dir, $cache]) {
+            unlink($dir.'/video.mp4');
+            file_put_contents($cache, str_repeat('c', 4096));
+            touch($cache, time() - 100 * 3600);
+            link($cache, $dir.'/video.mp4');
+            touch($dir, time() - 100 * 3600);
+            $this->paths[] = $cache;
+        }
+
+        $stats = app(StorageCleanup::class)->run(72);
+
+        $this->assertDirectoryDoesNotExist($idleDir);
+        $this->assertFileDoesNotExist($idleCache);
+        $this->assertDirectoryExists($busyDir);
+        $this->assertFileExists($busyCache);
+        $this->assertSame(1, $stats['cache_files']);
+        // Shared bytes are counted once, when the last link goes
+        $this->assertSame(4096, $stats['bytes']);
     }
 
     public function test_cleanup_command_runs(): void

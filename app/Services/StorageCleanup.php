@@ -10,7 +10,8 @@ use Illuminate\Support\Str;
  * Frees disk used by downloaded source videos. Rendered clips are kept.
  * - storage/app/temp/<project>: removed once the project is idle and older
  *   than the retention window (RenderClipJob re-downloads if needed later).
- * - storage/app/video_cache/*.mp4: removed when untouched for the window.
+ * - storage/app/video_cache/*.mp4: removed once downloaded before the window
+ *   and no longer hard-linked into any temp dir.
  */
 class StorageCleanup
 {
@@ -29,8 +30,9 @@ class StorageCleanup
         }
 
         foreach (glob(storage_path('app/video_cache/*.mp4')) ?: [] as $file) {
-            // A cache hit hard-links the file into temp/, bumping ctime; mtime is the download time
-            if (max(filemtime($file), filectime($file)) > $cutoff) {
+            // A cache hit hard-links the file into temp/, so a link count above 1 means a
+            // project still uses it. Don't go by ctime: unlinking the temp copy above bumps it.
+            if (filemtime($file) > $cutoff || stat($file)['nlink'] > 1) {
                 continue;
             }
             $stats['bytes'] += filesize($file);
@@ -104,7 +106,10 @@ class StorageCleanup
             if ($item->isDir()) {
                 @rmdir($item->getPathname());
             } else {
-                $bytes += $item->getSize();
+                // A file still hard-linked from video_cache frees nothing here
+                if (stat($item->getPathname())['nlink'] <= 1) {
+                    $bytes += $item->getSize();
+                }
                 @unlink($item->getPathname());
             }
         }
