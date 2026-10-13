@@ -24,6 +24,7 @@ a { color: var(--teal); }
 .pb-btn { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--bg); background: var(--text); border-radius: 10px; padding: 9px 16px; text-decoration: none; }
 .pb-btn.ghost { color: var(--text); background: transparent; border: 1px solid var(--border-strong); }
 .pb-main { max-width: 860px; margin: 0 auto; padding: 48px 24px 72px; }
+.pb-main.wide { max-width: 1140px; }
 .pb-doc h1 { font-size: 32px; letter-spacing: -.02em; margin: 0 0 6px; }
 .pb-doc .pb-updated { color: var(--text-dim); font-size: 13px; margin: 0 0 32px; }
 .pb-doc h2 { font-size: 18px; margin: 32px 0 10px; }
@@ -52,7 +53,7 @@ a { color: var(--teal); }
     @endauth
   </header>
 
-  <main class="pb-main">
+  <main class="pb-main @yield('main_class')">
     @yield('content')
   </main>
 
