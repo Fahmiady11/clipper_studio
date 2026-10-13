@@ -6,7 +6,7 @@ function studio() {
     'url','meta',
     'layout',
     'clipCount','durationMode','minDuration','maxDuration',
-    'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg',
+    'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
     'musicEnabled','musicMood','musicVolume',
     'generateStarted','generateProgress','generateLogIdx',
@@ -42,9 +42,9 @@ function studio() {
     url: '', meta: null, loadingMeta: false, metaError: null,
     layout: 'reframe',
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
-    subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 42,
+    subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 56,
     subtitleTextColor: '#ffffff', subtitleHighlight: '#facc15',
-    subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subDragging: false,
+    subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subtitleStyle: 'karaoke', subDragging: false,
     hookEnabled: true, hookText: 'Ingin lebih baik? Coba ini.', hookAi: false,
     hookDuration: 3, hookPos: 'center', hookTextColor: '#ffffff', hookBg: 'semi',
     musicEnabled: false, musicMood: '', musicVolume: 25, musicLibrary: null, musicMissing: false,
@@ -156,7 +156,23 @@ function studio() {
       this.subDragging = true;
       ClipPreview.dragSubtitle(e, y => { this.subtitleY = y; }, () => { this.subDragging = false; });
     },
-    pvSubBoxStyle()  { return ClipPreview.subBoxStyle({ font: this.subtitleFont, size: this.subtitleSize, bg: this.subtitleBg }); },
+    pvSubBoxStyle()  { return ClipPreview.subBoxStyle({ font: this.subtitleFont, size: this.subtitleSize, bg: this.subtitleBg, style: this.subtitleStyle }); },
+    get pvSubWords() { return ClipPreview.subWords(this.pvSubWordsAlways, this.subtitleStyle); },
+    pvSubWordStyle(w) { return ClipPreview.subWordStyle(w, { style: this.subtitleStyle, text: this.subtitleTextColor, hl: this.subtitleHighlight }); },
+    get subPreset() {
+      return ClipPreview.presetOf({
+        font_family: this.subtitleFont, font_size: this.subtitleSize, text_color: this.subtitleTextColor,
+        highlight_color: this.subtitleHighlight, background_style: this.subtitleBg, style: this.subtitleStyle,
+      });
+    },
+    applySubPreset(p) {
+      const s = p.set;
+      Object.assign(this, {
+        subtitleFont: s.font_family, subtitleSize: s.font_size, subtitleTextColor: s.text_color,
+        subtitleHighlight: s.highlight_color, subtitleBg: s.background_style, subtitleStyle: s.style,
+        subtitlePos: s.position, subtitleY: s.position_y,
+      });
+    },
     pvHook(text)     { return ClipPreview.hookLayout(text, this.subtitleFont, this.fontsTick); },
     pvHookBlockStyle(text) {
       return ClipPreview.hookStyle(text, {
@@ -390,6 +406,7 @@ function studio() {
               position: this.subtitlePos,
               position_y: this.subtitleY,
               background_style: this.subtitleBg,
+              style: this.subtitleStyle,
             },
             hook: {
               enabled: this.hookEnabled,

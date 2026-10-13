@@ -51,7 +51,7 @@ class AutopilotSettingsTest extends TestCase
         // A fixed hook would be wrong for every new video: autopilot hooks are AI-written
         $this->assertTrue($s['hook']['is_ai_generated']);
         $this->assertNull($s['hook']['hook_text']);
-        $this->assertSame(42, $s['subtitle']['font_size'], 'missing keys get defaults');
+        $this->assertSame(56, $s['subtitle']['font_size'], 'missing keys get defaults');
     }
 
     public function test_new_source_without_look_copies_latest_manual_project_but_keeps_ai_hook(): void

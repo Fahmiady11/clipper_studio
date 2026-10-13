@@ -24,6 +24,14 @@ class FFmpegService
     /** @var array{alpha: string, font: string, size: int, cy: float}|null rounded background box (set by buildAssFile) */
     private ?array $box = null;
 
+    /** karaoke | pop | word (set by buildAssFile) */
+    private string $style = 'karaoke';
+
+    private int $cueWords = self::MAX_CUE_WORDS;
+
+    /** @var array{path: string, size: int, outline: int} font used to measure cues so they fit the frame */
+    private array $font = ['path' => '', 'size' => 42, 'outline' => 0];
+
     private VideoLayoutService $layout;
 
     public function __construct()
@@ -120,6 +128,9 @@ class FFmpegService
         $hlColor = $this->hexToAss($subtitleSettings['highlight_color'] ?? '#facc15');
         $position = $subtitleSettings['position'] ?? 'bottom';
         $bgStyle = $subtitleSettings['background_style'] ?? 'semi';
+        $this->style = in_array($subtitleSettings['style'] ?? null, ClipSettings::SUBTITLE_STYLES, true)
+            ? $subtitleSettings['style'] : 'karaoke';
+        $this->cueWords = $this->style === 'word' ? 1 : self::MAX_CUE_WORDS;
 
         // Dragged position: every line is centred on that height (\an5 = middle-centre),
         // matching the studio preview which centres the subtitle box on the same %.
@@ -160,8 +171,10 @@ class FFmpegService
                     : (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920),
             ];
         }
-        $outlineW = $this->box ? 0 : 2;
-        $shadowW = $this->box ? 0 : 2;
+        // pop/word sit on the picture without a box, so they get a heavy outline
+        $outlineW = $this->box ? 0 : ($this->style === 'karaoke' ? 2 : 6);
+        $shadowW = $this->box ? 0 : ($this->style === 'karaoke' ? 2 : 3);
+        $this->font = ['path' => $this->layout->resolveFontByFamily($fontFamily), 'size' => $fontSize, 'outline' => $outlineW];
 
         $ass = "[Script Info]\n";
         $ass .= "ScriptType: v4.00+\n";
@@ -191,6 +204,12 @@ class FFmpegService
             $this->proportionalCues($untimed, $clipStart, $hookDuration)
         );
         foreach ($cues as $cue) {
+            if ($this->style !== 'karaoke') {
+                foreach ($cue['words'] as &$w) {
+                    $w['text'] = mb_strtoupper($w['text']);
+                }
+                unset($w);
+            }
             $ass .= $this->highlightDialogues($cue, $hlColor);
         }
 
@@ -202,12 +221,26 @@ class FFmpegService
         return "Dialogue: {$layer},".$this->toAssTime($start).','.$this->toAssTime($end).",Default,,0,0,0,,{$text}\n";
     }
 
+    /** Percent scale that makes a cue without a box fit the frame width (100 when it already fits). */
+    private function fitScale(string $text): int
+    {
+        $maxW = 1080 - 2 * 60 - 2 * $this->font['outline'];
+        $textW = FontMetrics::textWidth($this->font['path'], $text, $this->font['size']);
+
+        return (int) floor(min(1.0, $maxW / max(1.0, $textW)) * 100);
+    }
+
+    private function scaleTag(int $percent): string
+    {
+        return $percent < 100 ? sprintf('{\\fscx%1$d\\fscy%1$d}', $percent) : '';
+    }
+
     /**
      * Rounded rectangle behind a cue, drawn with ASS vector commands on layer 0.
      * Sized from the measured text width; text and box share the same centre,
      * so any small measuring error just shifts padding evenly to both sides.
      *
-     * @return array{0: string, 1: string} [box dialogue, override tag that shrinks the text to fit]
+     * @return array{0: string, 1: int} [box dialogue, percent scale that makes the text fit]
      */
     private function boxFor(float $start, float $end, string $text): array
     {
@@ -217,7 +250,6 @@ class FFmpegService
 
         $textW = FontMetrics::textWidth($this->box['font'], $text, $this->box['size']);
         $scale = min(1.0, ($maxW - 2 * $padX) / max(1.0, $textW));
-        $fitTag = $scale < 1.0 ? sprintf('{\\fscx%1$d\\fscy%1$d}', (int) floor($scale * 100)) : '';
 
         $w = (int) round($textW * $scale + 2 * $padX);
         $h = (int) round($this->box['size'] * $scale + 2 * $padY);
@@ -233,7 +265,7 @@ class FFmpegService
         $y = (int) round($this->box['cy'] - $h / 2);
         $tag = sprintf('{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H000000&\\1a&H%s&\\p1}', $x, $y, $this->box['alpha']);
 
-        return [$this->dialogue($start, $end, $tag.$path, 0), $fitTag];
+        return [$this->dialogue($start, $end, $tag.$path, 0), (int) floor($scale * 100)];
     }
 
     /**
@@ -248,12 +280,24 @@ class FFmpegService
     {
         $words = $cue['words'];
         $hl = '{\\1c&H'.substr($hlColor, 4).'&}'; // &H00BBGGRR -> \1c&HBBGGRR&
-        $out = '';
-        $fitTag = '';
+        $line = implode(' ', array_column($words, 'text'));
 
-        if ($this->box) {
-            [$out, $fitTag] = $this->boxFor($cue['start'], $cue['end'], implode(' ', array_column($words, 'text')));
+        [$out, $fit] = $this->box ? $this->boxFor($cue['start'], $cue['end'], $line) : ['', $this->fitScale($line)];
+        $fitTag = $this->scaleTag($fit);
+
+        if ($this->style === 'word') {
+            // One word per cue: it pops in (70% -> 100%); numbers and long words take the highlight
+            $word = $words[0]['text'];
+            $color = preg_match('/\d/u', $word) || mb_strlen(preg_replace('/[^\p{L}\p{N}]/u', '', $word)) >= 7 ? $hl : '';
+            $pop = sprintf('{\\fscx%1$d\\fscy%1$d\\t(0,110,\\fscx%2$d\\fscy%2$d)}', (int) round($fit * 0.7), $fit);
+
+            return $out.$this->dialogue($cue['start'], $cue['end'], $this->posTag.$pop.$color.$word);
         }
+
+        // pop: the spoken word grows a little as it is said
+        $grow = $this->style === 'pop'
+            ? sprintf('{\\t(0,90,\\fscx%1$d\\fscy%1$d)}', (int) round($fit * 1.15))
+            : '';
 
         foreach ($words as $i => $active) {
             $from = $i === 0 ? $cue['start'] : $active['start'];
@@ -263,7 +307,7 @@ class FFmpegService
             }
 
             $text = implode(' ', array_map(
-                fn ($w, $j) => $j === $i ? $hl.$w['text'].'{\\r}'.$fitTag : $w['text'],
+                fn ($w, $j) => $j === $i ? $hl.$grow.$w['text'].'{\\r}'.$fitTag : $w['text'],
                 $words,
                 array_keys($words)
             ));
@@ -299,7 +343,7 @@ class FFmpegService
         foreach ($rel as $w) {
             if ($group) {
                 $prev = $group[count($group) - 1];
-                $break = count($group) >= self::MAX_CUE_WORDS
+                $break = count($group) >= $this->cueWords
                     || $w['start'] - $prev['end'] > self::CUE_BREAK_GAP
                     || preg_match('/[.?!]$/u', $prev['text']);
                 if ($break) {
@@ -372,7 +416,7 @@ class FFmpegService
             $cursor = $seg['start'];
 
             $perWord = $dur / $total;
-            foreach (array_chunk($words, self::MAX_CUE_WORDS) as $chunk) {
+            foreach (array_chunk($words, $this->cueWords) as $chunk) {
                 $cueStart = $cursor;
                 $cueWords = [];
                 foreach ($chunk as $word) {

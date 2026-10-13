@@ -158,6 +158,7 @@ class RenderClipJob implements ShouldQueue
                     'position' => $subtitle->position,
                     'position_y' => $subtitle->position_y,
                     'background_style' => $subtitle->background_style,
+                    'style' => $subtitle->style,
                 ], (float) $clip->start_seconds, $hookDuration);
                 file_put_contents($assPath, $assContent);
             } else {

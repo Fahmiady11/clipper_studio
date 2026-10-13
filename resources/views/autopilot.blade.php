@@ -443,6 +443,31 @@
               <button class="tgl" :class="{ on: ed.s.subtitle.enabled }" @click="ed.s.subtitle.enabled = !ed.s.subtitle.enabled; pvTab = 'sub'" type="button"><span class="tgl-track"></span></button>
             </h4>
             <div class="settings-group" :class="{ off: !ed.s.subtitle.enabled }">
+              <div class="fblock">
+                <div class="fblock-title" style="margin-bottom:10px">Preset gaya</div>
+                <div class="sub-presets">
+                  <template x-for="p in ClipPreview.SUB_PRESETS" :key="p.id">
+                    <button type="button" class="sub-preset" :class="{ on: ClipPreview.presetOf(ed.s.subtitle) === p.id }" @click="Object.assign(ed.s.subtitle, p.set); pvTab = 'sub'" :title="p.hint">
+                      <span class="sub-preset-demo">
+                        <span :style="ClipPreview.subBoxStyle({ font: p.set.font_family, size: Math.min(p.set.font_size * (p.set.style === 'word' ? 0.5 : 0.62), 31), bg: p.set.background_style, style: p.set.style, demo: true })">
+                          <template x-for="w in ClipPreview.subWords([{ w: 'Ayo', active: false }, { w: 'mulai', active: true }], p.set.style)" :key="w.w">
+                            <span :style="ClipPreview.subWordStyle(w, { style: p.set.style, text: p.set.text_color, hl: p.set.highlight_color })" x-text="w.w"></span>
+                          </template>
+                        </span>
+                      </span>
+                      <span class="sub-preset-name" x-text="p.name"></span>
+                    </button>
+                  </template>
+                </div>
+              </div>
+              <div class="fblock">
+                <div class="fblock-title" style="margin-bottom:10px">Animasi</div>
+                <div class="seg">
+                  <template x-for="st in ClipPreview.SUB_STYLES" :key="st.id">
+                    <button :class="{ on: (ed.s.subtitle.style || 'karaoke') === st.id }" @click="ed.s.subtitle.style = st.id; pvTab = 'sub'" type="button" x-text="st.label"></button>
+                  </template>
+                </div>
+              </div>
               <div class="ap-row-2">
                 <div class="fblock">
                   <div class="fblock-title" style="margin-bottom:10px">Font</div>
@@ -453,7 +478,7 @@
                 <div class="fblock">
                   <div class="fblock-title" style="margin-bottom:10px">Ukuran</div>
                   <div class="sld-wrap">
-                    <input class="sld" type="range" min="24" max="72" x-model.number="ed.s.subtitle.font_size" @input="pvTab = 'sub'" />
+                    <input class="sld" type="range" min="24" max="160" x-model.number="ed.s.subtitle.font_size" @input="pvTab = 'sub'" />
                     <span class="sld-val" x-text="ed.s.subtitle.font_size + 'px'"></span>
                   </div>
                 </div>
@@ -550,9 +575,10 @@
             <div x-show="pvTab === 'sub' && ed.s.subtitle.enabled" :style="ClipPreview.subStyle(ed.s.subtitle.position, ed.s.subtitle.position_y)"
                  class="pv-sub-drag" :class="{ dragging: subDragging }" title="Seret untuk memindahkan subtitle"
                  @pointerdown="subDragging = true; ClipPreview.dragSubtitle($event, y => ed.s.subtitle.position_y = y, () => subDragging = false)">
-              <div :style="ClipPreview.subBoxStyle({ font: ed.s.subtitle.font_family, size: ed.s.subtitle.font_size, bg: ed.s.subtitle.background_style })">
-                <span :style="'color:' + ed.s.subtitle.highlight_color">Setiap</span>
-                <span :style="'color:' + ed.s.subtitle.text_color">momen adalah kesempatan</span>
+              <div :style="ClipPreview.subBoxStyle({ font: ed.s.subtitle.font_family, size: ed.s.subtitle.font_size, bg: ed.s.subtitle.background_style, style: ed.s.subtitle.style })">
+                <template x-for="w in ClipPreview.subWords([{ w: 'Setiap', active: false }, { w: 'momen', active: false }, { w: 'adalah', active: false }, { w: 'kesempatan', active: true }], ed.s.subtitle.style)" :key="w.w">
+                  <span :style="ClipPreview.subWordStyle(w, { style: ed.s.subtitle.style, text: ed.s.subtitle.text_color, hl: ed.s.subtitle.highlight_color })" x-text="w.w"></span>
+                </template>
               </div>
             </div>
             <div class="pv-hook-tag" x-show="(pvTab === 'hook' && !ed.s.hook.enabled) || (pvTab === 'sub' && !ed.s.subtitle.enabled)">NONAKTIF</div>
@@ -634,6 +660,7 @@ function autopilot() {
       const base = source ? source.settings : this.form.settings;
       if (!base) return;
       this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), saving: false, error: null };
+      this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles existed
       this.pvTab = 'hook';
     },
     async saveEditor() {

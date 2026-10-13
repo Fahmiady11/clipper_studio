@@ -2,7 +2,7 @@
   <div class="wiz-head">
     <div class="wiz-kicker">Langkah 4 dari 7</div>
     <h1 class="wiz-title">Pengaturan subtitle</h1>
-    <p class="wiz-desc">Subtitle karaoke — kata yang sedang diucapkan disorot dengan warna berbeda.</p>
+    <p class="wiz-desc">Pilih gaya subtitle; teksnya mengikuti setiap kata yang diucapkan.</p>
   </div>
   <div class="wiz-split">
 
@@ -16,6 +16,32 @@
       </div>
       <div class="settings-group" :class="{ off: !subtitleEnabled }">
         <div class="fblock">
+          <div class="fblock-title" style="margin-bottom:10px">Preset gaya <span style="color:var(--text-dim);font-weight:400;font-size:12px">· satu klik, bisa diubah lagi di bawah</span></div>
+          <div class="sub-presets">
+            <template x-for="p in ClipPreview.SUB_PRESETS" :key="p.id">
+              <button type="button" class="sub-preset" :class="{ on: subPreset === p.id }" @click="applySubPreset(p)" :title="p.hint">
+                <span class="sub-preset-demo">
+                  <span :style="ClipPreview.subBoxStyle({ font: p.set.font_family, size: Math.min(p.set.font_size * (p.set.style === 'word' ? 0.5 : 0.62), 31), bg: p.set.background_style, style: p.set.style, demo: true })">
+                    <template x-for="w in ClipPreview.subWords([{ w: 'Ayo', active: false }, { w: 'mulai', active: true }], p.set.style)" :key="w.w">
+                      <span :style="ClipPreview.subWordStyle(w, { style: p.set.style, text: p.set.text_color, hl: p.set.highlight_color })" x-text="w.w"></span>
+                    </template>
+                  </span>
+                </span>
+                <span class="sub-preset-name" x-text="p.name"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+        <div class="fblock">
+          <div class="fblock-title" style="margin-bottom:10px">Animasi</div>
+          <div class="seg">
+            <template x-for="st in ClipPreview.SUB_STYLES" :key="st.id">
+              <button :class="{ on: subtitleStyle === st.id }" @click="subtitleStyle = st.id" type="button" x-text="st.label"></button>
+            </template>
+          </div>
+          <div class="fhint" style="margin-top:8px" x-text="{ karaoke: 'Satu baris pendek, kata yang diucapkan berganti warna.', pop: 'HURUF BESAR dengan outline tebal, kata yang diucapkan membesar.', word: 'Satu kata besar muncul bergantian; angka & kata panjang memakai warna highlight.' }[subtitleStyle]"></div>
+        </div>
+        <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Font</div>
           <select class="select" x-model="subtitleFont">
             <template x-for="f in FONTS" :key="f"><option :value="f" x-text="f"></option></template>
@@ -24,7 +50,7 @@
         <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Ukuran font</div>
           <div class="sld-wrap">
-            <input class="sld" type="range" min="24" max="72" x-model.number="subtitleSize" />
+            <input class="sld" type="range" min="24" max="160" x-model.number="subtitleSize" />
             <span class="sld-val" x-text="subtitleSize + 'px'"></span>
           </div>
         </div>
@@ -97,11 +123,8 @@
         <div x-show="subtitleEnabled" :style="pvSubStyle()" class="pv-sub-drag" :class="{ dragging: subDragging }"
              @pointerdown="startSubDrag($event)" title="Seret untuk memindahkan subtitle">
           <div :style="pvSubBoxStyle()">
-            <template x-for="w in pvSubWordsAlways" :key="w.idx">
-              <span
-                :style="'color:'+(w.active ? subtitleHighlight : subtitleTextColor)+';transition:color .12s;'"
-                x-text="w.w + ' '"
-              ></span>
+            <template x-for="w in pvSubWords" :key="w.idx">
+              <span :style="pvSubWordStyle(w)" x-text="w.w"></span>
             </template>
           </div>
         </div>

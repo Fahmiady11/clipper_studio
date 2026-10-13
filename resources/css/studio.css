@@ -967,6 +967,52 @@ button.user-menu-item:hover {
     text-align: right
 }
 
+/* Subtitle style presets: a tiny sample of each look on a dark "video" tile */
+.sub-presets {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 8px
+}
+
+.sub-preset {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface, transparent);
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .12s, transform .1s
+}
+
+.sub-preset:hover {
+    transform: translateY(-1px)
+}
+
+.sub-preset.on {
+    border-color: var(--teal, #2dd4bf);
+    box-shadow: 0 0 0 1px var(--teal, #2dd4bf)
+}
+
+.sub-preset-demo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 54px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: linear-gradient(160deg, #4b5563, #1f2937 70%);
+    white-space: nowrap
+}
+
+.sub-preset-name {
+    font-size: 12px;
+    font-weight: 600
+}
+
 .swatches {
     display: flex;
     gap: 8px;
@@ -1525,7 +1571,9 @@ textarea.field {
     border: 8px solid #111;
     box-shadow: 0 0 0 1px var(--border-strong), 0 30px 80px rgba(0, 0, 0, .5);
     overflow: hidden;
-    position: relative
+    position: relative;
+    /* subtitle preview sizes are in cqw of the video, like the rendered 1080px frame */
+    container-type: inline-size
 }
 
 .phone-notch {

@@ -17,6 +17,7 @@ class SubtitleSetting extends Model
         'position',
         'position_y',
         'background_style',
+        'style',
     ];
 
     protected $casts = [

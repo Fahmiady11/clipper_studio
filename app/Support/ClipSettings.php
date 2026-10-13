@@ -16,6 +16,8 @@ final class ClipSettings
 
     public const Y_MAX = 95;
 
+    public const SUBTITLE_STYLES = ['karaoke', 'pop', 'word'];
+
     public const DEFAULTS = [
         'layout_type' => 'reframe',
         'clip_count' => 3,
@@ -23,8 +25,9 @@ final class ClipSettings
         'min_duration' => 20,
         'max_duration' => 60,
         'subtitle' => [
-            'enabled' => true, 'font_family' => 'Montserrat', 'font_size' => 42, 'text_color' => '#ffffff',
+            'enabled' => true, 'font_family' => 'Montserrat', 'font_size' => 56, 'text_color' => '#ffffff',
             'highlight_color' => '#facc15', 'position' => 'bottom', 'position_y' => null, 'background_style' => 'semi',
+            'style' => 'karaoke',
         ],
         'hook' => [
             'enabled' => true, 'hook_text' => null, 'is_ai_generated' => true, 'duration_seconds' => 3.0,
@@ -52,12 +55,13 @@ final class ClipSettings
             'subtitle' => ['sometimes', 'array'],
             'subtitle.enabled' => ['sometimes', 'boolean'],
             'subtitle.font_family' => ['sometimes', 'string', 'in:Arial,Roboto,Montserrat,Oswald,Bebas Neue'],
-            'subtitle.font_size' => ['sometimes', 'integer', 'min:16', 'max:100'],
+            'subtitle.font_size' => ['sometimes', 'integer', 'min:16', 'max:160'],
             'subtitle.text_color' => $color,
             'subtitle.highlight_color' => $color,
             'subtitle.position' => ['sometimes', 'in:top,center,bottom'],
             'subtitle.position_y' => ['sometimes', 'nullable', 'numeric', 'min:'.self::Y_MIN, 'max:'.self::Y_MAX],
             'subtitle.background_style' => ['sometimes', 'in:none,semi,full'],
+            'subtitle.style' => ['sometimes', 'in:'.implode(',', self::SUBTITLE_STYLES)],
 
             'hook' => ['sometimes', 'array'],
             'hook.enabled' => ['sometimes', 'boolean'],

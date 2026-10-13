@@ -81,9 +81,55 @@ window.ClipPreview = (() => {
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
   }
   const cq = v => (v / 10.8).toFixed(3) + 'cqw';
+  // em size per ASS font-size unit (unitsPerEm / (winAscent + winDescent)), like App\Support\FontMetrics
+  const SUB_EM = { Arial: 0.8951, Roboto: 0.8332, Montserrat: 0.6402, Oswald: 0.5875, 'Bebas Neue': 0.7692 };
   const FONT_STACK = { Arial: 'Arial,Helvetica,sans-serif', Roboto: "'Roboto',sans-serif", Montserrat: "'Montserrat',sans-serif", Oswald: "'Oswald',sans-serif", 'Bebas Neue': "'Bebas Neue',sans-serif" };
 
+  // One-click subtitle looks; `set` uses the subtitle settings' field names
+  const SUB_PRESETS = [
+    { id: 'clean',   name: 'Clean',       hint: 'Kotak semi, kata aktif kuning',
+      set: { font_family: 'Montserrat', font_size: 56, text_color: '#ffffff', highlight_color: '#facc15', background_style: 'semi', style: 'karaoke', position: 'bottom', position_y: null } },
+    { id: 'bold',    name: 'Bold Pop',    hint: 'Huruf besar, kata aktif membesar',
+      set: { font_family: 'Montserrat', font_size: 76, text_color: '#ffffff', highlight_color: '#22c55e', background_style: 'none', style: 'pop', position: 'bottom', position_y: 68 } },
+    { id: 'word',    name: 'Satu Kata',   hint: 'Satu kata besar per ketukan',
+      set: { font_family: 'Bebas Neue', font_size: 130, text_color: '#ffffff', highlight_color: '#facc15', background_style: 'none', style: 'word', position: 'center', position_y: 62 } },
+    { id: 'box',     name: 'Kotak Tegas', hint: 'Kotak hitam pekat, aksen oranye',
+      set: { font_family: 'Oswald', font_size: 62, text_color: '#ffffff', highlight_color: '#f97316', background_style: 'full', style: 'karaoke', position: 'bottom', position_y: null } },
+    { id: 'minimal', name: 'Minimal',     hint: 'Tipis tanpa sorotan',
+      set: { font_family: 'Roboto', font_size: 50, text_color: '#ffffff', highlight_color: '#ffffff', background_style: 'none', style: 'karaoke', position: 'bottom', position_y: null } },
+  ];
+  const PRESET_KEYS = ['font_family', 'font_size', 'text_color', 'highlight_color', 'background_style', 'style'];
+  // Same rule as FFmpegService for the "word" style: numbers and long words take the highlight
+  const emphasised = w => /\d/.test(w) || w.replace(/[^\p{L}\p{N}]/gu, '').length >= 7;
+
   return {
+    SUB_PRESETS,
+    SUB_STYLES: [
+      { id: 'karaoke', label: 'Karaoke' },
+      { id: 'pop',     label: 'Pop' },
+      { id: 'word',    label: 'Satu kata' },
+    ],
+
+    // Preset whose look matches these settings (position may differ), or null
+    presetOf(sub) {
+      const p = SUB_PRESETS.find(p => PRESET_KEYS.every(k => String(p.set[k]) === String(sub[k] ?? (k === 'style' ? 'karaoke' : ''))));
+      return p ? p.id : null;
+    },
+
+    // Words to draw for a style ([{w, active}] in, same out): "word" keeps only the spoken one
+    subWords(words, style) {
+      if (style !== 'word') return words;
+      const a = words.find(x => x.active) || words[0];
+      return a ? [{ ...a, em: emphasised(a.w) }] : [];
+    },
+
+    subWordStyle(w, { style, text, hl }) {
+      const color = style === 'word' ? (w.em ? hl : text) : (w.active ? hl : text);
+      // The grown word gets wider margins so it doesn't run into its neighbours
+      const grow = style === 'pop' && w.active ? 'transform:scale(1.15);margin:0 .22em;' : 'margin:0 .13em;';
+      return `display:inline-block;color:${color};transition:color .12s,transform .09s,margin .09s;${grow}`;
+    },
+
     // tick: bump when web fonts finish loading so widths are measured again
     hookLayout(text, family, tick = 0) {
       const key = family + '|' + text + '|' + tick;
@@ -164,12 +210,25 @@ window.ClipPreview = (() => {
       window.addEventListener('pointercancel', up);
     },
 
-    subBoxStyle({ font, size, bg }) {
+    /**
+     * The subtitle text box. Sized in cqw of the phone frame (a 1080px-wide video)
+     * with each font's real em size, so it matches FFmpegService/libass. demo:
+     * the small preset cards, which have no frame, use fixed px instead.
+     */
+    subBoxStyle({ font, size, bg, style = 'karaoke', demo = false }) {
       const fill = { none: 'transparent', semi: 'rgba(0,0,0,.6)', full: 'rgba(0,0,0,.9)' }[bg] || 'transparent';
       const bare = bg === 'none';
-      return `display:inline-block;background:${fill};padding:${bare ? '0' : '6px 10px'};border-radius:8px;`
-        + `font-family:${FONT_STACK[font] || 'sans-serif'};font-size:${Math.round(size * 0.34)}px;font-weight:800;line-height:1.2;letter-spacing:-.01em;`
-        + `text-shadow:${bare ? '0 2px 8px rgba(0,0,0,.85)' : 'none'};text-transform:${font === 'Bebas Neue' ? 'uppercase' : 'none'}`;
+      const loud = style === 'pop' || style === 'word';
+      const u = v => demo ? (v * 0.34 / SUB_EM.Montserrat).toFixed(2) + 'px' : cq(v);
+      const scale = SUB_EM[font] || SUB_EM.Montserrat, em = size * scale;
+      // pop/word: heavy black outline like the rendered \bord6
+      const o = (loud ? 6 : 2) * (demo ? 0.4 : 1);
+      const ring = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1.3], [0, 1.3], [-1.3, 0], [1.3, 0]]
+        .map(([x, y]) => `${u(x * o)} ${u(y * o)} 0 #000`).join(',');
+      const shadow = !bare ? 'none' : `${ring},0 ${u(3)} ${u(4)} rgba(0,0,0,.6)`;
+      return `display:inline-block;background:${fill};padding:${bare ? '0' : u(14) + ' ' + u(30)};border-radius:${u(24)};`
+        + `font-family:${FONT_STACK[font] || 'sans-serif'};font-size:${u(em)};font-weight:${font === 'Bebas Neue' ? 400 : 700};line-height:${demo ? 1.2 : (1 / scale).toFixed(3)};`
+        + `text-shadow:${shadow};text-transform:${loud || font === 'Bebas Neue' ? 'uppercase' : 'none'};white-space:nowrap`;
     },
   };
 })();
