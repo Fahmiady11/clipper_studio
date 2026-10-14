@@ -75,7 +75,7 @@ class SubtitleTimingTest extends TestCase
 
         $this->assertCount(2, $cues); // one event per word
         $this->assertSame('0:00:01.00', $cues[1]['start']);
-        $this->assertSame('0:00:02.00', $cues[1]['end']);
+        $this->assertSame('0:00:02.25', $cues[1]['end']); // held briefly, like timed cues
     }
 
     public function test_ass_time_never_rolls_centiseconds_to_100(): void

@@ -16,6 +16,8 @@ class FFmpegService
 
     private const CUE_HOLD = 0.25; // seconds a cue lingers after its last word
 
+    private const MAX_SPREAD_WORD = 1.0; // seconds an evenly spread (untimed) word may last
+
     private const VOICE_LUFS = -14; // speech loudness after mixing music (TikTok/Reels level)
 
     /**
@@ -209,7 +211,9 @@ class FFmpegService
         $ass .= "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
 
         // Segments with word timing (ASR captions / Groq) are cued from the real
-        // word timestamps; the rest fall back to proportional splitting.
+        // word timestamps; the rest get words spread evenly over the line. Both
+        // kinds go through one cue list, so two lines are never on screen at
+        // once (YouTube ASR mixes one-word lines without timing into timed ones).
         $timedWords = [];
         $untimed = [];
         foreach ($segments as $seg) {
@@ -219,11 +223,7 @@ class FFmpegService
                 $untimed[] = $seg;
             }
         }
-
-        $cues = array_merge(
-            $this->wordCues($timedWords, $clipStart, $hookDuration),
-            $this->proportionalCues($untimed, $clipStart, $hookDuration)
-        );
+        $cues = $this->wordCues(array_merge($timedWords, $this->spreadWords($untimed)), $clipStart, $hookDuration);
         $this->cueWordList = array_merge(...array_map(fn ($c) => $c['words'], $cues ?: [['words' => []]]));
         foreach ($cues as $cue) {
             if ($this->style !== 'karaoke') {
@@ -414,63 +414,32 @@ class FFmpegService
         return $cues;
     }
 
-    /** Fallback for segments without word timing: split evenly by word count. */
-    private function proportionalCues(array $segments, float $clipStart, float $hookDuration): array
+    /**
+     * Words for segments without word timing: spread evenly over the line,
+     * which ends no later than the next line starts (caption lines overlap),
+     * and no word longer than MAX_SPREAD_WORD.
+     *
+     * @return array<int, array{text: string, start: float, end: float}>
+     */
+    private function spreadWords(array $segments): array
     {
-        $cues = [];
-        // Normalize: clip-relative times + hook-window clamp
-        $norm = [];
-        foreach ($segments as $seg) {
-            $relStart = $seg['start'] - $clipStart;
-            $relEnd = $seg['end'] - $clipStart;
-
-            if ($relEnd <= $hookDuration) {
-                continue; // fully hidden behind hook
-            }
-            if ($relStart < $hookDuration) {
-                $relStart = $hookDuration;
-            }
-            if ($relEnd <= $relStart) {
+        usort($segments, fn ($a, $b) => $a['start'] <=> $b['start']);
+        $words = [];
+        foreach ($segments as $i => $seg) {
+            $start = (float) $seg['start'];
+            $end = min((float) $seg['end'], (float) ($segments[$i + 1]['start'] ?? INF));
+            $texts = preg_split('/\s+/', trim($seg['text'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+            if (! $texts || $end <= $start) {
                 continue;
             }
-            $norm[] = ['start' => $relStart, 'end' => $relEnd, 'text' => trim($seg['text'])];
-        }
-
-        // Prevent overlap: a segment must end before the next begins, else
-        // ASS stacks both events into separate rows (the "berantakan" bug).
-        $n = count($norm);
-        for ($i = 0; $i < $n - 1; $i++) {
-            if ($norm[$i]['end'] > $norm[$i + 1]['start']) {
-                $norm[$i]['end'] = $norm[$i + 1]['start'];
+            $step = ($end - $start) / count($texts);
+            foreach ($texts as $k => $text) {
+                $at = $start + $k * $step;
+                $words[] = ['text' => $text, 'start' => $at, 'end' => $at + min($step, self::MAX_SPREAD_WORD)];
             }
         }
 
-        // Split each segment into short single-line cues (≤ MAX_CUE_WORDS),
-        // timed proportionally to word count so captions track the speech and
-        // never sprawl across multiple rows.
-        foreach ($norm as $seg) {
-            $words = preg_split('/\s+/', $seg['text'], -1, PREG_SPLIT_NO_EMPTY);
-            $total = count($words);
-            if ($total === 0) {
-                continue;
-            }
-
-            $dur = $seg['end'] - $seg['start'];
-            $cursor = $seg['start'];
-
-            $perWord = $dur / $total;
-            foreach (array_chunk($words, $this->cueWords) as $chunk) {
-                $cueStart = $cursor;
-                $cueWords = [];
-                foreach ($chunk as $word) {
-                    $cueWords[] = ['text' => $word, 'start' => $cursor];
-                    $cursor += $perWord;
-                }
-                $cues[] = ['start' => $cueStart, 'end' => $cursor, 'words' => $cueWords];
-            }
-        }
-
-        return $cues;
+        return $words;
     }
 
     /**
