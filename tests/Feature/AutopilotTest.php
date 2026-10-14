@@ -276,7 +276,7 @@ class AutopilotTest extends TestCase
         $this->assertSame('Baru', $fresh->fresh()->caption);
     }
 
-    public function test_review_is_paginated_with_pending_clips_first(): void
+    public function test_review_is_paginated_with_newest_clips_first(): void
     {
         $user = User::factory()->create();
         $project = ClipProject::create([
@@ -284,22 +284,60 @@ class AutopilotTest extends TestCase
             'layout_type' => 'reframe', 'clip_count' => 12, 'duration_mode' => 'auto', 'status' => 'done',
         ]);
         foreach (range(1, 12) as $i) {
-            GeneratedClip::create([
+            $clip = GeneratedClip::create([
                 'clip_project_id' => $project->id, 'ranking' => $i, 'start_seconds' => 0, 'end_seconds' => 30,
                 'topic' => "clip {$i}", 'reason' => 'r', 'status' => 'done',
-                'review_status' => $i <= 2 ? 'rejected' : 'pending', // decided ones were created first
+                'review_status' => $i <= 2 ? 'pending' : 'rejected', // still-pending ones are the oldest
             ]);
+            $clip->forceFill(['created_at' => now()->subHours(12 - $i), 'updated_at' => now()->subHours(20)])->save();
         }
 
         $first = $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
             ->assertJsonCount(9, 'data')
             ->assertJsonPath('last_page', 2)
             ->assertJsonPath('total', 12)
-            ->assertJsonPath('pending', 10);
-        $this->assertSame(['pending'], array_unique(array_column($first->json('data'), 'review_status')));
+            ->assertJsonPath('pending', 2);
+        $this->assertSame(['clip 12', 'clip 11', 'clip 10'], array_slice(array_column($first->json('data'), 'topic'), 0, 3));
 
         $second = $this->actingAs($user)->getJson('/api/autopilot/review?page=2')->assertOk()->assertJsonCount(3, 'data');
-        $this->assertSame(['pending', 'rejected', 'rejected'], array_column($second->json('data'), 'review_status'));
+        $this->assertSame(['clip 3', 'clip 2', 'clip 1'], array_column($second->json('data'), 'topic'));
+    }
+
+    public function test_clean_approved_removes_finished_clips_and_empty_projects(): void
+    {
+        Storage::fake();
+        $user = User::factory()->create();
+        $mkProject = fn () => ClipProject::create([
+            'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/abcdefg',
+            'layout_type' => 'reframe', 'clip_count' => 2, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        $done = $mkProject();
+        $mixed = $mkProject();
+        $mk = fn ($project, $review, $tiktok, $path = null) => GeneratedClip::create([
+            'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
+            'topic' => 't', 'reason' => 'r', 'status' => 'done', 'review_status' => $review,
+            'tiktok_status' => $tiktok, 'output_path' => $path,
+        ]);
+        Storage::put('clips/sent.mp4', 'a');
+        Storage::put('clips/up.mp4', 'b');
+        $sent = $mk($done, 'approved', 'inbox', 'clips/sent.mp4');
+        $failed = $mk($mixed, 'approved', 'failed');
+        $uploading = $mk($mixed, 'approved', 'uploading', 'clips/up.mp4');
+        $pending = $mk($mixed, 'pending', null);
+
+        $this->actingAs(User::factory()->create())->postJson('/api/autopilot/review/clean-approved')
+            ->assertOk()->assertJson(['removed' => 0]);
+
+        $this->actingAs($user)->postJson('/api/autopilot/review/clean-approved')->assertOk()->assertJson(['removed' => 2]);
+
+        $this->assertModelMissing($sent);
+        $this->assertModelMissing($failed);
+        Storage::assertMissing('clips/sent.mp4');
+        $this->assertModelMissing($done);               // nothing left in it
+        $this->assertModelExists($uploading);           // TikTok still has it in flight
+        Storage::assertExists('clips/up.mp4');
+        $this->assertModelExists($pending);
+        $this->assertModelExists($mixed);
     }
 
     public function test_clip_download_supports_range_requests_for_previews(): void

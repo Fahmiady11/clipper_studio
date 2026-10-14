@@ -139,9 +139,8 @@ class AutopilotController extends Controller
         $page = (clone $base)
             ->when($status, fn ($q) => $q->where('review_status', $status))
             ->with('clipProject.videoSource')
-            ->orderByRaw("CASE WHEN review_status = 'pending' THEN 0 ELSE 1 END")
-            ->orderByRaw("CASE WHEN review_status = 'pending' THEN created_at END")
-            ->latest('updated_at')
+            ->latest() // newest clips on page 1
+            ->orderBy('ranking')
             ->orderBy('id') // stable order, so no clip shows on two pages
             ->paginate(self::REVIEW_PER_PAGE);
 
@@ -216,6 +215,36 @@ class AutopilotController extends Controller
         $cleanup->releaseSource($clip->clipProject); // drop the source video once no clip still needs it
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Clear approved clips that are done with TikTok (sent, posted or failed):
+     * the file and the row go, and an autopilot project left without clips is
+     * deleted along with its source video. Clips still uploading are kept.
+     */
+    public function cleanApproved(StorageCleanup $cleanup): JsonResponse
+    {
+        $clips = GeneratedClip::with('clipProject')
+            ->where('review_status', 'approved')
+            ->where(fn ($q) => $q->whereNull('tiktok_status')->orWhereNotIn('tiktok_status', ['queued', 'uploading', 'processing']))
+            ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
+            ->get();
+
+        foreach ($clips as $clip) {
+            if ($clip->output_path) {
+                Storage::delete($clip->output_path);
+            }
+            $clip->delete();
+        }
+
+        foreach ($clips->pluck('clipProject')->unique('id') as $project) {
+            $cleanup->releaseSource($project);
+            if ($project->video_source_id && ! $project->generatedClips()->exists()) {
+                $project->delete();
+            }
+        }
+
+        return response()->json(['removed' => $clips->count()]);
     }
 
     private function latestManualProject(): ?ClipProject

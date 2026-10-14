@@ -47,6 +47,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::delete('/autopilot/sources/{sourceId}', [AutopilotController::class, 'destroySource']);
     Route::post('/autopilot/sources/{sourceId}/run', [AutopilotController::class, 'runSource'])->middleware('throttle:10,1');
     Route::get('/autopilot/review', [AutopilotController::class, 'review']);
+    Route::post('/autopilot/review/clean-approved', [AutopilotController::class, 'cleanApproved']);
     Route::post('/autopilot/review/{clipId}/approve', [AutopilotController::class, 'approve']);
     Route::post('/autopilot/review/{clipId}/reject', [AutopilotController::class, 'reject']);
 });

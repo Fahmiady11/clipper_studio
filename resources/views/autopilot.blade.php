@@ -91,8 +91,9 @@
   .ap-result.is-fail { color: #f87171; }
   .ap-result small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
 
-  .ap-filter { margin-bottom: 16px; overflow-x: auto; }
-  .ap-filter .seg { display: inline-flex; }
+  .ap-filter { margin-bottom: 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  .ap-filter .seg { display: inline-flex; max-width: 100%; overflow-x: auto; }
+  .ap-clean { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted); }
   .ap-filter-n { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: .7; }
   .ap-pager { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
   .ap-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
@@ -271,6 +272,13 @@
               <span x-text="f.label"></span> <span class="ap-filter-n" x-text="filterCount(f.id)"></span>
             </button>
           </template>
+        </div>
+        <div class="ap-clean" x-show="reviewStatus === 'approved' && (reviewCounts.approved > 0 || cleanMsg)">
+          <span x-show="cleanMsg" x-text="cleanMsg"></span>
+          <button class="btn btn-ghost ap-btn btn-danger" type="button" x-show="reviewCounts.approved > 0" :disabled="cleaning" @click="cleanApproved()"
+                  title="Hapus file & daftar klip yang sudah dikirim ke TikTok">
+            <span x-text="cleaning ? 'Membersihkan…' : 'Bersihkan'"></span>
+          </button>
         </div>
       </div>
 
@@ -625,6 +633,7 @@ function autopilot() {
     formError: null, timer: null, copied: '', captionState: {}, captionBusy: false,
     reviewPage: 1, reviewLastPage: 1, reviewTotal: 0, pendingCount: 0,
     reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
+    cleaning: false, cleanMsg: '',
     REVIEW_FILTERS: [
       { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
       { id: 'approved', label: 'Disetujui' }, { id: 'rejected', label: 'Ditolak' },
@@ -736,6 +745,7 @@ function autopilot() {
       if (id === this.reviewStatus) return;
       this.reviewStatus = id;
       this.reviewPage = 1;
+      this.cleanMsg = '';
       this.clips = [];
       await this.loadClips();
     },
@@ -814,6 +824,19 @@ function autopilot() {
         await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST', body: JSON.stringify({ account_id: this.accountId }) });
         await this.loadClips();
       } catch (e) { c.actionError = e.message; }
+    },
+    // Approved clips are already in TikTok: drop their files and cards
+    async cleanApproved() {
+      if (!confirm('Hapus semua klip yang sudah disetujui dari daftar ini? File videonya ikut dihapus dari server. Klip yang masih diupload ke TikTok tidak disentuh.')) return;
+      this.cleaning = true;
+      this.cleanMsg = '';
+      try {
+        const r = await api('/api/autopilot/review/clean-approved', { method: 'POST' });
+        this.cleanMsg = r.removed ? r.removed + ' klip dibersihkan.' : 'Tidak ada yang bisa dibersihkan (masih diupload).';
+        this.reviewPage = 1;
+        await this.loadClips();
+      } catch (e) { this.cleanMsg = e.message; }
+      finally { this.cleaning = false; }
     },
     async reject(c) {
       c.actionError = null;
