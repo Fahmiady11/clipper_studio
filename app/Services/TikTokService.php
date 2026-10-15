@@ -96,7 +96,7 @@ class TikTokService
      * Post straight to the profile (scope video.publish). Until the app passes
      * TikTok's audit only privacy_level SELF_ONLY is accepted.
      *
-     * @param  array{title: string, privacy_level: string, disable_comment: bool, disable_duet: bool, disable_stitch: bool}  $postInfo
+     * @param  array{title: string, privacy_level: string, disable_comment: bool, disable_duet: bool, disable_stitch: bool, brand_organic_toggle?: bool, brand_content_toggle?: bool}  $postInfo
      * @return string publish_id
      */
     public function directPost(TiktokAccount $account, string $path, array $postInfo): string

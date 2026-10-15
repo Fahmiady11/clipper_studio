@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class TikTokController extends Controller
@@ -93,7 +94,14 @@ class TikTokController extends Controller
             'disable_comment' => ['exclude_unless:mode,direct', 'boolean'],
             'disable_duet' => ['exclude_unless:mode,direct', 'boolean'],
             'disable_stitch' => ['exclude_unless:mode,direct', 'boolean'],
+            // Commercial content disclosure: promoting your own brand / a paid partnership
+            'brand_organic_toggle' => ['exclude_unless:mode,direct', 'boolean'],
+            'brand_content_toggle' => ['exclude_unless:mode,direct', 'boolean'],
         ]);
+        // TikTok rejects branded content that only the creator can see
+        if (! empty($data['brand_content_toggle']) && ($data['privacy_level'] ?? null) === 'SELF_ONLY') {
+            throw ValidationException::withMessages(['privacy_level' => 'Branded content tidak bisa diposting sebagai "Hanya saya".']);
+        }
         $mode = $data['mode'] ?? 'inbox';
         $clip = $this->ownedClip($clipId);
         $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']);
@@ -118,6 +126,8 @@ class TikTokController extends Controller
             'disable_comment' => (bool) ($data['disable_comment'] ?? false),
             'disable_duet' => (bool) ($data['disable_duet'] ?? false),
             'disable_stitch' => (bool) ($data['disable_stitch'] ?? false),
+            'brand_organic_toggle' => (bool) ($data['brand_organic_toggle'] ?? false),
+            'brand_content_toggle' => (bool) ($data['brand_content_toggle'] ?? false),
         ] : [];
         UploadToTikTokJob::dispatch($clip->id, $account->id, $mode, $postInfo);
         $this->ensureQueueWorkerRunning();

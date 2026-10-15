@@ -63,6 +63,7 @@ function studio() {
     tiktokStatus: null, tiktokError: null, tiktokTimer: null,
     tiktokMode: 'inbox', tiktokCreator: null, tiktokCreatorError: null, tiktokCreatorLoading: false,
     tiktokTitle: '', tiktokPrivacy: '', tiktokAllowComment: false, tiktokAllowDuet: false, tiktokAllowStitch: false,
+    tiktokDisclose: false, tiktokBrandOrganic: false, tiktokBrandContent: false,
     PRIVACY_LABELS: {
       PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya',
     },
@@ -820,7 +821,7 @@ function studio() {
         uploading:  'Mengupload video ke TikTok…',
         processing: 'TikTok sedang memproses video…',
         inbox:      '✓ Terkirim ke inbox TikTok — buka app TikTok untuk menambah sound & posting.',
-        published:  '✓ Sudah diposting di TikTok (cek profil kamu; sebelum app diaudit, videonya private).',
+        published:  '✓ Sudah diposting di TikTok — cek profil kamu.',
         failed:     'Upload gagal.',
       }[this.tiktokStatus] || '';
     },
@@ -845,7 +846,23 @@ function studio() {
     get tiktokCanSubmit() {
       if (this.tiktokBusy || !this.tiktokAccountId) return false;
       if (this.tiktokMode === 'inbox') return true;
-      return !!this.tiktokCreator && !!this.tiktokPrivacy;
+      if (!this.tiktokCreator || !this.tiktokPrivacy || this.tiktokTooLong) return false;
+      if (this.tiktokBrandContent && this.tiktokPrivacy === 'SELF_ONLY') return false;
+      return !this.tiktokDisclose || this.tiktokBrandOrganic || this.tiktokBrandContent;
+    },
+    get tiktokClipSeconds() {
+      const c = this.selectedClipObj;
+      return c ? Number(c.end_seconds) - Number(c.start_seconds) : 0;
+    },
+    get tiktokTooLong() {
+      const max = this.tiktokCreator?.max_video_post_duration_sec;
+      return !!max && this.tiktokClipSeconds > max;
+    },
+    // Label TikTok puts on the video once the disclosure is on
+    get tiktokBrandLabel() {
+      if (this.tiktokBrandContent) return 'Paid partnership';
+      if (this.tiktokBrandOrganic) return 'Promotional content';
+      return '';
     },
     async loadTiktokCreator() {
       this.tiktokCreator = null; this.tiktokCreatorError = null; this.tiktokPrivacy = '';
@@ -877,6 +894,8 @@ function studio() {
         disable_comment: !this.tiktokAllowComment,
         disable_duet: !this.tiktokAllowDuet,
         disable_stitch: !this.tiktokAllowStitch,
+        brand_organic_toggle: this.tiktokDisclose && this.tiktokBrandOrganic,
+        brand_content_toggle: this.tiktokDisclose && this.tiktokBrandContent,
       } : {};
       try {
         const res = await fetch(`/api/clips/${clipId}/tiktok`, {

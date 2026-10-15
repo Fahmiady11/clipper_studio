@@ -128,18 +128,47 @@
               <div class="fblock-title" style="margin:12px 0 6px">Siapa yang bisa melihat</div>
               <div class="seg" style="flex-wrap:wrap">
                 <template x-for="p in (tiktokCreator.privacy_level_options || [])" :key="p">
-                  <button :class="{ on: tiktokPrivacy === p }" @click="tiktokPrivacy = p" type="button" x-text="PRIVACY_LABELS[p] || p"></button>
+                  <button :class="{ on: tiktokPrivacy === p }" @click="tiktokPrivacy = p" type="button"
+                          :disabled="p === 'SELF_ONLY' && tiktokBrandContent"
+                          :style="p === 'SELF_ONLY' && tiktokBrandContent ? 'opacity:.4;cursor:not-allowed' : ''"
+                          :title="p === 'SELF_ONLY' && tiktokBrandContent ? 'Branded content tidak bisa diposting privat' : ''"
+                          x-text="PRIVACY_LABELS[p] || p"></button>
                 </template>
               </div>
-              <div style="margin-top:6px;font-size:12px;color:var(--text-dim)">Selama app belum diaudit TikTok, hanya "Hanya saya" yang diterima.</div>
+              <div x-show="tiktokTooLong" style="margin-top:8px;font-size:12px;color:#f87171"
+                   x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik, akun TikTok ini maksimal ${tiktokCreator.max_video_post_duration_sec} detik. Pendekkan clip dulu.`"></div>
 
               <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:13px">
                 <label :style="tiktokCreator.comment_disabled ? 'opacity:.5' : ''"><input type="checkbox" x-model="tiktokAllowComment" :disabled="tiktokCreator.comment_disabled"> Izinkan komentar</label>
                 <label :style="tiktokCreator.duet_disabled ? 'opacity:.5' : ''"><input type="checkbox" x-model="tiktokAllowDuet" :disabled="tiktokCreator.duet_disabled"> Izinkan duet</label>
                 <label :style="tiktokCreator.stitch_disabled ? 'opacity:.5' : ''"><input type="checkbox" x-model="tiktokAllowStitch" :disabled="tiktokCreator.stitch_disabled"> Izinkan stitch</label>
               </div>
+
+              {{-- Commercial content disclosure (required by TikTok's Content Sharing Guidelines) --}}
+              <div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:13px">
+                <label style="display:flex;gap:8px;align-items:flex-start">
+                  <input type="checkbox" x-model="tiktokDisclose" @change="if (!tiktokDisclose) { tiktokBrandOrganic = false; tiktokBrandContent = false }">
+                  <span><b>Ungkapkan konten video</b><br><span style="color:var(--text-dim);font-size:12px">Aktifkan kalau video ini mempromosikan brand, produk, atau jasa.</span></span>
+                </label>
+                <div x-show="tiktokDisclose" style="margin:10px 0 0 24px;display:flex;flex-direction:column;gap:8px">
+                  <label style="display:flex;gap:8px;align-items:flex-start">
+                    <input type="checkbox" x-model="tiktokBrandOrganic">
+                    <span>Brand kamu sendiri<br><span style="color:var(--text-dim);font-size:12px">Kamu mempromosikan diri sendiri atau bisnismu sendiri.</span></span>
+                  </label>
+                  <label style="display:flex;gap:8px;align-items:flex-start">
+                    <input type="checkbox" x-model="tiktokBrandContent" @change="if (tiktokBrandContent && tiktokPrivacy === 'SELF_ONLY') tiktokPrivacy = ''">
+                    <span>Branded content<br><span style="color:var(--text-dim);font-size:12px">Kamu mempromosikan brand lain atau pihak ketiga.</span></span>
+                  </label>
+                  <div x-show="tiktokDisclose && !tiktokBrandOrganic && !tiktokBrandContent" style="font-size:12px;color:#fbbf24">Pilih minimal satu jenis promosi.</div>
+                  <div x-show="tiktokBrandLabel" style="font-size:12px;color:var(--text-muted)" x-text="`Video kamu akan diberi label '${tiktokBrandLabel}'.`"></div>
+                </div>
+              </div>
+
               <div style="margin-top:10px;font-size:12px;color:var(--text-dim)">
-                Dengan memposting, kamu menyetujui Music Usage Confirmation TikTok. Video mungkin butuh beberapa menit sampai tampil di profil.
+                Dengan memposting, kamu menyetujui
+                <template x-if="tiktokBrandContent"><span><a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener" style="color:var(--text-muted)">Branded Content Policy</a> dan </span></template>
+                <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener" style="color:var(--text-muted)">Music Usage Confirmation</a> TikTok.
+                Video mungkin butuh beberapa menit sampai tampil di profil.
               </div>
             </div>
           </template>
