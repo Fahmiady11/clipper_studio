@@ -10,6 +10,7 @@ use App\Services\MusicService;
 use App\Services\TranscriptService;
 use App\Services\YtDlpService;
 use App\Support\Cancellation;
+use App\Support\ClipBoundaries;
 use App\Support\HookText;
 use App\Support\JobCancelled;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -148,11 +149,13 @@ class AnalyzeVideoJob implements ShouldQueue
         $this->stage($project, 6);
         $auto = $project->video_source_id !== null;
         foreach ($clips as $clip) {
+            // Start and end on real sentence boundaries, not mid-word
+            [$start, $end] = ClipBoundaries::snap((float) $clip['start_seconds'], (float) $clip['end_seconds'], $transcriptData['segments']);
             $generated = GeneratedClip::create([
                 'clip_project_id' => $project->id,
                 'ranking' => $clip['ranking'],
-                'start_seconds' => $clip['start_seconds'],
-                'end_seconds' => $clip['end_seconds'],
+                'start_seconds' => $start,
+                'end_seconds' => $end,
                 'topic' => $clip['topic'] ?? 'Clip #'.$clip['ranking'],
                 'reason' => $clip['reason'] ?? '',
                 'viral_potential' => $clip['viral_potential'] ?? 'sedang',
