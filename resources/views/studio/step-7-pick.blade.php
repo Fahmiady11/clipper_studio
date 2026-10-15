@@ -15,11 +15,16 @@
             x-text="cancelling ? 'Membatalkan…' : 'Batalkan'"></button>
   </div>
 
-  <div class="batch-bar" x-show="clips.length > 1 && !renderingClipId && (unrenderedClips.length > 0 || batchRendering)">
-    <span x-show="!batchRendering" x-text="unrenderedClips.length + ' clip belum dirender. Render semuanya sekaligus, hasilnya bisa dibuka satu per satu.'"></span>
+  <div class="batch-bar" x-show="clips.length > 1 && !renderingClipId && (unrenderedClips.length > 0 || batchRendering || doneClips >= 2)">
+    <span x-show="!batchRendering && unrenderedClips.length > 0" x-text="unrenderedClips.length + ' clip belum dirender. Render semuanya sekaligus, hasilnya bisa dibuka satu per satu.'"></span>
     <span x-show="batchRendering" x-text="'Merender ' + clips.filter(c => c.status === 'processing').length + ' clip… boleh tinggalkan halaman ini.'"></span>
-    <button class="btn btn-secondary btn-sm" type="button" x-show="unrenderedClips.length > 0" @click="renderAll()" :disabled="batchStarting"
-            x-text="batchStarting ? 'Memulai…' : 'Render semua (' + unrenderedClips.length + ')'"></button>
+    <span x-show="!batchRendering && unrenderedClips.length === 0" x-text="'Semua ' + doneClips + ' clip sudah dirender.'"></span>
+    <div class="batch-actions">
+      <a class="btn btn-secondary btn-sm" x-show="doneClips >= 2" :href="'/api/projects/' + projectId + '/download'"
+         x-text="'Download semua (' + doneClips + ') · ZIP'"></a>
+      <button class="btn btn-secondary btn-sm" type="button" x-show="unrenderedClips.length > 0" @click="renderAll()" :disabled="batchStarting"
+              x-text="batchStarting ? 'Memulai…' : 'Render semua (' + unrenderedClips.length + ')'"></button>
+    </div>
   </div>
 
   <div x-show="renderError" style="margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:#f87171" x-text="renderError"></div>

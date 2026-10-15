@@ -680,6 +680,7 @@ function studio() {
 
     // ── render every clip at once ────────────────────────────────────────────
     get unrenderedClips() { return this.clips.filter(c => c.status !== 'done' && c.status !== 'processing'); },
+    get doneClips() { return this.clips.filter(c => c.status === 'done').length; },
     get batchRendering() { return !this.renderingClipId && this.clips.some(c => c.status === 'processing'); },
     async renderAll() {
       if (this.batchStarting || this.renderingClipId) return;
