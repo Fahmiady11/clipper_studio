@@ -273,9 +273,10 @@ class FFmpegService
         $untimed = [];
         foreach ($segments as $seg) {
             if (! empty($seg['words'])) {
-                array_push($timedWords, ...$seg['words']);
+                // Caption sound tags ("[tertawa]", "[Musik]", ♪) are not speech
+                array_push($timedWords, ...array_filter($seg['words'], fn ($w) => self::stripSoundTags($w['text'] ?? '') !== ''));
             } else {
-                $untimed[] = $seg;
+                $untimed[] = ['text' => self::stripSoundTags($seg['text'] ?? '')] + $seg;
             }
         }
         $cues = $this->wordCues(array_merge($timedWords, $this->spreadWords($untimed)), $clipStart, $hookDuration);
@@ -291,6 +292,11 @@ class FFmpegService
         }
 
         return $ass;
+    }
+
+    private static function stripSoundTags(string $text): string
+    {
+        return trim(preg_replace(['/\[[^\]]*\]/u', '/[♪♫♬]+/u', '/\s+/u'], ['', '', ' '], $text));
     }
 
     /**

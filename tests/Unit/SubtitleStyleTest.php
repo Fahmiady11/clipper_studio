@@ -108,4 +108,20 @@ class SubtitleStyleTest extends TestCase
         $spoken = array_values(array_unique(array_map(fn ($e) => preg_replace('/\{[^}]*\}/', '', $e[3]), $m)));
         $this->assertSame('jadi kita mulai oke dari awal lagi dua kata', implode(' ', $spoken));
     }
+
+    public function test_caption_sound_tags_are_not_shown(): void
+    {
+        $segments = [
+            ['start' => 0.0, 'end' => 2.0, 'text' => 'halo [tertawa] semua', 'words' => [
+                ['start' => 0.0, 'end' => 0.5, 'text' => 'halo'], ['start' => 0.5, 'end' => 1.0, 'text' => '[tertawa]'], ['start' => 1.0, 'end' => 1.5, 'text' => 'semua'],
+            ]],
+            ['start' => 3.0, 'end' => 5.0, 'text' => '[Musik] ♪ lagi enak ♪'],
+            ['start' => 6.0, 'end' => 8.0, 'text' => '[Tepuk tangan]'],
+        ];
+        $ass = (new FFmpegService)->buildAssFile($segments, ['background_style' => 'none']);
+
+        $this->assertStringNotContainsString('[', preg_replace('/^(?!Dialogue).*$/m', '', $ass));
+        $this->assertStringNotContainsString('♪', $ass);
+        $this->assertMatchesRegularExpression('/^Dialogue: .*lagi .*enak/m', $ass); // the speech around the tags stays
+    }
 }
