@@ -4,7 +4,7 @@ function studio() {
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
     'url','meta',
-    'layout',
+    'layout','jumpCut','autoZoom',
     'clipCount','durationMode','minDuration','maxDuration',
     'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
@@ -40,7 +40,7 @@ function studio() {
     sessionId: null, historyOpen: false, history: [], clearingHistory: false,
 
     url: '', meta: null, loadingMeta: false, metaError: null,
-    layout: 'reframe',
+    layout: 'reframe', jumpCut: true, autoZoom: true,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 56,
     subtitleTextColor: '#ffffff', subtitleHighlight: '#facc15',
@@ -394,6 +394,7 @@ function studio() {
           body: JSON.stringify({
             youtube_url: this.url,
             layout_type: this.layout,
+            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom },
             clip_count: this.clipCount,
             duration_mode: this.durationMode,
             min_duration: this.durationMode === 'manual' ? this.minDuration : null,

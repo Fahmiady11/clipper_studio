@@ -80,8 +80,10 @@ class FFmpegService
      *                             snaps back to the previous keyframe and shifts
      *                             the clip's t=0 away from $start (subtitle drift).
      * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
+     * @param  array|null  $pieces  SmartCut pieces to keep (clip-relative); the rest is cut out
+     * @param  array  $zoom  SmartCut spans (on the cut timeline) shown punched in
      */
-    public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null): void
+    public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = []): void
     {
         // Map new layout IDs to VideoLayoutService's filter method
         $layoutMap = [
@@ -90,11 +92,16 @@ class FFmpegService
         ];
 
         $mode = $layoutMap[$layoutType] ?? 'gaussian_blur';
-        $filterLabel = '[out]';
-        $filterGraph = $this->layout->layoutFilter($mode, $filterLabel, $track);
+        $filterGraph = $this->layout->layoutFilter($mode, '[lay]', $track);
         // Drop to 30fps before the per-frame crop/scale/sharpen, not after it
         if ($this->probeFps($input) > 30.5) {
             $filterGraph = preg_replace('/^\[0:v\]/', '[0:v]fps=30,', $filterGraph);
+        }
+        $audio = $this->hasAudio($input);
+        [$filterGraph, $video, $audioOut] = $this->jumpCuts($filterGraph, '[lay]', $audio ? '[0:a]' : null, $pieces ?? []);
+        if ($zoom) {
+            $filterGraph .= ';'.$this->punchZoom($video, $zoom, '[out]');
+            $video = '[out]';
         }
 
         $trimIn = '';
@@ -105,17 +112,64 @@ class FFmpegService
         }
 
         $cmd = sprintf(
-            '%s -y%s -i %s%s -filter_complex %s -map %s -map 0:a? '.self::ENCODE_INTERMEDIATE.' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.self::ENCODE_INTERMEDIATE.' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             $trimIn,
             escapeshellarg($input),
             $trimOut,
             escapeshellarg($filterGraph),
-            escapeshellarg($filterLabel),
+            escapeshellarg($video),
+            ' -map '.escapeshellarg($audioOut ?? '0:a?'),
             escapeshellarg($output)
         );
 
         $this->exec($cmd, 'applyLayout');
+    }
+
+    /**
+     * Keep only $pieces of the laid-out video (and its audio), joined back to
+     * back. Each piece is trimmed from the same stream and concatenated, so
+     * audio and picture restart together at every cut and never drift apart.
+     *
+     * @return array{0: string, 1: string, 2: string|null} [filter graph, video label, audio label]
+     */
+    private function jumpCuts(string $graph, string $video, ?string $audio, array $pieces): array
+    {
+        $n = count($pieces);
+        if ($n < 2) {
+            return [$graph, $video, null]; // audio is mapped straight from the input
+        }
+
+        $vSplit = implode('', array_map(fn ($i) => "[jv{$i}]", range(0, $n - 1)));
+        $parts = [$graph, "{$video}split={$n}{$vSplit}"];
+        if ($audio) {
+            $parts[] = "{$audio}asplit={$n}".implode('', array_map(fn ($i) => "[ja{$i}]", range(0, $n - 1)));
+        }
+        $concatIn = '';
+        foreach (array_values($pieces) as $i => [$a, $b]) {
+            $range = sprintf('start=%.3f:end=%.3f', $a, $b);
+            $parts[] = "[jv{$i}]trim={$range},setpts=PTS-STARTPTS[cv{$i}]";
+            $concatIn .= "[cv{$i}]";
+            if ($audio) {
+                $parts[] = "[ja{$i}]atrim={$range},asetpts=PTS-STARTPTS[ca{$i}]";
+                $concatIn .= "[ca{$i}]";
+            }
+        }
+        $parts[] = $concatIn.sprintf('concat=n=%d:v=1:a=%d', $n, $audio ? 1 : 0).($audio ? '[cutv][cuta]' : '[cutv]');
+
+        return [implode(';', $parts), '[cutv]', $audio ? '[cuta]' : null];
+    }
+
+    /** Show a punched-in copy of the frame (zoomed toward the upper middle, where faces sit) during $spans. */
+    private function punchZoom(string $video, array $spans, string $label): string
+    {
+        $w = (int) round(1080 * SmartCut::ZOOM / 2) * 2;
+        $h = (int) round(1920 * SmartCut::ZOOM / 2) * 2;
+        $on = implode('+', array_map(fn ($s) => sprintf('between(t,%.3f,%.3f)', $s[0], $s[1] - 0.001), $spans));
+
+        return "{$video}split=2[zbase][zsrc];"
+            ."[zsrc]scale={$w}:{$h}:flags=bicubic,crop=1080:1920:(iw-ow)/2:(ih-oh)*0.4[zin];"
+            ."[zbase][zin]overlay=0:0:enable='{$on}'{$label}";
     }
 
     public function burnSubtitles(string $input, string $assPath, string $output): void

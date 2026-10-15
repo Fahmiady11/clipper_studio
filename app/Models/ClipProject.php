@@ -23,6 +23,8 @@ class ClipProject extends Model
         'duration_seconds',
         'thumbnail_url',
         'layout_type',
+        'jump_cut',
+        'auto_zoom',
         'clip_count',
         'duration_mode',
         'min_duration',
@@ -43,6 +45,8 @@ class ClipProject extends Model
         'min_duration' => 'integer',
         'max_duration' => 'integer',
         'music_enabled' => 'boolean',
+        'jump_cut' => 'boolean',
+        'auto_zoom' => 'boolean',
         'music_volume' => 'integer',
         'cancelled_at' => 'datetime',
     ];

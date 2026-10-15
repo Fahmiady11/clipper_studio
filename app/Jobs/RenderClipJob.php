@@ -7,6 +7,7 @@ use App\Services\FaceTracker;
 use App\Services\FFmpegService;
 use App\Services\HookRenderer;
 use App\Services\MusicService;
+use App\Services\SmartCut;
 use App\Services\YtDlpService;
 use App\Support\Cancellation;
 use App\Support\JobCancelled;
@@ -99,7 +100,31 @@ class RenderClipJob implements ShouldQueue
             $track = app(FaceTracker::class)->plan($srcVideo, (float) $clip->start_seconds, (float) $clip->end_seconds);
             $log->info('Face tracking', ['pieces' => $track ? count($track) : 0]);
         }
-        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, (float) $clip->start_seconds, (float) $clip->end_seconds, $track);
+
+        // Transcript lines of this clip: they drive the cuts, the zoom and the subtitles
+        $clipStart = (float) $clip->start_seconds;
+        $rawSegments = $project->transcript?->content ?? $clip->subtitle_json ?? [];
+        $clipSegments = array_values(array_filter($rawSegments, fn ($s) => ($s['end'] ?? 0) > $clip->start_seconds &&
+            ($s['start'] ?? 0) < $clip->end_seconds
+        ));
+
+        // Jump cuts drop pauses and filler words; punch-ins change at cuts and sentence ends
+        $pieces = [[0.0, (float) $clip->end_seconds - $clipStart]];
+        if ($project->jump_cut) {
+            $words = array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments));
+            $pieces = app(SmartCut::class)->pieces($srcVideo, $clipStart, (float) $clip->end_seconds, $words);
+            $clipSegments = SmartCut::remapSegments($clipSegments, $pieces, $clipStart);
+        }
+        $clipDuration = SmartCut::outputDuration($pieces);
+        $zoom = [];
+        if ($project->auto_zoom) {
+            $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart, 'end' => ($w['end'] ?? $w['start']) - $clipStart],
+                array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
+            $zoom = SmartCut::zoomPlan($pieces, $words, $clipDuration);
+        }
+        $log->info('Smart cut', ['pieces' => count($pieces), 'duration' => round($clipDuration, 2), 'zoom' => count($zoom)]);
+
+        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom);
 
         $current = $step2;
         Cancellation::throwIfCancelled();
@@ -132,21 +157,13 @@ class RenderClipJob implements ShouldQueue
         $assPath = null;
         $subtitle = $project->subtitleSetting;
         if ($subtitle && $subtitle->enabled) {
-            // Use DB transcript segments (real YouTube caption timestamps) instead of
-            // Gemini-generated subtitle_json (AI approximation — causes timing drift).
-            $transcript = $project->transcript;
-            $rawSegments = $transcript?->content ?? $clip->subtitle_json ?? [];
-
-            // Filter to segments overlapping this clip's time window
-            $clipSegments = array_values(array_filter($rawSegments, fn ($s) => ($s['end'] ?? 0) > $clip->start_seconds &&
-                ($s['start'] ?? 0) < $clip->end_seconds
-            ));
-
+            // DB transcript segments (real YouTube caption timestamps) rather than
+            // Gemini's subtitle_json (AI approximation, drifts); on the cut timeline.
             if (! empty($clipSegments)) {
                 $log->info('Building subtitles', [
                     'font' => $subtitle->font_family,
                     'position' => $subtitle->position,
-                    'source' => $transcript ? 'transcript' : 'subtitle_json',
+                    'source' => $project->transcript ? 'transcript' : 'subtitle_json',
                     'segments' => count($clipSegments),
                 ]);
                 $assPath = $tempDir.'/sub_'.$this->clipId.'.ass';
@@ -159,7 +176,7 @@ class RenderClipJob implements ShouldQueue
                     'position_y' => $subtitle->position_y,
                     'background_style' => $subtitle->background_style,
                     'style' => $subtitle->style,
-                ], (float) $clip->start_seconds, $hookDuration);
+                ], $clipStart, $hookDuration);
                 file_put_contents($assPath, $assContent);
             } else {
                 $log->debug('Subtitles skipped — no segments in clip range', [
@@ -173,7 +190,7 @@ class RenderClipJob implements ShouldQueue
 
         // Emoji pop in over keywords of the subtitle words just built
         $emojis = $assPath && $subtitle->emoji
-            ? $ffmpeg->emojiOverlays((float) $clip->end_seconds - (float) $clip->start_seconds)
+            ? $ffmpeg->emojiOverlays($clipDuration)
             : [];
 
         // 5. Single pass: burn subtitles + overlay hook + emoji, audio preserved

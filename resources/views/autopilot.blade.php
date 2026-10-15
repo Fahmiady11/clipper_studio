@@ -380,6 +380,20 @@
               </div>
             </div>
             <div class="fblock">
+              <button class="tgl" :class="{ on: ed.s.edit.jump_cut }" @click="ed.s.edit.jump_cut = !ed.s.edit.jump_cut" type="button">
+                <span class="tgl-track"></span>
+                <span class="tgl-text">Potong jeda &amp; kata pengisi</span>
+              </button>
+              <div class="ap-ed-note">Jeda diam dan "eh", "hmm" dipotong supaya clip terasa cepat.</div>
+            </div>
+            <div class="fblock">
+              <button class="tgl" :class="{ on: ed.s.edit.zoom }" @click="ed.s.edit.zoom = !ed.s.edit.zoom" type="button">
+                <span class="tgl-track"></span>
+                <span class="tgl-text">Zoom otomatis</span>
+              </button>
+              <div class="ap-ed-note">Zoom-in sebentar di potongan dan akhir kalimat.</div>
+            </div>
+            <div class="fblock">
               <div class="fblock-title" style="margin-bottom:10px">Clip per video</div>
               <div class="seg">
                 <template x-for="n in [1, 3, 5]" :key="n">
@@ -679,6 +693,7 @@ function autopilot() {
       this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), saving: false, error: null };
       this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles / emoji existed
       this.ed.s.subtitle.emoji ??= true;
+      this.ed.s.edit ??= { jump_cut: true, zoom: true }; // saved before smart editing existed
       this.pvTab = 'hook';
     },
     async saveEditor() {

@@ -24,4 +24,20 @@
       </button>
     </template>
   </div>
+  <div class="edit-opts">
+    <div class="fblock">
+      <button class="tgl" :class="{ on: jumpCut }" @click="jumpCut = !jumpCut" type="button">
+        <span class="tgl-track"></span>
+        <span class="tgl-text">Potong jeda &amp; kata pengisi</span>
+      </button>
+      <div class="fhint" style="margin-top:8px">Jeda diam dan "eh", "hmm" dipotong, jadi clip terasa cepat seperti diedit manual.</div>
+    </div>
+    <div class="fblock">
+      <button class="tgl" :class="{ on: autoZoom }" @click="autoZoom = !autoZoom" type="button">
+        <span class="tgl-track"></span>
+        <span class="tgl-text">Zoom otomatis</span>
+      </button>
+      <div class="fhint" style="margin-top:8px">Gambar sedikit zoom-in dan kembali di potongan dan akhir kalimat, supaya tidak monoton.</div>
+    </div>
+  </div>
 </div>

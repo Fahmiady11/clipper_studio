@@ -620,6 +620,13 @@ button.user-menu-item:hover {
     border-radius: 6px
 }
 
+.edit-opts {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-top: 20px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+}
+.edit-opts .fblock { margin: 0; }
+@media (max-width: 640px) { .edit-opts { grid-template-columns: 1fr; } }
+
 .layout-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
