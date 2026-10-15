@@ -86,14 +86,9 @@ class RenderClipJob implements ShouldQueue
 
         $step2 = $tempDir.'/layout_'.$this->clipId.'.mp4';
 
-        // 1+2. Cut + layout in one re-encode pass. A stream-copy cut snaps to the
-        // previous keyframe, so the clip started up to a few seconds early and
-        // subtitles (timed from start_seconds) landed late by a varying amount.
-        $log->info('Cutting + applying layout', [
-            'layout' => $project->layout_type,
-            'start' => $clip->start_seconds,
-            'end' => $clip->end_seconds,
-        ]);
+        // 1+2. Cut + layout are part of the single re-encode pass below. A
+        // stream-copy cut snaps to the previous keyframe, so the clip started up
+        // to a few seconds early and subtitles landed late by a varying amount.
         // Reframe follows the faces (and the speaker on a two-shot) when the tracker is available
         $track = null;
         if ($project->layout_type === 'reframe') {
@@ -123,11 +118,6 @@ class RenderClipJob implements ShouldQueue
             $zoom = SmartCut::zoomPlan($pieces, $words, $clipDuration);
         }
         $log->info('Smart cut', ['pieces' => count($pieces), 'duration' => round($clipDuration, 2), 'zoom' => count($zoom)]);
-
-        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom);
-
-        $current = $step2;
-        Cancellation::throwIfCancelled();
 
         // 3. Resolve hook first — its duration drives subtitle suppression
         $hook = $project->hookSetting;
@@ -193,13 +183,13 @@ class RenderClipJob implements ShouldQueue
             ? $ffmpeg->emojiOverlays($clipDuration)
             : [];
 
-        // 5. Single pass: burn subtitles + overlay hook + emoji, audio preserved
-        if ($assPath || $hookOverlay) {
-            $log->info('Burning overlay', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis)]);
-            $final = $tempDir.'/final_'.$this->clipId.'.mp4';
-            $ffmpeg->burnSubtitlesAndHook($current, $assPath, $hookOverlay, $hookDuration, $final, $emojis);
-            $current = $final;
-        }
+        // 5. One pass from the source: cut + layout + jump cuts + zoom, with the
+        // subtitles, hook and emoji drawn on top (a single encode, audio kept)
+        $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis)]);
+        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
+            'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
+        ]);
+        $current = $step2;
         Cancellation::throwIfCancelled();
 
         // 6. Background music (ducked under the voice)

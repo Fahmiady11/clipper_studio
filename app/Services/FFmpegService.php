@@ -82,8 +82,11 @@ class FFmpegService
      * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
      * @param  array|null  $pieces  SmartCut pieces to keep (clip-relative); the rest is cut out
      * @param  array  $zoom  SmartCut spans (on the cut timeline) shown punched in
+     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array}|null  $overlay
+     *                                                                                                    Subtitles, hook and emoji drawn in the same pass,
+     *                                                                                                    which then is the final encode (one generation, no second pass)
      */
-    public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = []): void
+    public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = [], ?array $overlay = null): void
     {
         // Map new layout IDs to VideoLayoutService's filter method
         $layoutMap = [
@@ -100,23 +103,29 @@ class FFmpegService
         $audio = $this->hasAudio($input);
         [$filterGraph, $video, $audioOut] = $this->jumpCuts($filterGraph, '[lay]', $audio ? '[0:a]' : null, $pieces ?? []);
         if ($zoom) {
-            $filterGraph .= ';'.$this->punchZoom($video, $zoom, '[out]');
+            $filterGraph .= ';'.$this->punchZoom($video, $zoom, '[zoomed]');
+            $video = '[zoomed]';
+        }
+        $extraInputs = '';
+        if ($overlay !== null) {
+            [$extraInputs, $chain] = $this->overlayChain($video, '[out]', 1, $overlay['ass'] ?? null,
+                $overlay['hook'] ?? null, (float) ($overlay['hook_duration'] ?? 0), $overlay['emojis'] ?? []);
+            $filterGraph .= ';'.$chain;
             $video = '[out]';
         }
 
-        $trimIn = '';
-        $trimOut = '';
+        // -ss/-t before -i: they bound the source, not the hook/emoji inputs that follow
+        $trim = '';
         if ($start !== null && $end !== null) {
-            $trimIn = ' -ss '.escapeshellarg(sprintf('%.3f', $start));
-            $trimOut = ' -t '.escapeshellarg(sprintf('%.3f', $end - $start));
+            $trim = ' -ss '.escapeshellarg(sprintf('%.3f', $start)).' -t '.escapeshellarg(sprintf('%.3f', $end - $start));
         }
 
         $cmd = sprintf(
-            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.self::ENCODE_INTERMEDIATE.' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.($overlay !== null ? self::ENCODE_FINAL : self::ENCODE_INTERMEDIATE).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
-            $trimIn,
+            $trim,
             escapeshellarg($input),
-            $trimOut,
+            $extraInputs,
             escapeshellarg($filterGraph),
             escapeshellarg($video),
             ' -map '.escapeshellarg($audioOut ?? '0:a?'),
@@ -510,6 +519,55 @@ class FFmpegService
     }
 
     /**
+     * Subtitles, the hook block and emoji drawn over $from. The hook and emoji
+     * images are extra inputs numbered from $firstInput.
+     *
+     * @return array{0: string, 1: string} [input arguments, filter graph ending in $label]
+     */
+    private function overlayChain(string $from, string $label, int $firstInput, ?string $assPath, ?array $hook, float $hookDuration, array $emojis): array
+    {
+        $subs = $assPath ? 'ass='.$assPath.':fontsdir='.$this->layout->fontsDir() : 'null';
+        $inputs = '';
+        $parts = ["{$from}{$subs}[b0]"];
+        $n = 0; // overlays drawn so far
+        $in = $firstInput;
+
+        if ($hook && $hookDuration > 0) {
+            $fadeOut = min(0.25, $hookDuration / 4);
+            $pop = 'if(lt(t,0.14),0.82+t*1.857,if(lt(t,0.26),1.08-(t-0.14)*0.6667,1))';
+            $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', $hookDuration, escapeshellarg($hook['image']));
+            $n++;
+            $parts[] = sprintf(
+                "[%d:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
+                .'fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st=%.3f:d=%.2f:alpha=1[hook];'
+                // keep the block centred on its rendered spot while it scales
+                ."[b%d][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[b%d]",
+                $in++, $pop, $hookDuration - $fadeOut, $fadeOut,
+                $n - 1, $hook['x'], $hook['w'], $hook['y'], $hook['h'], $n
+            );
+        }
+
+        // Emoji: each image is shifted to its moment, pops in (50% -> 105% -> 100%) and fades out
+        foreach ($emojis as $e) {
+            $s = (float) $e['start'];
+            $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', EmojiCues::SHOW_FOR, escapeshellarg($e['image']));
+            $n++;
+            $pop = sprintf('if(lt(t-%1$.3f,0.12),0.5+(t-%1$.3f)*4.583,if(lt(t-%1$.3f,0.22),1.05-(t-%1$.3f-0.12)*0.5,1))', $s);
+            $parts[] = sprintf(
+                "[%d:v]setpts=PTS+%.3f/TB,format=rgba,scale=w='trunc(%d*%s)':h=-1:eval=frame,"
+                .'fade=t=in:st=%.3f:d=0.1:alpha=1,fade=t=out:st=%.3f:d=0.15:alpha=1[e%d];'
+                ."[b%d][e%d]overlay=x='%d-overlay_w/2':y='%d-overlay_h/2':eof_action=pass[b%d]",
+                $in++, $s, $e['size'], $pop, $s, $s + EmojiCues::SHOW_FOR - 0.15, $n,
+                $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $n
+            );
+        }
+
+        $filter = implode(';', $parts);
+
+        return [$inputs, substr($filter, 0, strrpos($filter, "[b{$n}]")).$label];
+    }
+
+    /**
      * Burn subtitles (ASS) and overlay the hook image onto the video in a single
      * pass. The hook is a transparent PNG from HookRenderer, cropped to the text
      * block; it pops in (scales 82% → 108% → 100% around its own centre), holds
@@ -539,43 +597,8 @@ class FFmpegService
             return;
         }
 
-        $subs = $assPath ? 'ass='.$assPath.':fontsdir='.$this->layout->fontsDir() : 'null';
-        $inputs = '-i '.escapeshellarg($input);
-        $parts = ["[0:v]{$subs}[b0]"];
-        $n = 0; // inputs after the video
-
-        if ($hasHook) {
-            $fadeOut = min(0.25, $hookDuration / 4);
-            $pop = 'if(lt(t,0.14),0.82+t*1.857,if(lt(t,0.26),1.08-(t-0.14)*0.6667,1))';
-            $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', $hookDuration, escapeshellarg($hook['image']));
-            $n++;
-            $parts[] = sprintf(
-                "[%d:v]format=rgba,scale=w='trunc(iw*%s)':h=-1:eval=frame,"
-                .'fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st=%.3f:d=%.2f:alpha=1[hook];'
-                // keep the block centred on its rendered spot while it scales
-                ."[b%d][hook]overlay=x='%d+(%d-overlay_w)/2':y='%d+(%d-overlay_h)/2':eof_action=pass[b%d]",
-                $n, $pop, $hookDuration - $fadeOut, $fadeOut,
-                $n - 1, $hook['x'], $hook['w'], $hook['y'], $hook['h'], $n
-            );
-        }
-
-        // Emoji: each image is shifted to its moment, pops in (50% -> 105% -> 100%) and fades out
-        foreach ($emojis as $e) {
-            $s = (float) $e['start'];
-            $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', EmojiCues::SHOW_FOR, escapeshellarg($e['image']));
-            $n++;
-            $pop = sprintf('if(lt(t-%1$.3f,0.12),0.5+(t-%1$.3f)*4.583,if(lt(t-%1$.3f,0.22),1.05-(t-%1$.3f-0.12)*0.5,1))', $s);
-            $parts[] = sprintf(
-                "[%d:v]setpts=PTS+%.3f/TB,format=rgba,scale=w='trunc(%d*%s)':h=-1:eval=frame,"
-                .'fade=t=in:st=%.3f:d=0.1:alpha=1,fade=t=out:st=%.3f:d=0.15:alpha=1[e%d];'
-                ."[b%d][e%d]overlay=x='%d-overlay_w/2':y='%d-overlay_h/2':eof_action=pass[b%d]",
-                $n, $s, $e['size'], $pop, $s, $s + EmojiCues::SHOW_FOR - 0.15, $n,
-                $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $n
-            );
-        }
-
-        $filter = implode(';', $parts);
-        $filter = substr($filter, 0, strrpos($filter, "[b{$n}]")).'[v]';
+        [$extraInputs, $filter] = $this->overlayChain('[0:v]', '[v]', 1, $assPath, $hook, $hookDuration, $emojis);
+        $inputs = '-i '.escapeshellarg($input).$extraInputs;
 
         $cmd = sprintf(
             '%s -y %s -filter_complex %s -map %s -map 0:a? '.self::ENCODE_FINAL.' -c:a copy -movflags +faststart %s 2>&1',
