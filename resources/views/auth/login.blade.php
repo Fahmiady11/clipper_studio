@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Login — Clipper Studio</title>
+@include('partials.favicon')
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -21,8 +22,7 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);-webkit-font
 .grain{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.4;mix-blend-mode:overlay;background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px);background-size:3px 3px}
 .shell{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;position:relative;z-index:1}
 .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;letter-spacing:-.01em;margin-bottom:36px}
-.brand-mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--teal),#60a5fa);position:relative}
-.brand-mark::after{content:'';position:absolute;inset:5px;background:var(--bg);border-radius:3px;clip-path:polygon(20% 0,100% 50%,20% 100%)}
+.brand-mark{width:22px;height:22px;background:url(/logo.svg) center/contain no-repeat}
 .card{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px}
 .card-title{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 6px}
 .card-sub{font-size:14px;color:var(--text-muted);margin:0 0 28px}

@@ -5,6 +5,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>@yield('title') — Clipper Studio</title>
+@include('partials.favicon')
 <meta name="description" content="Clipper Studio turns long videos into short vertical clips with subtitles and sends them to your TikTok inbox as drafts." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,8 +20,7 @@ html, body { margin: 0; background: var(--bg); color: var(--text); font-family: 
 a { color: var(--teal); }
 .pb-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 32px; border-bottom: 1px solid var(--border); }
 .pb-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; color: var(--text); text-decoration: none; }
-.pb-mark { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--teal), #60a5fa); position: relative; }
-.pb-mark::after { content: ''; position: absolute; inset: 5px; background: var(--bg); border-radius: 3px; clip-path: polygon(20% 0, 100% 50%, 20% 100%); }
+.pb-mark { width: 22px; height: 22px; background: url(/logo.svg) center / contain no-repeat; }
 .pb-btn { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--bg); background: var(--text); border-radius: 10px; padding: 9px 16px; text-decoration: none; }
 .pb-btn.ghost { color: var(--text); background: transparent; border: 1px solid var(--border-strong); }
 .pb-main { max-width: 860px; margin: 0 auto; padding: 48px 24px 72px; }
