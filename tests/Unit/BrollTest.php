@@ -4,7 +4,7 @@ namespace Tests\Unit;
 
 use App\Services\FFmpegService;
 use App\Services\GeminiService;
-use App\Services\PexelsService;
+use App\Services\StockFootage;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -17,13 +17,14 @@ class BrollTest extends TestCase
         parent::setUp();
         config([
             'services.pexels.key' => 'px',
-            'services.pexels.cache' => sys_get_temp_dir().'/clipper-broll-cache-'.getmypid(),
+            'services.pixabay.key' => null,
+            'services.broll_cache' => sys_get_temp_dir().'/clipper-broll-cache-'.getmypid(),
             'services.gemini.key' => 'k',
             'services.gemini.models' => ['model-a'],
             'services.gemini.retry_pauses' => [0, 0],
             'services.llm_gateway' => ['url' => null, 'key' => null, 'model' => null],
         ]);
-        $this->dir = config('services.pexels.cache');
+        $this->dir = config('services.broll_cache');
         exec('rm -rf '.escapeshellarg($this->dir));
     }
 
@@ -50,25 +51,47 @@ class BrollTest extends TestCase
             ]]),
             'cdn.test/*' => Http::response('MP4DATA'),
         ]);
-        $pexels = new PexelsService;
+        $pexels = new StockFootage;
 
         $first = $pexels->clip('city traffic');
-        $this->assertSame(2, $first['id']);
+        $this->assertSame('px2', $first['id']);
         $this->assertSame('MP4DATA', file_get_contents($first['path']));
         Http::assertSent(fn ($r) => $r->url() === 'https://cdn.test/2-1080.mp4');
         Http::assertSent(fn ($r) => str_contains($r->url(), 'orientation=portrait') && $r->hasHeader('Authorization', 'px'));
 
-        $this->assertSame(3, $pexels->clip('City Traffic ', [2])['id']); // same search (cached), next video
+        $this->assertSame('px3', $pexels->clip('City Traffic ', ['px2'])['id']); // same search (cached), next video
         Http::assertSentCount(3); // one search, two downloads
+    }
+
+    public function test_pixabay_is_used_when_only_its_key_is_set_portrait_first(): void
+    {
+        config(['services.pexels.key' => '', 'services.pixabay.key' => 'pb']);
+        $rendition = fn ($id, $w, $h) => ['url' => "https://cdn.pixabay.test/{$id}-{$w}.mp4", 'width' => $w, 'height' => $h, 'size' => 1];
+        Http::fake([
+            'pixabay.com/api/*' => Http::response(['hits' => [
+                ['id' => 10, 'duration' => 12, 'videos' => ['large' => $rendition(10, 3840, 2160), 'medium' => $rendition(10, 1920, 1080), 'small' => $rendition(10, 1280, 720)]],
+                ['id' => 11, 'duration' => 9, 'videos' => ['large' => $rendition(11, 1080, 1920), 'small' => $rendition(11, 720, 1280)]],
+                ['id' => 12, 'duration' => 9, 'videos' => ['medium' => $rendition(12, 1280, 720)]], // too small for a 1920 frame
+            ]]),
+            'cdn.pixabay.test/*' => Http::response('MP4'),
+        ]);
+        $stock = new StockFootage;
+
+        $this->assertTrue($stock->configured());
+        $this->assertSame('pb11', $stock->clip('money')['id']);              // portrait first
+        $this->assertSame('pb10', $stock->clip('money', ['pb11'])['id']);    // then landscape, cropped by the render
+        Http::assertSent(fn ($r) => $r->url() === 'https://cdn.pixabay.test/10-1920.mp4'); // smallest that fits
+        $this->assertNull($stock->clip('money', ['pb11', 'pb10']));
     }
 
     public function test_pexels_off_without_key_or_on_errors(): void
     {
         Http::fake(['*' => Http::response('nope', 500)]);
 
-        $this->assertNull((new PexelsService)->clip('money'));
-        config(['services.pexels.key' => '']);
-        $this->assertNull((new PexelsService)->clip('money'));
+        $this->assertNull((new StockFootage)->clip('money'));
+        config(['services.pexels.key' => '', 'services.pixabay.key' => '']);
+        $this->assertFalse((new StockFootage)->configured());
+        $this->assertNull((new StockFootage)->clip('money'));
     }
 
     public function test_ai_cues_are_sorted_spaced_and_kept_inside_the_clip(): void

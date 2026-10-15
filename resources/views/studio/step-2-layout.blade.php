@@ -59,7 +59,7 @@
         <span class="tgl-text">B-roll otomatis</span>
       </button>
       <div class="fhint" style="margin-top:8px">AI menyisipkan cuplikan video stok 2 detik saat membahas benda, tempat, atau aksi (mis. uang, kota, olahraga).
-        @unless (config('services.pexels.key'))<b>Belum aktif:</b> isi <code>PEXELS_API_KEY</code> di .env.@endunless</div>
+        @unless (config('services.pexels.key') || config('services.pixabay.key'))<b>Belum aktif:</b> isi <code>PIXABAY_API_KEY</code> atau <code>PEXELS_API_KEY</code> di .env.@endunless</div>
     </div>
   </div>
 </div>

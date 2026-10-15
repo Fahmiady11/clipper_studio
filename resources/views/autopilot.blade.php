@@ -414,7 +414,7 @@
                 <span class="tgl-text">B-roll otomatis</span>
               </button>
               <div class="ap-ed-note">Cuplikan video stok 2 detik di momen yang membahas benda/tempat/aksi.
-                @unless (config('services.pexels.key'))<b>Belum aktif:</b> isi <code>PEXELS_API_KEY</code> di .env.@endunless</div>
+                @unless (config('services.pexels.key') || config('services.pixabay.key'))<b>Belum aktif:</b> isi <code>PIXABAY_API_KEY</code> atau <code>PEXELS_API_KEY</code> di .env.@endunless</div>
             </div>
             <div class="fblock">
               <div class="fblock-title" style="margin-bottom:10px">Clip per video</div>

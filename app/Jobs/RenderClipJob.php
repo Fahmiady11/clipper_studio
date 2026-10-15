@@ -8,8 +8,8 @@ use App\Services\FFmpegService;
 use App\Services\GeminiService;
 use App\Services\HookRenderer;
 use App\Services\MusicService;
-use App\Services\PexelsService;
 use App\Services\SmartCut;
+use App\Services\StockFootage;
 use App\Services\YtDlpService;
 use App\Support\Cancellation;
 use App\Support\JobCancelled;
@@ -201,16 +201,16 @@ class RenderClipJob implements ShouldQueue
 
         // B-roll: stock footage over concrete things being talked about, after the hook
         $broll = [];
-        $pexels = app(PexelsService::class);
-        if ($project->broll && $pexels->configured()) {
+        $stock = app(StockFootage::class);
+        if ($project->broll && $stock->configured()) {
             $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
                 array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
             $used = [];
             foreach (app(GeminiService::class)->brollCues($words, $clipDuration, $hookDuration + 1.0) as $cue) {
-                $stock = $pexels->clip($cue['query'], $used);
-                if ($stock) {
-                    $used[] = $stock['id'];
-                    $broll[] = ['path' => $stock['path'], 'start' => $cue['time'], 'duration' => min(self::BROLL_SECONDS, $clipDuration - $cue['time'] - 0.5)];
+                $footage = $stock->clip($cue['query'], $used);
+                if ($footage) {
+                    $used[] = $footage['id'];
+                    $broll[] = ['path' => $footage['path'], 'start' => $cue['time'], 'duration' => min(self::BROLL_SECONDS, $clipDuration - $cue['time'] - 0.5)];
                 }
             }
             $log->info('B-roll', ['cues' => array_map(fn ($b) => round($b['start'], 1), $broll)]);

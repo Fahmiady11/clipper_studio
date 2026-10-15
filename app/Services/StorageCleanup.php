@@ -42,7 +42,7 @@ class StorageCleanup
         }
 
         $brollCutoff = now()->subDays(self::BROLL_DAYS)->getTimestamp();
-        foreach (glob((config('services.pexels.cache') ?: storage_path('app/broll')).'/*') ?: [] as $file) {
+        foreach (glob((config('services.broll_cache') ?: storage_path('app/broll')).'/*') ?: [] as $file) {
             if (filemtime($file) > $brollCutoff) {
                 continue; // PexelsService touches a file each time it is reused
             }
