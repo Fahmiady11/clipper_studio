@@ -26,7 +26,7 @@ class SmartCutSettingsTest extends TestCase
 
         $off = $creator->create($user->id, 'https://youtu.be/abcdefghijk', ClipSettings::normalize(['edit' => ['jump_cut' => false]]));
         $this->assertFalse($off->fresh()->jump_cut);
-        $this->assertSame(['jump_cut' => false, 'zoom' => true], $creator->settingsFrom($off->fresh())['edit']);
+        $this->assertSame(['jump_cut' => false, 'zoom' => true, 'progress' => true, 'title' => false], $creator->settingsFrom($off->fresh())['edit']);
     }
 
     public function test_studio_request_accepts_edit_options(): void

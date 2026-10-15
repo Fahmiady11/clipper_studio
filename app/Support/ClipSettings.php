@@ -24,7 +24,7 @@ final class ClipSettings
         'duration_mode' => 'auto',
         'min_duration' => 20,
         'max_duration' => 60,
-        'edit' => ['jump_cut' => true, 'zoom' => true],
+        'edit' => ['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false],
         'subtitle' => [
             'enabled' => true, 'font_family' => 'Montserrat', 'font_size' => 56, 'text_color' => '#ffffff',
             'highlight_color' => '#facc15', 'position' => 'bottom', 'position_y' => null, 'background_style' => 'semi',
@@ -56,6 +56,8 @@ final class ClipSettings
             'edit' => ['sometimes', 'array'],
             'edit.jump_cut' => ['sometimes', 'boolean'],
             'edit.zoom' => ['sometimes', 'boolean'],
+            'edit.progress' => ['sometimes', 'boolean'],
+            'edit.title' => ['sometimes', 'boolean'],
 
             'subtitle' => ['sometimes', 'array'],
             'subtitle.enabled' => ['sometimes', 'boolean'],

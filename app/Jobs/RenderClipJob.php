@@ -185,9 +185,20 @@ class RenderClipJob implements ShouldQueue
 
         // 5. One pass from the source: cut + layout + jump cuts + zoom, with the
         // subtitles, hook and emoji drawn on top (a single encode, audio kept)
-        $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis)]);
+        // Title held at the top once the hook is done; progress bar in the highlight colour
+        $titlePath = null;
+        if ($project->top_title && trim((string) $clip->topic) !== '' && $clipDuration - $hookDuration > 1) {
+            $titlePath = $tempDir.'/title_'.$this->clipId.'.ass';
+            file_put_contents($titlePath, $ffmpeg->buildTitleAss((string) $clip->topic, $hookDuration, $clipDuration, $subtitle?->font_family ?? 'Montserrat'));
+        }
+        $progress = $project->progress_bar
+            ? ['color' => $subtitle?->highlight_color ?? '#facc15', 'duration' => $clipDuration]
+            : null;
+
+        $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
         $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
+            'title' => $titlePath, 'progress' => $progress,
         ]);
         $current = $step2;
         Cancellation::throwIfCancelled();
@@ -251,7 +262,7 @@ class RenderClipJob implements ShouldQueue
 
     private function cleanupTemp(string $dir, string $clipId): void
     {
-        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_'] as $prefix) {
+        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_', 'title_'] as $prefix) {
             foreach (['.mp4', '.ass', '.png'] as $ext) {
                 $f = $dir.'/'.$prefix.$clipId.$ext;
                 if (file_exists($f)) {

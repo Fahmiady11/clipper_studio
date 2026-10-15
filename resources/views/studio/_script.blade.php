@@ -4,7 +4,7 @@ function studio() {
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
     'url','meta',
-    'layout','jumpCut','autoZoom',
+    'layout','jumpCut','autoZoom','progressBar','topTitle',
     'clipCount','durationMode','minDuration','maxDuration',
     'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
@@ -40,7 +40,7 @@ function studio() {
     sessionId: null, historyOpen: false, history: [], clearingHistory: false,
 
     url: '', meta: null, loadingMeta: false, metaError: null,
-    layout: 'reframe', jumpCut: true, autoZoom: true,
+    layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 56,
     subtitleTextColor: '#ffffff', subtitleHighlight: '#facc15',
@@ -394,7 +394,7 @@ function studio() {
           body: JSON.stringify({
             youtube_url: this.url,
             layout_type: this.layout,
-            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom },
+            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle },
             clip_count: this.clipCount,
             duration_mode: this.durationMode,
             min_duration: this.durationMode === 'manual' ? this.minDuration : null,

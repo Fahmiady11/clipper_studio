@@ -39,5 +39,19 @@
       </button>
       <div class="fhint" style="margin-top:8px">Gambar sedikit zoom-in dan kembali di potongan dan akhir kalimat, supaya tidak monoton.</div>
     </div>
+    <div class="fblock">
+      <button class="tgl" :class="{ on: progressBar }" @click="progressBar = !progressBar" type="button">
+        <span class="tgl-track"></span>
+        <span class="tgl-text">Progress bar</span>
+      </button>
+      <div class="fhint" style="margin-top:8px">Garis tipis di tepi atas yang terisi sampai clip selesai, bikin penonton bertahan sampai akhir.</div>
+    </div>
+    <div class="fblock">
+      <button class="tgl" :class="{ on: topTitle }" @click="topTitle = !topTitle" type="button">
+        <span class="tgl-track"></span>
+        <span class="tgl-text">Judul di atas</span>
+      </button>
+      <div class="fhint" style="margin-top:8px">Topik clip dari AI tampil terus di bagian atas setelah hook selesai.</div>
+    </div>
   </div>
 </div>

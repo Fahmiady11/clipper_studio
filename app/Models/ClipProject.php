@@ -25,6 +25,8 @@ class ClipProject extends Model
         'layout_type',
         'jump_cut',
         'auto_zoom',
+        'progress_bar',
+        'top_title',
         'clip_count',
         'duration_mode',
         'min_duration',
@@ -47,6 +49,8 @@ class ClipProject extends Model
         'music_enabled' => 'boolean',
         'jump_cut' => 'boolean',
         'auto_zoom' => 'boolean',
+        'progress_bar' => 'boolean',
+        'top_title' => 'boolean',
         'music_volume' => 'integer',
         'cancelled_at' => 'datetime',
     ];

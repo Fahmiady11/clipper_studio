@@ -395,6 +395,20 @@
               <div class="ap-ed-note">Zoom-in sebentar di potongan dan akhir kalimat.</div>
             </div>
             <div class="fblock">
+              <button class="tgl" :class="{ on: ed.s.edit.progress }" @click="ed.s.edit.progress = !ed.s.edit.progress" type="button">
+                <span class="tgl-track"></span>
+                <span class="tgl-text">Progress bar</span>
+              </button>
+              <div class="ap-ed-note">Garis tipis di tepi atas yang terisi sampai clip selesai.</div>
+            </div>
+            <div class="fblock">
+              <button class="tgl" :class="{ on: ed.s.edit.title }" @click="ed.s.edit.title = !ed.s.edit.title" type="button">
+                <span class="tgl-track"></span>
+                <span class="tgl-text">Judul di atas</span>
+              </button>
+              <div class="ap-ed-note">Topik clip tampil terus di atas setelah hook.</div>
+            </div>
+            <div class="fblock">
               <div class="fblock-title" style="margin-bottom:10px">Clip per video</div>
               <div class="seg">
                 <template x-for="n in [1, 3, 5]" :key="n">
@@ -694,7 +708,7 @@ function autopilot() {
       this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), saving: false, error: null };
       this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles / emoji existed
       this.ed.s.subtitle.emoji ??= true;
-      this.ed.s.edit ??= { jump_cut: true, zoom: true }; // saved before smart editing existed
+      this.ed.s.edit = { jump_cut: true, zoom: true, progress: true, title: false, ...(this.ed.s.edit || {}) }; // saved before these existed
       this.pvTab = 'hook';
     },
     async saveEditor() {

@@ -82,9 +82,9 @@ class FFmpegService
      * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
      * @param  array|null  $pieces  SmartCut pieces to keep (clip-relative); the rest is cut out
      * @param  array  $zoom  SmartCut spans (on the cut timeline) shown punched in
-     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array}|null  $overlay
-     *                                                                                                    Subtitles, hook and emoji drawn in the same pass,
-     *                                                                                                    which then is the final encode (one generation, no second pass)
+     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array}|null  $overlay
+     *                                                                                                                                        Subtitles, hook and emoji drawn in the same pass,
+     *                                                                                                                                        which then is the final encode (one generation, no second pass)
      */
     public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = [], ?array $overlay = null): void
     {
@@ -109,7 +109,8 @@ class FFmpegService
         $extraInputs = '';
         if ($overlay !== null) {
             [$extraInputs, $chain] = $this->overlayChain($video, '[out]', 1, $overlay['ass'] ?? null,
-                $overlay['hook'] ?? null, (float) ($overlay['hook_duration'] ?? 0), $overlay['emojis'] ?? []);
+                $overlay['hook'] ?? null, (float) ($overlay['hook_duration'] ?? 0), $overlay['emojis'] ?? [],
+                $overlay['title'] ?? null, $overlay['progress'] ?? null);
             $filterGraph .= ';'.$chain;
             $video = '[out]';
         }
@@ -298,6 +299,45 @@ class FFmpegService
                 unset($w);
             }
             $ass .= $this->highlightDialogues($cue, $hlColor);
+        }
+
+        return $ass;
+    }
+
+    /**
+     * A title held at the top of the frame (below TikTok's top tabs) from
+     * $from to $to: white text on a dark rounded box. A title too wide for one
+     * line breaks into two at the space nearest the middle, then shrinks to fit.
+     */
+    public function buildTitleAss(string $title, float $from, float $to, string $fontFamily): string
+    {
+        $title = trim(preg_replace('/\s+/u', ' ', $title));
+        $size = 54;
+        $font = $this->layout->resolveFontByFamily($fontFamily);
+        $maxW = 1080 - 2 * 60 - 2 * 30;
+        $lines = [$title];
+        if (FontMetrics::textWidth($font, $title, $size) > $maxW && str_contains($title, ' ')) {
+            $mid = intdiv(mb_strlen($title), 2);
+            $cut = null;
+            foreach (array_keys(array_filter(mb_str_split($title), fn ($c) => $c === ' ')) as $i) {
+                if ($cut === null || abs($i - $mid) < abs($cut - $mid)) {
+                    $cut = $i;
+                }
+            }
+            $lines = [mb_substr($title, 0, $cut), mb_substr($title, $cut + 1)];
+        }
+
+        $t = new self;
+        $t->box = ['alpha' => '1A', 'font' => $font, 'size' => $size, 'cy' => 0];
+        $ass = "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n[V4+ Styles]\n"
+            ."Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            ."Style: Default,{$fontFamily},{$size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,60,60,0,1\n\n"
+            ."[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+        $lineH = (int) round($size * 1.25);
+        foreach ($lines as $i => $line) {
+            $t->box['cy'] = 250 + $i * $lineH;
+            [$box, $fit] = $t->boxFor($from, $to, $line);
+            $ass .= $box.$t->dialogue($from, $to, sprintf('{\\an5\\pos(540,%d)}', $t->box['cy']).$t->scaleTag($fit).$line);
         }
 
         return $ass;
@@ -524,9 +564,10 @@ class FFmpegService
      *
      * @return array{0: string, 1: string} [input arguments, filter graph ending in $label]
      */
-    private function overlayChain(string $from, string $label, int $firstInput, ?string $assPath, ?array $hook, float $hookDuration, array $emojis): array
+    private function overlayChain(string $from, string $label, int $firstInput, ?string $assPath, ?array $hook, float $hookDuration, array $emojis, ?string $titleAss = null, ?array $progress = null): array
     {
-        $subs = $assPath ? 'ass='.$assPath.':fontsdir='.$this->layout->fontsDir() : 'null';
+        $ass = array_map(fn ($f) => 'ass='.$f.':fontsdir='.$this->layout->fontsDir(), array_filter([$assPath, $titleAss]));
+        $subs = $ass ? implode(',', $ass) : 'null';
         $inputs = '';
         $parts = ["{$from}{$subs}[b0]"];
         $n = 0; // overlays drawn so far
@@ -560,6 +601,14 @@ class FFmpegService
                 $in++, $s, $e['size'], $pop, $s, $s + EmojiCues::SHOW_FOR - 0.15, $n,
                 $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $n
             );
+        }
+
+        // Progress bar: a thin strip along the top edge that fills as the clip plays
+        if ($progress) {
+            $d = max(0.1, (float) $progress['duration']);
+            $n++;
+            $parts[] = sprintf("color=c=0x%s:s=1080x12:r=30:d=%.3f[pb];[b%d][pb]overlay=x='-w+w*t/%.3f':y=0:eof_action=pass[b%d]",
+                ltrim($progress['color'], '#'), $d, $n - 1, $d, $n);
         }
 
         $filter = implode(';', $parts);
