@@ -125,6 +125,7 @@ class StorageCleanupTest extends TestCase
         $ffmpeg = $this->mock(FFmpegService::class);
         $ffmpeg->shouldReceive('applyLayout')->once()
             ->andReturnUsing(fn ($in, $layout, $out) => file_put_contents($out, 'rendered'));
+        $ffmpeg->shouldReceive('normalizeVoice')->once()->andReturn(false); // the fake file has no audio
 
         $this->app->call([new RenderClipJob($clip->id), 'handle']);
 

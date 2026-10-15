@@ -114,4 +114,25 @@ class SmartCutTest extends TestCase
         $this->assertEqualsWithDelta($probe('v:0'), $probe('a:0'), 0.06);
         exec('rm -rf '.escapeshellarg($dir));
     }
+
+    public function test_quiet_voice_is_brought_to_tiktok_loudness(): void
+    {
+        $dir = sys_get_temp_dir().'/clipper-loud-'.getmypid();
+        @mkdir($dir);
+        $src = $dir.'/src.mp4';
+        exec(sprintf('%s -v error -y -f lavfi -i color=c=black:s=320x240:r=25:d=4 -f lavfi -i %s -shortest -pix_fmt yuv420p -c:a aac %s 2>&1',
+            escapeshellarg(config('services.ffmpeg.path', 'ffmpeg')),
+            escapeshellarg("aevalsrc='0.02*sin(300*2*PI*t)*(1+sin(3*t))':d=4"),
+            escapeshellarg($src)), $o, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('ffmpeg not available');
+        }
+
+        $this->assertTrue((new FFmpegService)->normalizeVoice($src, $dir.'/out.mp4'));
+
+        $lufs = fn ($f) => (float) (preg_match('/I:\s+(-?[\d.]+) LUFS/', (string) shell_exec(sprintf('ffmpeg -nostats -i %s -af ebur128 -f null - 2>&1 | tail -12', escapeshellarg($f))), $m) ? $m[1] : 0);
+        $this->assertLessThan(-30, $lufs($src));
+        $this->assertEqualsWithDelta(-14, $lufs($dir.'/out.mp4'), 2.5);
+        exec('rm -rf '.escapeshellarg($dir));
+    }
 }

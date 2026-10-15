@@ -634,6 +634,30 @@ class FFmpegService
         $this->exec($cmd, 'mixMusic');
     }
 
+    /**
+     * Bring the voice to VOICE_LUFS (TikTok/Reels loudness) when no music mix
+     * does it: quiet uploads otherwise play noticeably softer than the feed.
+     * Video is stream-copied; returns false when there is no audio to level.
+     */
+    public function normalizeVoice(string $input, string $output): bool
+    {
+        if (! $this->hasAudio($input)) {
+            return false;
+        }
+
+        $cmd = sprintf(
+            '%s -y -i %s -map 0:v -map 0:a -c:v copy -af %s -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            $this->bin,
+            escapeshellarg($input),
+            // loudnorm works at 192 kHz internally; bring it back to 48 kHz
+            escapeshellarg('loudnorm=I='.self::VOICE_LUFS.':TP=-1.5:LRA=11,aresample=48000'),
+            escapeshellarg($output)
+        );
+        $this->exec($cmd, 'normalizeVoice');
+
+        return true;
+    }
+
     private function probeDuration(string $input): float
     {
         exec(sprintf(

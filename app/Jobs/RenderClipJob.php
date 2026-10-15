@@ -217,6 +217,13 @@ class RenderClipJob implements ShouldQueue
                 $log->warning('Music enabled but library is empty — skipped', ['path' => config('services.music.path')]);
             }
         }
+        // Without music nothing levelled the voice yet
+        if (! $musicTrack) {
+            $levelled = $tempDir.'/loud_'.$this->clipId.'.mp4';
+            if ($ffmpeg->normalizeVoice($current, $levelled)) {
+                $current = $levelled;
+            }
+        }
 
         // 7. Move to output
         Cancellation::throwIfCancelled();
@@ -254,7 +261,7 @@ class RenderClipJob implements ShouldQueue
 
     private function cleanupTemp(string $dir, string $clipId): void
     {
-        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_'] as $prefix) {
+        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_'] as $prefix) {
             foreach (['.mp4', '.ass', '.png'] as $ext) {
                 $f = $dir.'/'.$prefix.$clipId.$ext;
                 if (file_exists($f)) {
