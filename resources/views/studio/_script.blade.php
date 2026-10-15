@@ -56,6 +56,7 @@ function studio() {
     fontsTick: 0,
     resultHookText: 'Ingin lebih baik? Coba ini.',
     editHookOpen: false, draftHook: '', copied: '',
+    trim: { open: false, clip: null, words: [], start: 0, end: 0, mode: 'start', loading: false, saving: false, error: null },
     clipCaption: '', clipHashtags: [], loadingCaption: false,
     tiktokConfigured: false, tiktokAccounts: [], tiktokAccountId: null,
     tiktokStatus: null, tiktokError: null, tiktokTimer: null,
@@ -671,6 +672,66 @@ function studio() {
       this.step = 7;
       this.downloadUrl = null;
       this.renderClip(text);
+    },
+
+    // ── trim a clip on its transcript ───────────────────────────────────────
+    async openTrim(c) {
+      this.trim = { open: true, clip: c, words: [], start: c.start_seconds, end: c.end_seconds, mode: 'start', loading: true, saving: false, error: null };
+      try {
+        const res = await fetch(`/api/clips/${c.id}/transcript`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (this.trim.clip !== c) return; // another clip opened meanwhile
+        this.trim.words = data.words;
+        this.trim.loading = false;
+        // bring the clip's first word into view
+        this.$nextTick(() => this.$refs.trimWords?.querySelector('.trim-w.in')?.scrollIntoView({ block: 'center' }));
+      } catch (e) {
+        this.trim.loading = false;
+        this.trim.error = 'Gagal memuat transkrip.';
+      }
+    },
+    // First and last word of the clip get a marker
+    trimEdge(i) {
+      const w = this.trim.words, inside = j => w[j] && w[j].start >= this.trim.start - 0.01 && w[j].start < this.trim.end;
+      return inside(i) && (!inside(i - 1) || !inside(i + 1));
+    },
+    pickTrimWord(i) {
+      const w = this.trim.words, word = w[i];
+      if (this.trim.mode === 'start') {
+        // a breath before the word, never into the previous one
+        const prevEnd = w[i - 1] && w[i - 1].end <= word.start ? w[i - 1].end : 0;
+        this.trim.start = Math.max(prevEnd, word.start - 0.15);
+        if (this.trim.end <= this.trim.start + 1) this.trim.end = word.end + 0.35;
+        this.trim.mode = 'end';
+      } else {
+        const nextStart = w[i + 1] && w[i + 1].start >= word.end ? w[i + 1].start : Infinity;
+        this.trim.end = Math.min(nextStart, word.end + 0.35);
+        if (this.trim.end <= this.trim.start) this.trim.start = Math.max(0, word.start - 0.15);
+      }
+    },
+    async saveTrim() {
+      const c = this.trim.clip;
+      this.trim.saving = true;
+      this.trim.error = null;
+      try {
+        const res = await fetch(`/api/clips/${c.id}/bounds`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+          body: JSON.stringify({ start_seconds: +this.trim.start.toFixed(2), end_seconds: +this.trim.end.toFixed(2) }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'HTTP ' + res.status);
+        Object.assign(c, { start_seconds: +data.start_seconds, end_seconds: +data.end_seconds, status: 'pending' });
+        // the old render is gone: this clip renders afresh when picked
+        if (this.selectedClip === c.ranking) this.downloadUrl = null;
+        this.selectedClip = c.ranking;
+        this.trim.open = false;
+      } catch (e) {
+        this.trim.error = e.message || 'Gagal menyimpan.';
+      } finally {
+        this.trim.saving = false;
+      }
     },
 
     // ── utilities ──────────────────────────────────────────────────────────

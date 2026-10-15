@@ -27,6 +27,8 @@
           <div class="clip-time">
             <span x-text="'⧗ ' + fmtClock(c.start_seconds) + ' → ' + fmtClock(c.end_seconds)"></span>
             <span x-text="'durasi ' + Math.round(c.end_seconds - c.start_seconds) + 's'"></span>
+            <span class="clip-trim" role="button" tabindex="0" x-show="!renderingClipId"
+                  @click.stop="openTrim(c)" @keydown.enter.stop.prevent="openTrim(c)">✂ Atur awal/akhir</span>
           </div>
         </div>
         <div class="clip-aside">

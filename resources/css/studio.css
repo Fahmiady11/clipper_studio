@@ -1320,6 +1320,28 @@ textarea.field {
     flex-wrap: wrap
 }
 
+.clip-trim {
+    color: var(--teal);
+    cursor: pointer;
+    font-family: inherit
+}
+
+.clip-trim:hover { text-decoration: underline }
+
+.modal.modal-trim { max-width: 640px }
+.trim-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px }
+.trim-info { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted) }
+.trim-words {
+    max-height: 46vh; overflow-y: auto; padding: 14px 16px; line-height: 2;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 12px; font-size: 14.5px
+}
+.trim-w { color: var(--text-dim); cursor: pointer; border-radius: 4px; padding: 2px 0 }
+.trim-w:hover { background: var(--surface-2); color: var(--text) }
+.trim-w.in { color: var(--text); font-weight: 600 }
+.trim-w.edge { color: var(--teal); text-decoration: underline; text-underline-offset: 4px }
+.trim-muted { color: var(--text-dim); font-size: 13px }
+.trim-err { margin-top: 10px; font-size: 13px; color: #f87171 }
+
 .clip-aside {
     display: flex;
     flex-direction: column;

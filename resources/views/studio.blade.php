@@ -34,6 +34,7 @@
 
   @include('studio._footer-nav')
   @include('studio._modal-hook')
+  @include('studio._modal-trim')
   @include('studio._history-panel')
 
 </div>

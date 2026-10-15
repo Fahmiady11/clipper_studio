@@ -26,6 +26,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/clips/{clipId}/cancel', [RenderController::class, 'cancel']);
     Route::get('/clips/{clipId}/render-status', [RenderController::class, 'renderStatus']);
     Route::get('/clips/{clipId}/caption', [RenderController::class, 'caption']);
+    Route::get('/clips/{clipId}/transcript', [RenderController::class, 'transcript']);
+    Route::patch('/clips/{clipId}/bounds', [RenderController::class, 'bounds']);
     Route::get('/clips/{clipId}/download', [DownloadController::class, 'download']);
 
     Route::get('/tiktok/accounts', [TikTokController::class, 'accounts']);

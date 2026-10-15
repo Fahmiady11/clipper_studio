@@ -11,10 +11,13 @@ use App\Support\HookText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class RenderController extends Controller
 {
     use EnsuresQueueWorker;
+
+    private const TRIM_CONTEXT = 20.0; // seconds of transcript shown around a clip when trimming
 
     public function render(Request $request, string $clipId): JsonResponse
     {
@@ -41,6 +44,66 @@ class RenderController extends Controller
         $this->ensureQueueWorkerRunning();
 
         return response()->json(['clip_id' => $clip->id, 'status' => 'processing']);
+    }
+
+    /**
+     * The transcript around a clip, word by word, for picking new start/end
+     * words: 20s of context on either side.
+     */
+    public function transcript(string $clipId): JsonResponse
+    {
+        $clip = GeneratedClip::with('clipProject.transcript')->findOrFail($clipId);
+        abort_if($clip->clipProject->user_id !== Auth::id(), 403);
+
+        $from = (float) $clip->start_seconds - self::TRIM_CONTEXT;
+        $to = (float) $clip->end_seconds + self::TRIM_CONTEXT;
+        $words = [];
+        foreach ($clip->clipProject->transcript?->content ?? [] as $seg) {
+            // Lines without word timing stand in as one "word"
+            foreach (! empty($seg['words']) ? $seg['words'] : [$seg] as $w) {
+                $text = trim(preg_replace('/\[[^\]]*\]/u', '', (string) ($w['text'] ?? '')));
+                if ($text !== '' && $w['start'] >= $from && $w['start'] <= $to) {
+                    $words[] = ['start' => round((float) $w['start'], 2), 'end' => round((float) ($w['end'] ?? $w['start']), 2), 'text' => $text];
+                }
+            }
+        }
+        usort($words, fn ($a, $b) => $a['start'] <=> $b['start']);
+
+        return response()->json([
+            'start_seconds' => (float) $clip->start_seconds,
+            'end_seconds' => (float) $clip->end_seconds,
+            'words' => $words,
+        ]);
+    }
+
+    /** New start/end for a clip; its old render no longer matches, so it is dropped. */
+    public function bounds(Request $request, string $clipId): JsonResponse
+    {
+        $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
+        abort_if($clip->clipProject->user_id !== Auth::id(), 403);
+        abort_if($clip->status === 'processing', 409, 'Clip masih dirender. Tunggu selesai atau batalkan dulu.');
+
+        $data = $request->validate([
+            'start_seconds' => ['required', 'numeric', 'min:0'],
+            'end_seconds' => ['required', 'numeric', 'gt:start_seconds'],
+        ]);
+        $duration = $data['end_seconds'] - $data['start_seconds'];
+        abort_if($duration < 3 || $duration > 300, 422, 'Durasi clip harus 3 detik sampai 5 menit.');
+        $videoLength = $clip->clipProject->duration_seconds;
+        abort_if($videoLength && $data['end_seconds'] > $videoLength + 1, 422, 'Akhir clip melewati durasi video.');
+
+        if ($clip->output_path) {
+            Storage::delete($clip->output_path);
+        }
+        $clip->update([
+            'start_seconds' => round((float) $data['start_seconds'], 2),
+            'end_seconds' => round((float) $data['end_seconds'], 2),
+            'output_path' => null,
+            'status' => 'pending',
+            'error_msg' => null,
+        ]);
+
+        return response()->json(['start_seconds' => $clip->start_seconds, 'end_seconds' => $clip->end_seconds, 'status' => 'pending']);
     }
 
     public function cancel(string $clipId): JsonResponse

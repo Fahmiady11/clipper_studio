@@ -16,7 +16,7 @@
         ['Subtitle', 'Mulai dari <b>preset gaya</b> (Clean, Bold Pop, Satu Kata, …), lalu ubah font, ukuran, warna, atau animasi: <b>Karaoke</b>, <b>Pop</b> (kata aktif membesar), atau <b>Satu kata</b>. <b>Emoji otomatis</b> memunculkan emoji di kata kunci. Preview sama ukurannya dengan hasil render. Posisi bisa dipilih atau <b>diseret langsung di preview</b>; hindari area bawah yang tertutup tombol TikTok.'],
         ['Hook & musik', 'Hook = teks pembuka 2–5 detik untuk menahan penonton. Biarkan AI menulisnya, atau tulis sendiri (apit kata dengan <code>*bintang*</code> untuk menyorotnya). Musik latar diambil dari <a href="/music">library musik</a> sesuai mood.'],
         ['Generate dengan AI', 'Klik <b>Generate Clip dengan AI</b>. Video diunduh, transkrip dibuat, lalu AI memilih momen paling berpotensi viral. Biasanya beberapa menit; kamu boleh pindah halaman, proses tetap jalan.'],
-        ['Pilih & render clip', 'Pilih clip yang mau dibuat, lalu render (biasanya 1–5 menit per clip).'],
+        ['Pilih & render clip', 'Pilih clip yang mau dibuat, lalu render (biasanya 1–5 menit per clip). Momen kurang pas? <b>✂ Atur awal/akhir</b> membuka transkripnya: klik kata pertama dan terakhir.'],
         ['Hasil', '<b>Download MP4</b>, salin caption & hashtag buatan AI, atau upload ke TikTok. Hook masih bisa diedit lalu render ulang tanpa mengulang analisis.'],
       ],
       'tips' => [
