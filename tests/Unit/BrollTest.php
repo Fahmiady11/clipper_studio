@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Services\FFmpegService;
 use App\Services\GeminiService;
 use App\Services\StockFootage;
+use App\Support\BrollCues;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -133,5 +134,23 @@ class BrollTest extends TestCase
         $this->assertGreaterThan(200, $lum('2.2')); // during: the stock clip fills the frame
         $this->assertLessThan(40, $lum('3.6'));   // after: back to the source
         exec('rm -rf '.escapeshellarg($dir));
+    }
+
+    public function test_analysis_moments_follow_the_cuts_and_trim(): void
+    {
+        // clip 100..160 in the source; 4s cut out at 120..124 (clip time 20..24)
+        $pieces = [[0.0, 20.0], [24.0, 60.0]];
+        $broll = [
+            ['time' => 102.0, 'query' => 'under the hook'],
+            ['time' => 110.0, 'query' => 'counting money'],
+            ['time' => 130.0, 'query' => 'city traffic'],   // 30s in the clip -> 26s after the cut
+            ['time' => 90.0, 'query' => 'before the clip'],
+            ['time' => 170.0, 'query' => 'after the clip'],
+        ];
+
+        $this->assertSame(
+            [['time' => 10.0, 'query' => 'counting money'], ['time' => 26.0, 'query' => 'city traffic']],
+            BrollCues::fromAnalysis($broll, $pieces, 100.0, 56.0, 4.0)
+        );
     }
 }

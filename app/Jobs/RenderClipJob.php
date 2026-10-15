@@ -11,6 +11,7 @@ use App\Services\MusicService;
 use App\Services\SmartCut;
 use App\Services\StockFootage;
 use App\Services\YtDlpService;
+use App\Support\BrollCues;
 use App\Support\Cancellation;
 use App\Support\JobCancelled;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -203,10 +204,17 @@ class RenderClipJob implements ShouldQueue
         $broll = [];
         $stock = app(StockFootage::class);
         if ($project->broll && $stock->configured()) {
-            $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
-                array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
+            if (is_array($clip->broll_json)) {
+                // Picked during analysis (source time): onto the cut timeline
+                $cues = BrollCues::fromAnalysis($clip->broll_json, $pieces, $clipStart, $clipDuration, $hookDuration + 1.0);
+            } else {
+                // Clip analysed before that: ask now
+                $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
+                    array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
+                $cues = app(GeminiService::class)->brollCues($words, $clipDuration, $hookDuration + 1.0);
+            }
             $used = [];
-            foreach (app(GeminiService::class)->brollCues($words, $clipDuration, $hookDuration + 1.0) as $cue) {
+            foreach ($cues as $cue) {
                 $footage = $stock->clip($cue['query'], $used);
                 if ($footage) {
                     $used[] = $footage['id'];

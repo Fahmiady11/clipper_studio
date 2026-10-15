@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\BrollCues;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -114,7 +115,7 @@ class GeminiService
             return [];
         }
         $transcript = mb_substr(implode("\n", $lines), 0, 6000);
-        $max = max(1, min(3, (int) floor($duration / 15)));
+        $max = BrollCues::max($duration);
         $from = round($notBefore, 1);
         $until = round($duration - 3, 1);
 
@@ -140,25 +141,7 @@ class GeminiService
             return [];
         }
 
-        $data = array_values(array_filter($data, 'is_array'));
-        usort($data, fn ($a, $b) => (float) ($a['time'] ?? 0) <=> (float) ($b['time'] ?? 0));
-        $cues = [];
-        foreach ($data as $c) {
-            $time = (float) ($c['time'] ?? -1);
-            $query = trim((string) ($c['query'] ?? ''));
-            if ($query === '' || $time < $notBefore || $time > $duration - 3) {
-                continue;
-            }
-            if ($cues && $time - end($cues)['time'] < 8) {
-                continue;
-            }
-            $cues[] = ['time' => round($time, 2), 'query' => mb_substr($query, 0, 40)];
-            if (count($cues) >= $max) {
-                break;
-            }
-        }
-
-        return $cues;
+        return BrollCues::filter($data, $duration, $notBefore);
     }
 
     /**
@@ -378,6 +361,12 @@ class GeminiService
         - "Daripada nanya 'gimana caranya viral?', ubah pertanyaannya jadi…" → "Berhenti ngejar *viral*"
         - "Gue takut di New York. Ada berita disamperin, ditusuk, dibakar di subway?" → "Sisi *gelap* New York"
 
+        == BROLL — cuplikan video stok 2 detik ==
+        Per clip, pilih 0–3 momen yang menyebut BENDA, TEMPAT, atau AKSI konkret (uang, kota, olahraga, makanan, kantor, jalan macet).
+        - time = detik (timestamp video, sama seperti start_seconds) saat kata itu diucapkan, di dalam clip, antar momen minimal 8 detik
+        - query = kata kunci video stok dalam BAHASA INGGRIS, 1–3 kata, visual dan umum ("city traffic", "counting money", "boxing gym")
+        - Momen abstrak (perasaan, opini, obrolan biasa) atau nama orang: jangan dipilih; array kosong lebih baik daripada tidak cocok
+
         == FORMAT OUTPUT ==
         Kembalikan array JSON {$clipCount} item:
         [
@@ -392,6 +381,7 @@ class GeminiService
             "hook_text": string (judul overlay MAKSIMAL 5 kata, bikin penasaran, ikuti aturan HOOK_TEXT di atas),
             "completion_check": string (konfirmasi bahwa topik selesai di end_seconds, bukan terpotong),
             "music_mood": "energetic"|"chill"|"inspiring"|"dramatic"|"funny"|"sad" (suasana musik latar yang paling cocok dengan emosi segmen),
+            "broll": [{"time": float, "query": string}] (ikuti aturan BROLL di atas),
             "subtitle_segments": [{"start": float, "end": float, "text": string}]
           }
         ]

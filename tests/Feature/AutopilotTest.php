@@ -133,13 +133,15 @@ class AutopilotTest extends TestCase
         $this->mock(TranscriptService::class)->shouldReceive('fetch')
             ->andReturn(['language' => 'id', 'segments' => [['start' => 0, 'end' => 5, 'text' => 'halo']]]);
         $this->mock(GeminiService::class)->shouldReceive('analyzeWithTranscript')->andReturn([
-            ['ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30, 'topic' => 'T', 'reason' => 'R', 'music_mood' => 'chill'],
+            ['ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30, 'topic' => 'T', 'reason' => 'R', 'music_mood' => 'chill',
+                'broll' => [['time' => 12.5, 'query' => 'counting money'], 'junk', ['time' => 20]]],
         ]);
 
         $this->app->call([new AnalyzeVideoJob($project->id), 'handle']);
 
         $clip = GeneratedClip::where('clip_project_id', $project->id)->firstOrFail();
         $this->assertSame('pending', $clip->review_status);
+        $this->assertSame([['time' => 12.5, 'query' => 'counting money']], $clip->broll_json); // ready for the render, no extra AI call
         Queue::assertPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
         exec('rm -rf '.escapeshellarg(storage_path('app/temp/'.$project->id)));
     }

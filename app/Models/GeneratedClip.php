@@ -26,6 +26,7 @@ class GeneratedClip extends Model
         'subtitle_json',
         'caption',
         'hashtags_json',
+        'broll_json',
         'music_mood',
         'music_track',
         'tiktok_account_id',
@@ -45,6 +46,7 @@ class GeneratedClip extends Model
         'end_seconds' => 'float',
         'subtitle_json' => 'array',
         'hashtags_json' => 'array',
+        'broll_json' => 'array',
         'cancelled_at' => 'datetime',
     ];
 
