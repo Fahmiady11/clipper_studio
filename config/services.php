@@ -65,6 +65,11 @@ return [
         'python' => env('FACE_TRACK_PYTHON', 'python3'),
     ],
 
+    // Stock footage for automatic B-roll (free key: pexels.com/api); empty = no B-roll
+    'pexels' => [
+        'key' => env('PEXELS_API_KEY'),
+    ],
+
     'tiktok' => [
         'client_key' => env('TIKTOK_CLIENT_KEY'),
         'client_secret' => env('TIKTOK_CLIENT_SECRET'),

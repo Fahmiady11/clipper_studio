@@ -5,8 +5,10 @@ namespace App\Jobs;
 use App\Models\GeneratedClip;
 use App\Services\FaceTracker;
 use App\Services\FFmpegService;
+use App\Services\GeminiService;
 use App\Services\HookRenderer;
 use App\Services\MusicService;
+use App\Services\PexelsService;
 use App\Services\SmartCut;
 use App\Services\YtDlpService;
 use App\Support\Cancellation;
@@ -23,6 +25,8 @@ class RenderClipJob implements ShouldQueue
     use Queueable;
 
     public int $tries = 2;
+
+    private const BROLL_SECONDS = 2.2; // length of one stock-footage cut-in
 
     public int $timeout = 1800; // two libx264 "slow" passes on long clips can take >10 min
 
@@ -195,10 +199,27 @@ class RenderClipJob implements ShouldQueue
             ? ['color' => $subtitle?->highlight_color ?? '#facc15', 'duration' => $clipDuration]
             : null;
 
+        // B-roll: stock footage over concrete things being talked about, after the hook
+        $broll = [];
+        $pexels = app(PexelsService::class);
+        if ($project->broll && $pexels->configured()) {
+            $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
+                array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
+            $used = [];
+            foreach (app(GeminiService::class)->brollCues($words, $clipDuration, $hookDuration + 1.0) as $cue) {
+                $stock = $pexels->clip($cue['query'], $used);
+                if ($stock) {
+                    $used[] = $stock['id'];
+                    $broll[] = ['path' => $stock['path'], 'start' => $cue['time'], 'duration' => min(self::BROLL_SECONDS, $clipDuration - $cue['time'] - 0.5)];
+                }
+            }
+            $log->info('B-roll', ['cues' => array_map(fn ($b) => round($b['start'], 1), $broll)]);
+        }
+
         $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
         $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
-            'title' => $titlePath, 'progress' => $progress,
+            'title' => $titlePath, 'progress' => $progress, 'broll' => $broll,
         ]);
         $current = $step2;
         Cancellation::throwIfCancelled();

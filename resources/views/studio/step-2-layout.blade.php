@@ -53,5 +53,13 @@
       </button>
       <div class="fhint" style="margin-top:8px">Topik clip dari AI tampil terus di bagian atas setelah hook selesai.</div>
     </div>
+    <div class="fblock">
+      <button class="tgl" :class="{ on: broll }" @click="broll = !broll" type="button">
+        <span class="tgl-track"></span>
+        <span class="tgl-text">B-roll otomatis</span>
+      </button>
+      <div class="fhint" style="margin-top:8px">AI menyisipkan cuplikan video stok 2 detik saat membahas benda, tempat, atau aksi (mis. uang, kota, olahraga).
+        @unless (config('services.pexels.key'))<b>Belum aktif:</b> isi <code>PEXELS_API_KEY</code> di .env.@endunless</div>
+    </div>
   </div>
 </div>

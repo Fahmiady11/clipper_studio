@@ -27,6 +27,7 @@ class ClipProject extends Model
         'auto_zoom',
         'progress_bar',
         'top_title',
+        'broll',
         'clip_count',
         'duration_mode',
         'min_duration',
@@ -51,6 +52,7 @@ class ClipProject extends Model
         'auto_zoom' => 'boolean',
         'progress_bar' => 'boolean',
         'top_title' => 'boolean',
+        'broll' => 'boolean',
         'music_volume' => 'integer',
         'cancelled_at' => 'datetime',
     ];

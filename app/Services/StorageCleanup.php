@@ -11,9 +11,12 @@ use Illuminate\Support\Str;
  * - storage/app/temp/<project>: removed once the project is idle and older
  *   than the retention window (RenderClipJob re-downloads if needed later).
  * - storage/app/video_cache/*.mp4: removed when untouched for the window.
+ * - storage/app/broll: stock clips and searches unused for BROLL_DAYS.
  */
 class StorageCleanup
 {
+    private const BROLL_DAYS = 30; // B-roll is reused across clips; keep it longer than sources
+
     /** @return array{temp_dirs: int, cache_files: int, bytes: int} */
     public function run(int $retentionHours): array
     {
@@ -32,6 +35,16 @@ class StorageCleanup
             // A cache hit hard-links the file into temp/, bumping ctime; mtime is the download time
             if (max(filemtime($file), filectime($file)) > $cutoff) {
                 continue;
+            }
+            $stats['bytes'] += filesize($file);
+            @unlink($file);
+            $stats['cache_files']++;
+        }
+
+        $brollCutoff = now()->subDays(self::BROLL_DAYS)->getTimestamp();
+        foreach (glob((config('services.pexels.cache') ?: storage_path('app/broll')).'/*') ?: [] as $file) {
+            if (filemtime($file) > $brollCutoff) {
+                continue; // PexelsService touches a file each time it is reused
             }
             $stats['bytes'] += filesize($file);
             @unlink($file);

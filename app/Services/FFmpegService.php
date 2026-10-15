@@ -82,9 +82,9 @@ class FFmpegService
      * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
      * @param  array|null  $pieces  SmartCut pieces to keep (clip-relative); the rest is cut out
      * @param  array  $zoom  SmartCut spans (on the cut timeline) shown punched in
-     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array}|null  $overlay
-     *                                                                                                                                        Subtitles, hook and emoji drawn in the same pass,
-     *                                                                                                                                        which then is the final encode (one generation, no second pass)
+     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array, broll?: list<array{path: string, start: float, duration: float}>}|null  $overlay
+     *                                                                                                                                                                                                          Subtitles, hook and emoji drawn in the same pass,
+     *                                                                                                                                                                                                          which then is the final encode (one generation, no second pass)
      */
     public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = [], ?array $overlay = null): void
     {
@@ -107,10 +107,25 @@ class FFmpegService
             $video = '[zoomed]';
         }
         $extraInputs = '';
+        // B-roll cut-ins go under the subtitles, hook and emoji
+        $nextInput = 1;
+        foreach (array_values($overlay['broll'] ?? []) as $i => $b) {
+            $s = (float) $b['start'];
+            $d = (float) $b['duration'];
+            $extraInputs .= sprintf(' -t %.3f -i %s', $d, escapeshellarg($b['path']));
+            $filterGraph .= sprintf(
+                ';[%d:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,format=yuva420p,'
+                .'setpts=PTS-STARTPTS+%.3f/TB,fade=t=in:st=%.3f:d=0.12:alpha=1,fade=t=out:st=%.3f:d=0.12:alpha=1[br%d];'
+                .'%s[br%d]overlay=0:0:eof_action=pass[brd%d]',
+                $nextInput++, $s, $s, $s + $d - 0.12, $i, $video, $i, $i
+            );
+            $video = "[brd{$i}]";
+        }
         if ($overlay !== null) {
-            [$extraInputs, $chain] = $this->overlayChain($video, '[out]', 1, $overlay['ass'] ?? null,
+            [$extraInputs2, $chain] = $this->overlayChain($video, '[out]', $nextInput, $overlay['ass'] ?? null,
                 $overlay['hook'] ?? null, (float) ($overlay['hook_duration'] ?? 0), $overlay['emojis'] ?? [],
                 $overlay['title'] ?? null, $overlay['progress'] ?? null);
+            $extraInputs .= $extraInputs2;
             $filterGraph .= ';'.$chain;
             $video = '[out]';
         }

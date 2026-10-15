@@ -409,6 +409,14 @@
               <div class="ap-ed-note">Topik clip tampil terus di atas setelah hook.</div>
             </div>
             <div class="fblock">
+              <button class="tgl" :class="{ on: ed.s.edit.broll }" @click="ed.s.edit.broll = !ed.s.edit.broll" type="button">
+                <span class="tgl-track"></span>
+                <span class="tgl-text">B-roll otomatis</span>
+              </button>
+              <div class="ap-ed-note">Cuplikan video stok 2 detik di momen yang membahas benda/tempat/aksi.
+                @unless (config('services.pexels.key'))<b>Belum aktif:</b> isi <code>PEXELS_API_KEY</code> di .env.@endunless</div>
+            </div>
+            <div class="fblock">
               <div class="fblock-title" style="margin-bottom:10px">Clip per video</div>
               <div class="seg">
                 <template x-for="n in [1, 3, 5]" :key="n">
@@ -708,7 +716,7 @@ function autopilot() {
       this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), saving: false, error: null };
       this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles / emoji existed
       this.ed.s.subtitle.emoji ??= true;
-      this.ed.s.edit = { jump_cut: true, zoom: true, progress: true, title: false, ...(this.ed.s.edit || {}) }; // saved before these existed
+      this.ed.s.edit = { jump_cut: true, zoom: true, progress: true, title: false, broll: true, ...(this.ed.s.edit || {}) }; // saved before these existed
       this.pvTab = 'hook';
     },
     async saveEditor() {

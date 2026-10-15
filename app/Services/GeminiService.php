@@ -94,6 +94,74 @@ class GeminiService
     }
 
     /**
+     * Moments of a clip that stock footage could illustrate, each with an
+     * English search query. Empty when nothing concrete is said or the AI is
+     * unavailable (B-roll is a nice-to-have, never a reason to fail a render).
+     *
+     * @param  array<int, array{text: string, start: float}>  $words  clip-relative
+     * @return list<array{time: float, query: string}>
+     */
+    public function brollCues(array $words, float $duration, float $notBefore): array
+    {
+        // Transcript as short timestamped lines the model can point into
+        $lines = [];
+        foreach ($words as $w) {
+            $slot = (int) floor($w['start'] / 3);
+            $lines[$slot] ??= sprintf('[%.1f] ', $w['start']);
+            $lines[$slot] .= $w['text'].' ';
+        }
+        if (! $lines) {
+            return [];
+        }
+        $transcript = mb_substr(implode("\n", $lines), 0, 6000);
+        $max = max(1, min(3, (int) floor($duration / 15)));
+        $from = round($notBefore, 1);
+        $until = round($duration - 3, 1);
+
+        $prompt = <<<PROMPT
+        Kamu editor video TikTok. Dari transkrip clip di bawah (format: [detik] teks), pilih paling banyak {$max} momen
+        yang bisa diperkuat dengan B-roll (cuplikan video stok 2 detik) yang menggambarkan BENDA, TEMPAT, atau AKSI
+        konkret yang sedang dibicarakan (mis. uang, kota, olahraga, makanan, jalan macet, kantor).
+
+        Aturan:
+        - time = detik saat kata itu diucapkan, antara {$from} dan {$until}, antar momen minimal 8 detik
+        - query = kata kunci pencarian video stok dalam BAHASA INGGRIS, 1-3 kata, visual dan umum (mis. "city traffic", "counting money", "boxing gym")
+        - JANGAN pilih momen abstrak (perasaan, opini, percakapan biasa) atau nama orang; lebih baik kosong daripada tidak cocok
+
+        Transkrip:
+        {$transcript}
+
+        Kembalikan JSON: {"broll": [{"time": 12.3, "query": "city traffic"}]}
+        PROMPT;
+
+        try {
+            $data = $this->generate($prompt, 'broll', 0.4, 30, fn ($d) => is_array($d['broll'] ?? null) ? $d['broll'] : null);
+        } catch (RuntimeException) {
+            return [];
+        }
+
+        $data = array_values(array_filter($data, 'is_array'));
+        usort($data, fn ($a, $b) => (float) ($a['time'] ?? 0) <=> (float) ($b['time'] ?? 0));
+        $cues = [];
+        foreach ($data as $c) {
+            $time = (float) ($c['time'] ?? -1);
+            $query = trim((string) ($c['query'] ?? ''));
+            if ($query === '' || $time < $notBefore || $time > $duration - 3) {
+                continue;
+            }
+            if ($cues && $time - end($cues)['time'] < 8) {
+                continue;
+            }
+            $cues[] = ['time' => round($time, 2), 'query' => mb_substr($query, 0, 40)];
+            if (count($cues) >= $max) {
+                break;
+            }
+        }
+
+        return $cues;
+    }
+
+    /**
      * Ask each provider in turn until one returns JSON that $accept turns into a value.
      *
      * @template T

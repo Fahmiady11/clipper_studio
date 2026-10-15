@@ -83,7 +83,7 @@ class SmartCutTest extends TestCase
 
     public function test_edit_options_default_on_and_are_validated(): void
     {
-        $this->assertSame(['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false], ClipSettings::normalize([])['edit']);
+        $this->assertSame(['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false, 'broll' => true], ClipSettings::normalize([])['edit']);
         $this->assertFalse(ClipSettings::normalize(['edit' => ['zoom' => false]])['edit']['zoom']);
         $this->assertFalse(validator(['edit' => ['jump_cut' => 'ya']], ClipSettings::rules())->passes());
     }
