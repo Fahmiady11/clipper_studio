@@ -17,7 +17,7 @@
       </button>
       <button class="btn" x-show="step === 7" :disabled="!selectedClip || !!renderingClipId"
               @click="renderClip()">
-        <span x-text="renderingClipId ? 'Merender…' : 'Render clip ini'"></span>
+        <span x-text="renderingClipId ? 'Merender…' : (selectedClipObj && selectedClipObj.status === 'done' ? 'Lihat hasil' : 'Render clip ini')"></span>
         <svg x-show="!renderingClipId" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 3l4 9-4 9 14-9z"/></svg>
       </button>
     </div>

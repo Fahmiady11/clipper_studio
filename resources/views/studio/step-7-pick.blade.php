@@ -15,6 +15,13 @@
             x-text="cancelling ? 'Membatalkan…' : 'Batalkan'"></button>
   </div>
 
+  <div class="batch-bar" x-show="clips.length > 1 && !renderingClipId && (unrenderedClips.length > 0 || batchRendering)">
+    <span x-show="!batchRendering" x-text="unrenderedClips.length + ' clip belum dirender. Render semuanya sekaligus, hasilnya bisa dibuka satu per satu.'"></span>
+    <span x-show="batchRendering" x-text="'Merender ' + clips.filter(c => c.status === 'processing').length + ' clip… boleh tinggalkan halaman ini.'"></span>
+    <button class="btn btn-secondary btn-sm" type="button" x-show="unrenderedClips.length > 0" @click="renderAll()" :disabled="batchStarting"
+            x-text="batchStarting ? 'Memulai…' : 'Render semua (' + unrenderedClips.length + ')'"></button>
+  </div>
+
   <div x-show="renderError" style="margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:#f87171" x-text="renderError"></div>
 
   <div class="clip-list">
@@ -33,6 +40,10 @@
         </div>
         <div class="clip-aside">
           <span class="viral" :class="c.viral_potential" x-text="'● ' + c.viral_potential"></span>
+          <span class="clip-state" x-show="c.status === 'processing' && renderingClipId !== c.id">⏳ Diproses</span>
+          <span class="clip-state is-fail" x-show="c.status === 'failed'" :title="c.error_msg || ''">Gagal</span>
+          <span class="clip-state is-done" role="button" tabindex="0" x-show="c.status === 'done'"
+                @click.stop="openClipResult(c)" @keydown.enter.stop.prevent="openClipResult(c)">✓ Lihat hasil</span>
           <span class="clip-pick" x-text="selectedClip === c.ranking ? '✓ Dipilih' : 'Pilih clip ini'"></span>
         </div>
       </button>

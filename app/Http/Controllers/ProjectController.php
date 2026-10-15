@@ -154,6 +154,7 @@ class ProjectController extends Controller
             'viral_potential' => $c->viral_potential,
             'hook_text' => $c->hook_text,
             'status' => $c->status,
+            'error_msg' => $c->status === 'failed' ? $c->error_msg : null,
         ]);
 
         return response()->json([

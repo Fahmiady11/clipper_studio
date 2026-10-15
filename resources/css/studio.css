@@ -1320,6 +1320,16 @@ textarea.field {
     flex-wrap: wrap
 }
 
+.batch-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); font-size: 13.5px; color: var(--text-muted)
+}
+.clip-state { font-size: 12px; font-weight: 600; color: var(--text-muted) }
+.clip-state.is-done { color: var(--teal); cursor: pointer }
+.clip-state.is-done:hover { text-decoration: underline }
+.clip-state.is-fail { color: #f87171 }
+
 .clip-trim {
     color: var(--teal);
     cursor: pointer;

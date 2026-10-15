@@ -56,6 +56,7 @@ function studio() {
     fontsTick: 0,
     resultHookText: 'Ingin lebih baik? Coba ini.',
     editHookOpen: false, draftHook: '', copied: '',
+    batchTimer: null, batchStarting: false,
     trim: { open: false, clip: null, words: [], start: 0, end: 0, mode: 'start', loading: false, saving: false, error: null },
     clipCaption: '', clipHashtags: [], loadingCaption: false,
     tiktokConfigured: false, tiktokAccounts: [], tiktokAccountId: null,
@@ -308,9 +309,12 @@ function studio() {
       this.step = 7;
       this.maxReached = 7;
 
-      // A clip still rendering (started before switching away): pick it up again
-      const rendering = this.clips.find(c => c.status === 'processing');
-      if (rendering) {
+      // Clips still rendering (started before switching away): pick them up again
+      const renderingAll = this.clips.filter(c => c.status === 'processing');
+      const rendering = renderingAll.length === 1 ? renderingAll[0] : null;
+      if (renderingAll.length > 1) {
+        this.watchBatch(0); // a "Render semua" batch
+      } else if (rendering) {
         this.selectedClip = rendering.ranking;
         this.renderingClipId = rendering.id;
         this.watchRender(rendering.id);
@@ -446,7 +450,7 @@ function studio() {
       return (list || []).map(c => ({
         ranking: c.ranking, start_seconds: c.start_seconds, end_seconds: c.end_seconds,
         topic: c.topic, reason: c.reason, viral_potential: c.viral_potential,
-        hook_text: c.hook_text, id: c.id, status: c.status,
+        hook_text: c.hook_text, id: c.id, status: c.status, error_msg: c.error_msg || null,
       }));
     },
 
@@ -672,6 +676,62 @@ function studio() {
       this.step = 7;
       this.downloadUrl = null;
       this.renderClip(text);
+    },
+
+    // ── render every clip at once ────────────────────────────────────────────
+    get unrenderedClips() { return this.clips.filter(c => c.status !== 'done' && c.status !== 'processing'); },
+    get batchRendering() { return !this.renderingClipId && this.clips.some(c => c.status === 'processing'); },
+    async renderAll() {
+      if (this.batchStarting || this.renderingClipId) return;
+      this.batchStarting = true;
+      this.renderError = null;
+      const headers = { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content };
+      for (const c of this.unrenderedClips) {
+        try {
+          const res = await fetch(`/api/clips/${c.id}/render`, { method: 'POST', headers });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'HTTP ' + res.status);
+          Object.assign(c, { status: data.status, error_msg: null });
+        } catch (e) {
+          Object.assign(c, { status: 'failed', error_msg: e.message });
+        }
+      }
+      this.batchStarting = false;
+      this.watchBatch();
+    },
+    // One poll of the project covers every clip in the batch
+    watchBatch(delay = 4000) {
+      clearTimeout(this.batchTimer);
+      const projectId = this.projectId;
+      const poll = async () => {
+        if (this.projectId !== projectId || !this.clips.some(c => c.status === 'processing')) return;
+        try {
+          const res = await fetch(`/api/projects/${projectId}/status`, { headers: { 'Accept': 'application/json' } });
+          const data = await res.json();
+          if (this.projectId !== projectId) return;
+          for (const fresh of data.clips || []) {
+            const c = this.clips.find(x => x.id === fresh.id);
+            if (c) Object.assign(c, { status: fresh.status, error_msg: fresh.error_msg || null });
+          }
+        } catch (e) {}
+        if (this.clips.some(c => c.status === 'processing')) this.batchTimer = setTimeout(poll, 4000);
+      };
+      this.batchTimer = setTimeout(poll, delay);
+    },
+    // A finished clip opens its result straight away
+    async openClipResult(c) {
+      this.selectedClip = c.ranking;
+      try {
+        const res = await fetch(`/api/clips/${c.id}/render-status`, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.status !== 'done') { c.status = data.status; return; }
+        this.downloadUrl = data.download_url;
+        this.musicMissing = !!data.music_missing;
+        this.resultHookText = this.hookAi ? (c.hook_text || this.hookText) : this.hookText;
+        this.done = true;
+      } catch (e) {
+        this.renderError = 'Koneksi gagal.';
+      }
     },
 
     // ── trim a clip on its transcript ───────────────────────────────────────
