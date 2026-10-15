@@ -12,7 +12,8 @@ class SubtitleTimingTest extends TestCase
     {
         preg_match_all('/^Dialogue: 1,([^,]+),([^,]+),Default,,0,0,0,,(.*)$/m', $ass, $m, PREG_SET_ORDER);
 
-        return array_map(fn ($d) => ['start' => $d[1], 'end' => $d[2], 'text' => $d[3]], $m);
+        // every line carries the same position tag; tests look at the rest
+        return array_map(fn ($d) => ['start' => $d[1], 'end' => $d[2], 'text' => preg_replace('/^\{\\\\an5\\\\pos\(\d+,\d+\)\}/', '', $d[3])], $m);
     }
 
     private function callPrivate(object $obj, string $method, array $args): mixed

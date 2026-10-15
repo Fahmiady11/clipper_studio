@@ -33,9 +33,13 @@ class SubtitlePositionTest extends TestCase
         }
     }
 
-    public function test_preset_position_has_no_override_and_out_of_range_is_clamped(): void
+    public function test_preset_position_centres_lines_in_their_box_and_out_of_range_is_clamped(): void
     {
-        $this->assertDoesNotMatchRegularExpression('/^Dialogue: 1,.*\\\\pos\(/m', $this->ass(null));
+        // bottom preset: 200px margin, line centred half a 42px line above it,
+        // the same centre as its rounded box (y 1664 + 70/2)
+        $ass = $this->ass(null);
+        $this->assertStringContainsString('\pos(355,1664)', $ass);
+        $this->assertMatchesRegularExpression('/^Dialogue: 1,.*\{\\\\an5\\\\pos\(540,1699\)\}/m', $ass);
         $this->assertStringContainsString('\pos(540,1824)', $this->ass(99)); // clamped to 95%
     }
 

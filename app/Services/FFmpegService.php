@@ -154,11 +154,7 @@ class FFmpegService
             ? $subtitleSettings['style'] : 'karaoke';
         $this->cueWords = $this->style === 'word' ? 1 : self::MAX_CUE_WORDS;
 
-        // Dragged position: every line is centred on that height (\an5 = middle-centre),
-        // matching the studio preview which centres the subtitle box on the same %.
         $positionY = $subtitleSettings['position_y'] ?? null;
-        $this->posTag = $positionY === null ? '' : sprintf('{\\an5\\pos(540,%d)}',
-            (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920));
 
         $alignment = match ($position) {
             'top' => 8,
@@ -187,6 +183,11 @@ class FFmpegService
                 default => 1920 - $marginV - $fontSize / 2,
             }
         : (int) round(max(ClipSettings::Y_MIN, min(ClipSettings::Y_MAX, (float) $positionY)) / 100 * 1920);
+        // Every line is centred on that height (\an5 = middle-centre), like the
+        // studio preview: a line scaled down to fit shrinks around its centre,
+        // so it stays inside its rounded box, and libass never shifts a line
+        // out of the way of another.
+        $this->posTag = sprintf('{\\an5\\pos(540,%d)}', (int) round($this->subtitleY));
         if ($this->box) {
             $this->box += [
                 'font' => $this->layout->resolveFontByFamily($fontFamily),
@@ -265,12 +266,12 @@ class FFmpegService
     }
 
     /** Percent scale that makes a cue without a box fit the frame width (100 when it already fits). */
-    private function fitScale(string $text): int
+    private function fitScale(string $text, float $extra = 0.0): int
     {
         $maxW = 1080 - 2 * 60 - 2 * $this->font['outline'];
         $textW = FontMetrics::textWidth($this->font['path'], $text, $this->font['size']);
 
-        return (int) floor(min(1.0, $maxW / max(1.0, $textW)) * 100);
+        return (int) floor(min(1.0, $maxW / max(1.0, $textW + $extra)) * 100);
     }
 
     private function scaleTag(int $percent): string
@@ -285,14 +286,14 @@ class FFmpegService
      *
      * @return array{0: string, 1: int} [box dialogue, percent scale that makes the text fit]
      */
-    private function boxFor(float $start, float $end, string $text): array
+    private function boxFor(float $start, float $end, string $text, float $extra = 0.0): array
     {
         $padX = 30;
         $padY = 14;
         $maxW = 1080 - 2 * 60;
 
         $textW = FontMetrics::textWidth($this->box['font'], $text, $this->box['size']);
-        $scale = min(1.0, ($maxW - 2 * $padX) / max(1.0, $textW));
+        $scale = min(1.0, ($maxW - 2 * $padX) / max(1.0, $textW + $extra));
 
         $w = (int) round($textW * $scale + 2 * $padX);
         $h = (int) round($this->box['size'] * $scale + 2 * $padY);
@@ -325,7 +326,13 @@ class FFmpegService
         $hl = '{\\1c&H'.substr($hlColor, 4).'&}'; // &H00BBGGRR -> \1c&HBBGGRR&
         $line = implode(' ', array_column($words, 'text'));
 
-        [$out, $fit] = $this->box ? $this->boxFor($cue['start'], $cue['end'], $line) : ['', $this->fitScale($line)];
+        // pop grows the spoken word 15%: leave room for the widest one grown
+        $extra = 0.0;
+        if ($this->style === 'pop') {
+            $font = $this->box['font'] ?? $this->font['path'];
+            $extra = 0.15 * max(array_map(fn ($w) => FontMetrics::textWidth($font, $w['text'], $this->font['size']), $words));
+        }
+        [$out, $fit] = $this->box ? $this->boxFor($cue['start'], $cue['end'], $line, $extra) : ['', $this->fitScale($line, $extra)];
         $fitTag = $this->scaleTag($fit);
 
         if ($this->style === 'word') {

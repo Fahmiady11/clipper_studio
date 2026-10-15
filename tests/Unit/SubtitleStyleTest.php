@@ -23,7 +23,8 @@ class SubtitleStyleTest extends TestCase
         );
         preg_match_all('/^Dialogue: 1,[^,]+,[^,]+,Default,,0,0,0,,(.*)$/m', $ass, $m);
 
-        return $m[1];
+        // every line carries the same position tag; tests look at the rest
+        return array_map(fn ($t) => preg_replace('/^\{\\\\an5\\\\pos\(\d+,\d+\)\}/', '', $t), $m[1]);
     }
 
     public function test_karaoke_keeps_case_and_only_colours_the_spoken_word(): void
@@ -64,6 +65,14 @@ class SubtitleStyleTest extends TestCase
         $this->assertMatchesRegularExpression('/^\{\\\\fscx(\d+)\\\\fscy\1\}/', $texts[0]);
         preg_match('/fscx(\d+)/', $texts[0], $m);
         $this->assertLessThan(100, (int) $m[1]);
+    }
+
+    public function test_pop_leaves_room_for_the_grown_word(): void
+    {
+        $scale = fn ($style) => (int) (preg_match('/fscx(\d+)/', $this->texts($style, 'PENGEMBANGAN KEPRIBADIAN MENYELURUH SEKARANG', 70)[0], $m) ? $m[1] : 100);
+
+        // same (upper-case) text, but pop also fits its widest word at 115%
+        $this->assertLessThan($scale('karaoke'), $scale('pop'));
     }
 
     public function test_unknown_style_is_rejected_and_defaults_to_karaoke(): void
