@@ -1,5 +1,5 @@
 @extends('public._layout')
-@section('title', 'Turn long videos into TikTok clips')
+@section('title', 'Turn long videos into TikTok and YouTube Shorts clips')
 @section('main_class', 'wide')
 
 @section('style')
@@ -130,9 +130,9 @@
   <section class="wl-hero">
     <div class="wl-glow" aria-hidden="true"></div>
     <div>
-      <span class="wl-kicker"><b></b> Long video → TikTok clips</span>
+      <span class="wl-kicker"><b></b> Long video → TikTok &amp; Shorts</span>
       <h1>Turn long videos into <span>short vertical clips</span></h1>
-      <p class="wl-lead">Clipper Studio finds the strongest moments in a long video or podcast, turns them into 9:16 clips with karaoke subtitles and an opening hook, and sends the clip you choose to your TikTok inbox as a draft.</p>
+      <p class="wl-lead">Clipper Studio finds the strongest moments in a long video or podcast and edits them into 9:16 clips: pauses cut out, faces followed, karaoke subtitles, an opening hook and B-roll. Then it sends the clip you choose to TikTok or YouTube Shorts.</p>
       <div class="wl-cta">
         @auth
           <a class="pb-btn" href="{{ route('home') }}">Open app →</a>
@@ -170,7 +170,7 @@
         </div>
       </div>
 
-      <div class="wl-toast">
+      <div class="wl-toast" id="wl-toast">
         <span class="wl-toast-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span>
         <div><b>Draft sent to TikTok</b><span>Ready to edit in your inbox</span></div>
       </div>
@@ -184,27 +184,39 @@
     </div>
     <div class="wl-feats">
       <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg></div>
-        <h3>AI picks the moments</h3><p>The transcript is read to find the parts most likely to keep viewers watching.</p>
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg></div>
+        <h3>AI picks the moments</h3><p>The transcript is read to find the parts most likely to keep viewers watching, and each clip starts and ends on a full sentence.</p>
       </div>
       <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg></div>
-        <h3>Karaoke subtitles</h3><p>Word-by-word highlighting in your font, colour and position, with rounded backgrounds.</p>
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16"/><path d="M10 9l4 3-4 3"/></svg></div>
+        <h3>Jump cuts and zoom</h3><p>Long pauses and filler words like "um" are cut out, and the picture punches in at cuts and sentence ends, as an editor would.</p>
       </div>
       <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
-        <h3>Opening hook</h3><p>A short headline pops in for the first seconds so viewers stop scrolling.</p>
-      </div>
-      <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
         <h3>Vertical 9:16 layouts</h3><p>A reframe that follows faces and cuts to whoever is talking, or the full shot over a blurred background.</p>
       </div>
       <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-        <h3>Background music</h3><p>Licensed tracks by mood, mixed well under the voice, credits added to the caption.</p>
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg></div>
+        <h3>Karaoke subtitles</h3><p>Word-by-word highlighting in ready-made styles or your own font, colour and position, with emoji on key words.</p>
       </div>
       <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+        <h3>Hook, title and progress bar</h3><p>A headline pops in for the first seconds, the topic can stay on top, and a thin bar shows how much is left.</p>
+      </div>
+      <div class="wl-feat wl-reveal">
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></div>
+        <h3>Automatic B-roll</h3><p>Short stock clips that match what is being said are cut in over the speaker, under the subtitles.</p>
+      </div>
+      <div class="wl-feat wl-reveal">
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+        <h3>Music and clean sound</h3><p>Licensed tracks by mood, mixed well under the voice; without music the voice is levelled to platform loudness.</p>
+      </div>
+      <div class="wl-feat wl-reveal">
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6-6 6 6"/><path d="M12 3v13"/><path d="M4 21h16"/></svg></div>
+        <h3>Post to TikTok and YouTube</h3><p>Send a clip to your TikTok inbox as a draft, post it directly, or upload it to your YouTube channel as a Short.</p>
+      </div>
+      <div class="wl-feat wl-reveal">
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
         <h3>Autopilot with review</h3><p>New videos from your sources become clips automatically; nothing goes out until you approve it.</p>
       </div>
     </div>
@@ -214,8 +226,8 @@
     <div class="wl-sec-head wl-reveal"><h2>How it works</h2></div>
     <div class="wl-steps">
       <div class="wl-step wl-reveal"><h3>Paste a video link</h3><p>Add a long-form video you own or have permission to use.</p></div>
-      <div class="wl-step wl-reveal"><h3>Pick and render clips</h3><p>Choose the suggested moments, set the layout, subtitles and hook, then render.</p></div>
-      <div class="wl-step wl-reveal"><h3>Send to TikTok as a draft</h3><p>Upload a finished clip to your TikTok inbox, then edit and post it in TikTok.</p></div>
+      <div class="wl-step wl-reveal"><h3>Pick and render clips</h3><p>Choose the suggested moments, adjust where each one starts and ends, set the style, then render one clip or all of them.</p></div>
+      <div class="wl-step wl-reveal"><h3>Post or download</h3><p>Send a clip to TikTok or YouTube Shorts, or download every clip with its caption in one ZIP.</p></div>
     </div>
   </section>
 
@@ -223,11 +235,12 @@
     <div class="wl-box wl-reveal">
       <div class="wl-box-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg></div>
       <div>
-        <h2>How Clipper Studio works with TikTok</h2>
+        <h2>How Clipper Studio works with TikTok and YouTube</h2>
         <ul>
           <li><strong>Login Kit</strong>: you connect your own TikTok account through TikTok's authorization screen. We use your display name and avatar only to show which account is connected.</li>
-          <li><strong>Content Posting API</strong>: a clip is uploaded only when you click upload for that clip. It arrives in your TikTok inbox as a draft; you write the caption and decide whether to post it.</li>
-          <li>We never post publicly on your behalf, and you can disconnect your TikTok account at any time. See our <a href="{{ route('privacy') }}">Privacy Policy</a>.</li>
+          <li><strong>Content Posting API</strong>: a clip is uploaded only when you click upload for that clip. Send it to your TikTok inbox as a draft to finish in TikTok, or post it directly with the caption, privacy and interaction settings you choose on that screen.</li>
+          <li><strong>YouTube Data API</strong>: you connect your own channel through Google's authorization screen. A clip is uploaded only when you click upload for that clip, with the title, description and visibility you set. Clipper Studio uses YouTube API Services; see the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a>.</li>
+          <li>Nothing is posted without your action for that clip, and you can disconnect your accounts at any time. See our <a href="{{ route('privacy') }}">Privacy Policy</a>.</li>
         </ul>
       </div>
     </div>
@@ -272,6 +285,16 @@
         draw();
       }, 420);
     }
+
+    // The toast alternates between the two places a clip can go
+    const toast = document.getElementById('wl-toast');
+    const toasts = [['Draft sent to TikTok', 'Ready to edit in your inbox'], ['Uploaded to YouTube Shorts', 'Live on your channel']];
+    let t = 0;
+    toast.addEventListener('animationiteration', () => {
+      t = (t + 1) % toasts.length;
+      toast.querySelector('div > b').textContent = toasts[t][0];
+      toast.querySelector('div > span').textContent = toasts[t][1];
+    });
 
     // Fade sections in as they scroll into view
     const io = new IntersectionObserver(entries => entries.forEach(e => {

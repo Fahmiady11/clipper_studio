@@ -20,7 +20,7 @@
   <h2>2. How we use information</h2>
   <ul>
     <li>To provide the Service: download and transcribe your videos, suggest clips, render them with subtitles, hooks and music, and generate captions and hashtags.</li>
-    <li>To upload a clip to your TikTok inbox as a draft when you choose to, and to show which TikTok account is connected.</li>
+    <li>To upload a clip to your TikTok inbox as a draft, or post it to your profile with the settings you choose, when you start that upload, and to show which TikTok account is connected.</li>
     <li>To upload a clip to your YouTube channel as a Short when you choose to, with the title, description and visibility you set, and to show which channel is connected.</li>
     <li>To keep the Service secure, prevent abuse and fix problems.</li>
   </ul>
