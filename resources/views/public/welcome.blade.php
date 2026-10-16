@@ -50,6 +50,13 @@
 .wl-sub { position: absolute; bottom: 18%; left: 10px; right: 10px; text-align: center; }
 .wl-sub-box { display: inline-block; padding: 5px 9px; border-radius: 9px; background: rgba(0, 0, 0, .6); font-weight: 800; font-size: 13px; line-height: 1.3; color: #fff; }
 .wl-sub-box .on { color: #facc15; }
+.wl-face { position: absolute; left: 25%; top: 43%; width: 50%; height: 25%; animation: wl-face 6s ease-in-out infinite; }
+.wl-face i { position: absolute; width: 14px; height: 14px; border: 2px solid var(--teal); }
+.wl-face i:nth-child(1) { top: 0; left: 0; border-width: 2px 0 0 2px; border-radius: 4px 0 0 0; }
+.wl-face i:nth-child(2) { top: 0; right: 0; border-width: 2px 2px 0 0; border-radius: 0 4px 0 0; }
+.wl-face i:nth-child(3) { bottom: 0; left: 0; border-width: 0 0 2px 2px; border-radius: 0 0 0 4px; }
+.wl-face i:nth-child(4) { bottom: 0; right: 0; border-width: 0 2px 2px 0; border-radius: 0 0 4px 0; }
+.wl-face span { position: absolute; top: -15px; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 600; letter-spacing: .08em; color: var(--teal); }
 .wl-rail { position: absolute; right: 8px; bottom: 46%; display: flex; flex-direction: column; gap: 12px; }
 .wl-rail i { width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, .18); }
 .wl-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .15); }
@@ -96,11 +103,12 @@
 @keyframes wl-scan { from { left: 0; } to { left: 100%; } }
 @keyframes wl-pick { 0%, 15% { opacity: 0; transform: scaleY(.6); } 25%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 @keyframes wl-hook { 0% { opacity: 0; transform: scale(.82); } 6% { opacity: 1; transform: scale(1.08); } 10%, 42% { opacity: 1; transform: scale(1); } 50%, 100% { opacity: 0; transform: scale(1); } }
+@keyframes wl-face { 0%, 100% { transform: translate(0, 0); } 30% { transform: translate(-4%, 2%); } 65% { transform: translate(5%, -1%); } }
 @keyframes wl-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes wl-toast { 0%, 55% { opacity: 0; transform: translateY(12px); } 62%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .wl-src, .wl-phone, .wl-kicker b, .wl-head, .wl-pick, .wl-hook, .wl-bar::after, .wl-toast { animation: none !important; }
+  .wl-src, .wl-phone, .wl-kicker b, .wl-head, .wl-pick, .wl-hook, .wl-bar::after, .wl-toast, .wl-face { animation: none !important; }
   .wl-pick, .wl-toast { opacity: 1; }
   .js .wl-reveal { opacity: 1; transform: none; transition: none; }
 }
@@ -163,6 +171,7 @@
         <div class="wl-screen">
           <div class="wl-notch"></div>
           <div class="wl-person p1"></div>
+          <div class="wl-face"><i></i><i></i><i></i><i></i><span>FACE</span></div>
           <div class="wl-hook"><span>The habit that</span><span>changed everything</span></div>
           <div class="wl-rail"><i></i><i></i><i></i></div>
           <div class="wl-sub"><span class="wl-sub-box" id="wl-sub">Start small every single day</span></div>
@@ -192,8 +201,8 @@
         <h3>Jump cuts and zoom</h3><p>Long pauses and filler words like "um" are cut out, and the picture punches in at cuts and sentence ends, as an editor would.</p>
       </div>
       <div class="wl-feat wl-reveal">
-        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
-        <h3>Vertical 9:16 layouts</h3><p>A reframe that follows faces and cuts to whoever is talking, or the full shot over a blurred background.</p>
+        <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><circle cx="12" cy="10" r="3"/><path d="M7.5 17a5 5 0 019 0"/></svg></div>
+        <h3>Face tracking</h3><p>The 9:16 frame follows faces and cuts to whoever is talking, so the speaker never drifts out of shot. Or keep the full shot over a blurred background.</p>
       </div>
       <div class="wl-feat wl-reveal">
         <div class="wl-feat-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg></div>
