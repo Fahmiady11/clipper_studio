@@ -748,7 +748,7 @@ class FFmpegService
         return true;
     }
 
-    private function probeDuration(string $input): float
+    public function probeDuration(string $input): float
     {
         exec(sprintf(
             '%s -v error -show_entries format=duration -of default=nw=1:nk=1 %s 2>&1',

@@ -7,6 +7,7 @@ use App\Http\Controllers\MusicController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RenderController;
 use App\Http\Controllers\TikTokController;
+use App\Http\Controllers\YouTubeController;
 use Illuminate\Support\Facades\Route;
 
 // New Studio API (auth required)
@@ -36,6 +37,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/tiktok/accounts/{accountId}/creator-info', [TikTokController::class, 'creatorInfo']);
     Route::post('/clips/{clipId}/tiktok', [TikTokController::class, 'upload']);
     Route::get('/clips/{clipId}/tiktok-status', [TikTokController::class, 'status']);
+
+    Route::get('/youtube/accounts', [YouTubeController::class, 'accounts']);
+    Route::delete('/youtube/accounts/{accountId}', [YouTubeController::class, 'disconnect']);
+    Route::post('/clips/{clipId}/youtube', [YouTubeController::class, 'upload'])->middleware('throttle:10,1');
+    Route::get('/clips/{clipId}/youtube-status', [YouTubeController::class, 'status']);
 
     Route::get('/music', [MusicController::class, 'index']);
     Route::post('/music', [MusicController::class, 'store']);

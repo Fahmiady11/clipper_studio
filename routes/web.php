@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
+use App\Http\Controllers\YouTubeController;
 use Illuminate\Support\Facades\Route;
 
 // Public pages: what the app is, terms and privacy (linked from the TikTok app listing)
@@ -49,4 +50,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // TikTok OAuth (redirect URI registered on the TikTok app → /tiktok/callback)
     Route::get('/tiktok/connect', [TikTokController::class, 'connect'])->name('tiktok.connect');
     Route::get('/tiktok/callback', [TikTokController::class, 'callback'])->name('tiktok.callback');
+
+    // Google OAuth for YouTube Shorts (authorized redirect URI → /youtube/callback)
+    Route::get('/youtube/connect', [YouTubeController::class, 'connect'])->name('youtube.connect');
+    Route::get('/youtube/callback', [YouTubeController::class, 'callback'])->name('youtube.callback');
 });

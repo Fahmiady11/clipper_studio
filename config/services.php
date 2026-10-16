@@ -82,6 +82,14 @@ return [
         'scopes' => env('TIKTOK_SCOPES', 'user.info.basic,video.upload'),
     ],
 
+    'youtube' => [
+        // console.cloud.google.com → APIs & Services → Credentials → OAuth client ID (Web application)
+        'client_id' => env('YOUTUBE_CLIENT_ID'),
+        'client_secret' => env('YOUTUBE_CLIENT_SECRET'),
+        // Must match an Authorized redirect URI on that client: <APP_URL>/youtube/callback
+        'redirect_uri' => env('YOUTUBE_REDIRECT_URI'),
+    ],
+
     'clipper' => [
         // Downloaded source videos (temp/, video_cache/) older than this are deleted daily
         'temp_retention_hours' => (int) env('CLIPPER_TEMP_RETENTION_HOURS', 72),

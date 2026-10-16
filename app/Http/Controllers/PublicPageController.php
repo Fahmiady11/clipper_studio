@@ -8,7 +8,7 @@ use Illuminate\View\View;
 class PublicPageController extends Controller
 {
     /** Shown as "Last updated" on the terms and privacy pages; bump when either changes. */
-    public const UPDATED = 'October 13, 2026';
+    public const UPDATED = 'October 16, 2026';
 
     public function welcome(): View
     {

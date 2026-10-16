@@ -64,6 +64,9 @@ function studio() {
     tiktokMode: 'inbox', tiktokCreator: null, tiktokCreatorError: null, tiktokCreatorLoading: false,
     tiktokTitle: '', tiktokPrivacy: '', tiktokAllowComment: false, tiktokAllowDuet: false, tiktokAllowStitch: false,
     tiktokDisclose: false, tiktokBrandOrganic: false, tiktokBrandContent: false,
+    ytConfigured: false, ytAccounts: [], ytAccountId: null,
+    ytTitle: '', ytDescription: '', ytPrivacy: 'public', ytTags: [], ytFilledFor: null,
+    ytStatus: null, ytError: null, ytUrl: null, ytPrivacyNow: null, ytTimer: null,
     PRIVACY_LABELS: {
       PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya',
     },
@@ -825,6 +828,87 @@ function studio() {
         failed:     'Upload gagal.',
       }[this.tiktokStatus] || '';
     },
+    // ── YouTube Shorts upload ──────────────────────────────────────────────
+    get ytBusy() { return ['queued', 'uploading'].includes(this.ytStatus); },
+    get ytStatusLabel() {
+      return {
+        queued:     'Menunggu antrian…',
+        uploading:  'Mengupload video ke YouTube…',
+        processing: '✓ Terupload — YouTube sedang memproses video…',
+        published:  this.ytPrivacyNow === 'private'
+          ? '✓ Sudah di YouTube sebagai Pribadi — ubah ke Publik di YouTube Studio.'
+          : '✓ Sudah di YouTube Shorts.',
+        failed:     'Upload gagal.',
+      }[this.ytStatus] || '';
+    },
+    get ytTooLong() { return this.tiktokClipSeconds > 181; },
+    get ytCanSubmit() {
+      return !this.ytBusy && !!this.ytAccountId && !!this.ytTitle.trim() && !/[<>]/.test(this.ytTitle) && !this.ytTooLong;
+    },
+    async loadYoutubeAccounts() {
+      try {
+        const res = await fetch('/api/youtube/accounts', { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return;
+        const data = await res.json();
+        this.ytConfigured = data.configured;
+        this.ytAccounts = data.accounts || [];
+        if (!this.ytAccounts.some(a => a.id === this.ytAccountId)) {
+          this.ytAccountId = this.ytAccounts[0]?.id ?? null;
+        }
+      } catch (e) { console.error('loadYoutubeAccounts', e); }
+    },
+    // Title from the clip topic, description from the AI caption; once per clip, edits are kept
+    fillYoutubeFields(captionArrived = false) {
+      const c = this.selectedClipObj;
+      if (!c) return;
+      if (this.ytFilledFor !== c.id) {
+        this.ytFilledFor = c.id;
+        this.ytTitle = String(c.topic || c.hook_text || '').replace(/[<>]/g, '').slice(0, 100);
+        this.ytDescription = '';
+      }
+      if (captionArrived && !this.ytDescription && this.clipCaption) {
+        this.ytDescription = (this.clipCaption + '\n\n' + this.clipHashtags.join(' ')).trim().slice(0, 5000);
+        this.ytTags = this.clipHashtags.map(h => String(h).replace(/^#/, '')).filter(Boolean).slice(0, 30);
+      }
+    },
+    async uploadToYoutube() {
+      const clipId = this.selectedClipObj?.id;
+      if (!clipId || !this.ytCanSubmit) return;
+      this.ytError = null;
+      try {
+        const res = await fetch(`/api/clips/${clipId}/youtube`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+          body: JSON.stringify({ account_id: this.ytAccountId, title: this.ytTitle.trim(), description: this.ytDescription, privacy: this.ytPrivacy, tags: this.ytTags }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.ytStatus = 'failed';
+          this.ytError = data.message || 'Gagal memulai upload.';
+          return;
+        }
+        this.applyYoutubeStatus(data);
+      } catch (e) {
+        this.ytStatus = 'failed'; this.ytError = 'Koneksi gagal.';
+      }
+    },
+    async fetchYoutubeStatus() {
+      const clipId = this.selectedClipObj?.id;
+      if (!clipId) return;
+      try {
+        const res = await fetch(`/api/clips/${clipId}/youtube-status`, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) this.applyYoutubeStatus(await res.json());
+      } catch (e) { console.error('fetchYoutubeStatus', e); }
+    },
+    applyYoutubeStatus(data) {
+      if (data.clip_id !== this.selectedClipObj?.id) return;
+      this.ytStatus = data.status;
+      this.ytError = data.error;
+      this.ytUrl = data.url;
+      if (data.privacy) this.ytPrivacyNow = data.privacy;
+      clearTimeout(this.ytTimer);
+      if (this.ytBusy || this.ytStatus === 'processing') this.ytTimer = setTimeout(() => this.fetchYoutubeStatus(), 5000);
+    },
     async loadMusicLibrary() {
       try {
         const res = await fetch('/api/music', { headers: { 'Accept': 'application/json' } });
@@ -943,6 +1027,7 @@ function studio() {
         }
         this.clipCaption  = data.caption  || '';
         this.clipHashtags = data.hashtags || [];
+        this.fillYoutubeFields(true);
       } catch (e) {
         console.error('fetchCaption exception', e);
       }
@@ -1015,9 +1100,10 @@ function studio() {
       this.$watch('selectedClip', () => {
         this.clipCaption = ''; this.clipHashtags = [];
         this.tiktokStatus = null; this.tiktokError = null;
-        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); }
+        this.ytStatus = null; this.ytError = null; this.ytUrl = null; this.ytPrivacyNow = null; clearTimeout(this.ytTimer);
+        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); }
       });
-      this.$watch('done', val => { if (val && this.selectedClipObj) this.fetchTiktokStatus(); });
+      this.$watch('done', val => { if (val && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); } });
       this.$watch('tiktokMode', () => this.loadTiktokCreator());
       this.$watch('tiktokAccountId', () => this.loadTiktokCreator());
 
@@ -1027,8 +1113,14 @@ function studio() {
         history.replaceState(null, '', location.pathname);
         if (tiktokResult !== 'connected') alert('Gagal menghubungkan TikTok (' + tiktokResult + ').');
       }
-      await Promise.all([this.loadTiktokAccounts(), this.loadMusicLibrary()]);
-      if (this.done && this.selectedClipObj) this.fetchTiktokStatus();
+      // Back from Google OAuth: /?youtube=connected|denied|error|…
+      const youtubeResult = new URLSearchParams(location.search).get('youtube');
+      if (youtubeResult) {
+        history.replaceState(null, '', location.pathname);
+        if (youtubeResult !== 'connected') alert('Gagal menghubungkan YouTube (' + youtubeResult + ').');
+      }
+      await Promise.all([this.loadTiktokAccounts(), this.loadYoutubeAccounts(), this.loadMusicLibrary()]);
+      if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); }
       // If restored from session and already done
       if (this.done && this.selectedClipObj && !this.clipCaption) this.fetchCaption();
     },

@@ -185,6 +185,61 @@
       </div>
     </div>
 
+    {{-- Upload ke YouTube Shorts --}}
+    <div class="res-sec">
+      <div class="res-sec-head">
+        <span class="res-sec-title">Upload ke YouTube Shorts</span>
+        <a class="res-edit" href="/youtube/connect" x-show="ytConfigured && ytAccounts.length > 0">+ Channel lain</a>
+      </div>
+
+      <div x-show="!ytConfigured" style="padding:8px 0;color:var(--text-dim);font-size:13px">
+        Isi <code>YOUTUBE_CLIENT_ID</code>, <code>YOUTUBE_CLIENT_SECRET</code>, dan <code>YOUTUBE_REDIRECT_URI</code> di <code>.env</code> untuk mengaktifkan upload.
+      </div>
+
+      <div x-show="ytConfigured && ytAccounts.length === 0" style="padding:8px 0">
+        <a class="btn btn-secondary" href="/youtube/connect">Hubungkan channel YouTube</a>
+      </div>
+
+      <div x-show="ytConfigured && ytAccounts.length > 0">
+        <div class="seg" style="flex-wrap:wrap;margin-bottom:12px">
+          <template x-for="a in ytAccounts" :key="a.id">
+            <button :class="{ on: ytAccountId === a.id }" @click="ytAccountId = a.id" type="button" x-text="a.title || ('Channel #' + a.id)"></button>
+          </template>
+        </div>
+
+        <div class="fblock-title" style="margin-bottom:6px">Judul <span style="color:var(--text-dim);font-weight:400" x-text="`(${ytTitle.length}/100)`"></span></div>
+        <input class="field" maxlength="100" x-model="ytTitle">
+        <div x-show="/[<>]/.test(ytTitle)" style="margin-top:6px;font-size:12px;color:#f87171">Judul YouTube tidak boleh berisi &lt; atau &gt;.</div>
+
+        <div class="fblock-title" style="margin:12px 0 6px">Deskripsi</div>
+        <textarea class="field" maxlength="5000" x-model="ytDescription" style="min-height:90px"></textarea>
+
+        <div class="fblock-title" style="margin:12px 0 6px">Siapa yang bisa melihat</div>
+        <div class="seg" style="flex-wrap:wrap">
+          <button :class="{ on: ytPrivacy === 'public' }"   @click="ytPrivacy = 'public'"   type="button">Publik</button>
+          <button :class="{ on: ytPrivacy === 'unlisted' }" @click="ytPrivacy = 'unlisted'" type="button">Tidak publik</button>
+          <button :class="{ on: ytPrivacy === 'private' }"  @click="ytPrivacy = 'private'"  type="button">Pribadi</button>
+        </div>
+        <div x-show="ytTooLong" style="margin-top:8px;font-size:12px;color:#f87171"
+             x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik. YouTube Shorts maksimal 3 menit.`"></div>
+        <div style="margin:10px 0 14px;font-size:12px;color:var(--text-dim);line-height:1.5">
+          Video vertikal sampai 3 menit otomatis jadi Shorts, dan <code>#Shorts</code> ditambahkan ke deskripsi.
+          Selama app belum lolos audit YouTube API, video tetap tersimpan sebagai <b>Pribadi</b>; ubah ke Publik di YouTube Studio.
+        </div>
+
+        <button class="btn" @click="uploadToYoutube()"
+                :disabled="!ytCanSubmit"
+                :style="!ytCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
+                x-text="ytBusy ? 'Mengupload…' : 'Upload ke YouTube'"></button>
+        <div x-show="ytStatus" style="margin-top:12px;font-size:13px"
+             :style="{ color: ytStatus === 'failed' ? '#f87171' : 'var(--text-muted)' }">
+          <span x-text="ytStatusLabel"></span>
+          <a x-show="ytUrl && ytStatus !== 'failed'" :href="ytUrl" target="_blank" rel="noopener" style="color:var(--teal);margin-left:6px">Buka di YouTube →</a>
+        </div>
+        <div x-show="ytStatus === 'failed' && ytError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="ytError"></div>
+      </div>
+    </div>
+
     <div class="dl-row">
       <button class="btn btn-ghost" @click="restart()">← Buat project baru</button>
     </div>
