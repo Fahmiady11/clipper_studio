@@ -37,10 +37,33 @@ class SmartCut
     {
         $duration = $end - $start;
 
-        return self::keep(array_merge(
+        return self::onFrames(self::keep(array_merge(
             $this->silences($video, $start, $duration),
             self::fillers($words, $start, $duration),
-        ), $duration);
+        ), $duration), app(FFmpegService::class)->outputFps($video));
+    }
+
+    /**
+     * Piece edges moved to the nearest frame edge. A piece then holds a whole
+     * number of frames and its sound is exactly as long; otherwise concat pads
+     * the shorter one at every join (up to a frame of silence each) and the
+     * subtitles, timed on the exact pieces, fall behind cut after cut.
+     */
+    public static function onFrames(array $pieces, float $fps): array
+    {
+        if ($fps <= 0 || count($pieces) < 2) {
+            return $pieces;
+        }
+        $snap = fn ($t) => round(round($t * $fps) / $fps, 3);
+        $out = [];
+        foreach ($pieces as [$a, $b]) {
+            [$a, $b] = [$snap($a), $snap($b)];
+            if ($b > $a) {
+                $out[] = [$a, $b];
+            }
+        }
+
+        return $out ?: $pieces;
     }
 
     /**

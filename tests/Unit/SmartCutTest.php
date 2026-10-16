@@ -115,6 +115,58 @@ class SmartCutTest extends TestCase
         exec('rm -rf '.escapeshellarg($dir));
     }
 
+    public function test_joins_do_not_click(): void
+    {
+        $dir = sys_get_temp_dir().'/clipper-join-'.getmypid();
+        @mkdir($dir);
+        $src = $dir.'/src.mp4';
+        exec(sprintf('%s -v error -y -f lavfi -i testsrc=size=320x240:rate=25:duration=4 -f lavfi -i sine=f=440:d=4:sample_rate=48000 -shortest -pix_fmt yuv420p -c:a aac -b:a 256k %s 2>&1',
+            escapeshellarg(config('services.ffmpeg.path', 'ffmpeg')), escapeshellarg($src)), $o, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('ffmpeg not available');
+        }
+
+        // the first piece ends on a wave peak, the second starts at a zero crossing
+        $out = $dir.'/out.mp4';
+        (new FFmpegService)->applyLayout($src, 'gaussian', $out, 0.0, 4.0, null, [[0.0, 1.000568], [2.0, 3.0]], []);
+
+        $pcm = array_values(unpack('s*', (string) shell_exec(sprintf('ffmpeg -v error -i %s -ac 1 -ar 48000 -f s16le - 2>/dev/null', escapeshellarg($out)))));
+        $jump = fn ($from, $to) => max(array_map(fn ($k) => abs($pcm[$k + 1] - $pcm[$k]), range($from, $to)));
+        $join = (int) round(1.000568 * 48000);
+
+        $this->assertLessThan($jump(10000, 20000) * 1.5, $jump($join - 400, $join + 400));
+        exec('rm -rf '.escapeshellarg($dir));
+    }
+
+    public function test_piece_edges_land_on_frames(): void
+    {
+        $this->assertSame([[0.0, 1.0], [2.04, 3.0]], SmartCut::onFrames([[0.0, 1.013], [2.05, 3.0]], 25.0));
+        $this->assertSame([[0.0, 2.002]], SmartCut::onFrames([[0.0, 2.002]], 25.0)); // one piece: nothing is joined
+        $this->assertSame([[0.0, 1.001]], SmartCut::onFrames([[0.0, 1.0], [2.01, 2.015]], 30000 / 1001)); // a piece shorter than a frame goes
+    }
+
+    public function test_many_cuts_add_no_time_so_subtitles_stay_in_sync(): void
+    {
+        $dir = sys_get_temp_dir().'/clipper-sync-'.getmypid();
+        @mkdir($dir);
+        $src = $dir.'/src.mp4';
+        exec(sprintf('%s -v error -y -f lavfi -i testsrc=size=320x240:rate=25:duration=12 -f lavfi -i sine=f=440:d=12 -shortest -pix_fmt yuv420p -c:a aac %s 2>&1',
+            escapeshellarg(config('services.ffmpeg.path', 'ffmpeg')), escapeshellarg($src)), $o, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('ffmpeg not available');
+        }
+
+        // ten pieces with edges between frames
+        $pieces = SmartCut::onFrames(array_map(fn ($i) => [$i + 0.039, $i + 0.641], range(0, 9)), (new FFmpegService)->outputFps($src));
+        $out = $dir.'/out.mp4';
+        (new FFmpegService)->applyLayout($src, 'gaussian', $out, 0.0, 12.0, null, $pieces, []);
+
+        $probe = fn ($stream) => (float) shell_exec(sprintf('ffprobe -v error -select_streams %s -show_entries stream=duration -of csv=p=0 %s', $stream, escapeshellarg($out)));
+        $this->assertEqualsWithDelta(SmartCut::outputDuration($pieces), $probe('v:0'), 0.02);
+        $this->assertEqualsWithDelta(SmartCut::outputDuration($pieces), $probe('a:0'), 0.03);
+        exec('rm -rf '.escapeshellarg($dir));
+    }
+
     public function test_quiet_voice_is_brought_to_tiktok_loudness(): void
     {
         $dir = sys_get_temp_dir().'/clipper-loud-'.getmypid();

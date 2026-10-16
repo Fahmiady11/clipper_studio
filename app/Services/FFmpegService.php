@@ -97,7 +97,7 @@ class FFmpegService
         $mode = $layoutMap[$layoutType] ?? 'gaussian_blur';
         $filterGraph = $this->layout->layoutFilter($mode, '[lay]', $track);
         // Drop to 30fps before the per-frame crop/scale/sharpen, not after it
-        if ($this->probeFps($input) > 30.5) {
+        if ($this->outputFps($input) < $this->probeFps($input)) {
             $filterGraph = preg_replace('/^\[0:v\]/', '[0:v]fps=30,', $filterGraph);
         }
         $audio = $this->hasAudio($input);
@@ -176,7 +176,10 @@ class FFmpegService
             $parts[] = "[jv{$i}]trim={$range},setpts=PTS-STARTPTS[cv{$i}]";
             $concatIn .= "[cv{$i}]";
             if ($audio) {
-                $parts[] = "[ja{$i}]atrim={$range},asetpts=PTS-STARTPTS[ca{$i}]";
+                // a 10ms fade at each edge: a join between two waveforms clicks otherwise
+                $fade = min(0.01, ($b - $a) / 4);
+                $parts[] = sprintf('[ja%d]atrim=%s,asetpts=PTS-STARTPTS,afade=t=in:d=%.3f,afade=t=out:st=%.3f:d=%.3f[ca%d]',
+                    $i, $range, $fade, $b - $a - $fade, $fade, $i);
                 $concatIn .= "[ca{$i}]";
             }
         }
@@ -759,6 +762,14 @@ class FFmpegService
         }
 
         return $duration;
+    }
+
+    /** Frame rate of the rendered clip: the source's, at most 30 */
+    public function outputFps(string $input): float
+    {
+        $fps = $this->probeFps($input);
+
+        return $fps > 30.5 ? 30.0 : $fps;
     }
 
     private function probeFps(string $input): float
