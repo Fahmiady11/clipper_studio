@@ -6,9 +6,7 @@
 <title>Autopilot — Clipper Studio</title>
 @include('partials.favicon')
 <meta name="csrf-token" content="{{ csrf_token() }}" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Roboto:wght@400;700;900&family=Montserrat:wght@600;700;800&family=Oswald:wght@500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
+@include('partials.head', ['fonts' => 'family=Roboto:wght@400;700;900&family=Montserrat:wght@600;700;800&family=Oswald:wght@500;700&family=Bebas+Neue'])
 @vite('resources/css/studio.css')
 @include('partials.session-guard')
 @include('partials.clip-preview-js')
@@ -21,7 +19,7 @@
   .ap-section { margin-top: 44px; }
   .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .ap-section-head h2 { font-size: 17px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 10px; }
-  .ap-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+  .ap-count { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
 
   .ap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
   .ap-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; min-width: 0; }
@@ -40,18 +38,18 @@
   .ap-range { display: flex; align-items: center; gap: 6px; }
   .ap-range .field { min-width: 0; }
   .ap-range em { font-style: normal; color: var(--text-dim); }
-  .ap-error { font-size: 13px; color: #f87171; background: rgba(248, 113, 113, .08); border: 1px solid rgba(248, 113, 113, .25); border-radius: var(--radius-sm); padding: 8px 12px; word-break: break-word; }
+  .ap-error { font-size: 13px; color: var(--danger); background: rgba(248, 113, 113, .08); border: 1px solid rgba(248, 113, 113, .25); border-radius: var(--radius-sm); padding: 8px 12px; word-break: break-word; }
 
   /* Compact buttons for dense cards */
   .ap-btn { padding: 10px 16px; font-size: 13px; border-radius: 10px; }
   .btn.ap-btn.btn-ghost { padding: 10px 12px; }
-  .btn-danger:hover { color: #f87171; }
+  .btn-danger:hover { color: var(--danger); }
 
   /* Source card */
   .ap-src-value { font-weight: 600; font-size: 15px; margin: 14px 0 10px; word-break: break-word; line-height: 1.35; }
   .ap-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 0; font-size: 12.5px; }
   .ap-stats dt { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
-  .ap-stats dd { margin: 0; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .ap-stats dd { margin: 0; color: var(--text); font-family: var(--font-mono); font-size: 12px; }
   .ap-card-foot { margin-top: auto; padding-top: 14px; display: flex; gap: 6px; align-items: center; }
   .ap-card .tgl-text { font-size: 13px; color: var(--text-muted); }
   .ap-card .tgl.on .tgl-text { color: var(--text); }
@@ -61,51 +59,51 @@
   .ap-media { position: relative; border-radius: var(--radius-sm); overflow: hidden; background: #000; aspect-ratio: 9/16; max-height: 360px; width: 100%; }
   .ap-media video { width: 100%; height: 100%; object-fit: contain; display: block; }
   .ap-placeholder { position: absolute; inset: 0; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; font-size: 13px; color: var(--text-muted); text-align: center; padding: 20px; word-break: break-word; }
-  .ap-placeholder.is-failed { color: #f87171; }
-  .ap-spin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--teal); animation: ap-spin 1s linear infinite; }
+  .ap-placeholder.is-failed { color: var(--danger); }
+  .ap-spin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent-ink); animation: ap-spin 1s linear infinite; }
   @keyframes ap-spin { to { transform: rotate(360deg); } }
-  .ap-badge { position: absolute; top: 10px; left: 10px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; backdrop-filter: blur(6px); background: rgba(10, 10, 12, .7); color: var(--text-muted); }
-  .ap-badge.b-pending { color: var(--yellow); }
-  .ap-badge.b-ok { color: var(--teal); }
-  .ap-badge.b-fail { color: #f87171; }
-  .ap-badge.b-busy { color: var(--blue); }
+  .ap-badge { position: absolute; top: 10px; left: 10px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; backdrop-filter: blur(6px); background: rgba(10, 10, 12, .7); color: var(--text-muted); }
+  .ap-badge.b-pending { color: var(--warn); }
+  .ap-badge.b-ok { color: var(--accent-ink); }
+  .ap-badge.b-fail { color: var(--danger); }
+  .ap-badge.b-busy { color: var(--info); }
   .ap-topic { font-weight: 600; font-size: 15px; line-height: 1.35; margin: 14px 0 6px; }
   .ap-meta { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
   .ap-meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .ap-viral { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 1px 7px; border-radius: 5px; background: var(--surface-3); }
-  .ap-viral.v-tinggi { background: var(--teal-dim); color: var(--teal); }
-  .ap-viral.v-sedang { background: var(--yellow-dim); color: var(--yellow); }
+  .ap-viral { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 1px 7px; border-radius: 5px; background: var(--surface-3); }
+  .ap-viral.v-tinggi { background: var(--accent-soft); color: var(--accent-ink); }
+  .ap-viral.v-sedang { background: var(--warn-soft); color: var(--warn); }
   .ap-reason { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; }
   .ap-cap { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); padding: 12px; }
   .ap-cap-title { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); white-space: nowrap; margin-bottom: 8px; }
   .ap-cap-text { font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 132px; overflow-y: auto; }
   .ap-cap-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
-  .ap-cap-tags span { font-size: 11.5px; color: var(--teal); background: var(--teal-dim); border-radius: 999px; padding: 2px 8px; }
+  .ap-cap-tags span { font-size: 11.5px; color: var(--accent-ink); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
   .ap-cap-copy { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .ap-cap-copy button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; }
   .ap-cap-copy button:hover { color: var(--text); border-color: var(--text-dim); }
-  .ap-cap-copy button.is-done { color: var(--teal); border-color: var(--teal); }
+  .ap-cap-copy button.is-done { color: var(--accent-ink); border-color: var(--accent-ink); }
   .ap-cap-muted { font-size: 12.5px; color: var(--text-muted); }
   .ap-actions { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; }
   .ap-actions .btn:first-child { flex: 1; justify-content: center; }
   .ap-result { margin-top: auto; padding-top: 14px; font-size: 13px; color: var(--text-muted); }
-  .ap-result.is-fail { color: #f87171; }
+  .ap-result.is-fail { color: var(--danger); }
   .ap-result small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
 
   .ap-filter { margin-bottom: 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
   .ap-filter .seg { display: inline-flex; max-width: 100%; overflow-x: auto; }
   .ap-clean { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted); }
-  .ap-filter-n { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: .7; }
+  .ap-filter-n { font-family: var(--font-mono); font-size: 11px; opacity: .7; }
   .ap-pager { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
   .ap-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
   .ap-note { font-size: 13px; color: var(--text-muted); }
-  .ap-note a { color: var(--teal); }
+  .ap-note a { color: var(--accent-ink); }
 
   .ap-look { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); }
   .ap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .ap-chip { font-size: 11.5px; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
   .ap-chip b { color: var(--text); font-weight: 600; }
-  .ap-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--teal); cursor: pointer; }
+  .ap-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--accent-ink); cursor: pointer; }
   .ap-link:hover { text-decoration: underline; }
 
   /* Look editor */
@@ -117,7 +115,7 @@
   .ap-ed-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); }
   .ap-ed-sec { padding-bottom: 22px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
   .ap-ed-sec:last-child { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
-  .ap-ed-sec h4 { margin: 0 0 14px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .ap-ed-sec h4 { margin: 0 0 14px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); font-family: var(--font-mono); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .ap-ed-sec .fblock { margin-bottom: 16px; }
   .ap-ed-sec .fblock:last-child { margin-bottom: 0; }
   .ap-ed-aside { position: sticky; top: 0; align-self: start; }
@@ -596,7 +594,7 @@
                 </div>
               </div>
               <div class="ap-ed-note">Suara podcast otomatis dikeraskan. 20–35% = musik latar yang pas · 100% = sekeras suara.</div>
-              <div class="ap-ed-note">Lagu diambil dari <a href="/music" style="color:var(--teal)">library musik</a> sesuai mood; kredit CC BY otomatis masuk caption.</div>
+              <div class="ap-ed-note">Lagu diambil dari <a href="/music" style="color:var(--accent-ink)">library musik</a> sesuai mood; kredit CC BY otomatis masuk caption.</div>
               <div class="music-warn" x-show="ed.s.music.enabled && musicTotal === 0">Library musik masih kosong — clip akan dibuat <b>tanpa musik</b>. <a href="/music">Upload lagu dulu →</a></div>
             </div>
           </section>

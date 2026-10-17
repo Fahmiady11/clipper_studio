@@ -92,11 +92,11 @@
   .gd-intro { margin: 0 0 18px; color: var(--text); }
   .gd-steps { list-style: none; counter-reset: gd; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
   .gd-steps li { counter-increment: gd; position: relative; padding-left: 40px; }
-  .gd-steps li::before { content: counter(gd, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--teal); background: var(--teal-dim); border-radius: 6px; padding: 2px 6px; }
+  .gd-steps li::before { content: counter(gd, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--accent-ink); background: var(--accent-soft); border-radius: 6px; padding: 2px 6px; }
   .gd-steps b { color: var(--text); font-size: 14px; }
   .gd-steps p { margin: 3px 0 0; }
-  .gd-body a { color: var(--teal); }
-  .gd-body code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .gd-body a { color: var(--accent-ink); }
+  .gd-body code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
   .gd-tips { margin-top: 22px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
   .gd-tips > b { color: var(--text); font-size: 13px; }
   .gd-tips ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }

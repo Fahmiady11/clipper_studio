@@ -24,7 +24,7 @@
     <code>youtube.com/watch?v=…</code><code>youtu.be/…</code><code>youtube.com/shorts/…</code>
   </div>
 
-  <div x-show="metaError" style="margin-top:14px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:#f87171" x-text="metaError"></div>
+  <div x-show="metaError" style="margin-top:14px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:var(--danger)" x-text="metaError"></div>
 
   <div class="meta-card" x-show="meta">
     <div class="meta-thumb">

@@ -11,7 +11,7 @@
         <div class="layout-card-meta">
           <div class="layout-card-badges">
             <span x-show="L.badge" :class="['badge', L.badge ? L.badge.cls : '']" x-text="L.badge ? L.badge.text : ''"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase" x-text="L.sub"></span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase" x-text="L.sub"></span>
           </div>
           <div class="layout-card-title" x-text="L.title"></div>
           <div class="layout-card-desc" x-text="L.desc"></div>

@@ -27,7 +27,7 @@
     </div>
   </div>
 
-  <div x-show="renderError" style="margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:#f87171" x-text="renderError"></div>
+  <div x-show="renderError" style="margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:var(--danger)" x-text="renderError"></div>
 
   <div class="clip-list">
     <template x-for="c in clips" :key="c.ranking">

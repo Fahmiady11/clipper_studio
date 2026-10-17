@@ -6,9 +6,7 @@
 <title>Library Musik — Clipper Studio</title>
 @include('partials.favicon')
 <meta name="csrf-token" content="{{ csrf_token() }}" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+@include('partials.head')
 @vite('resources/css/studio.css')
 @include('partials.session-guard')
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -19,15 +17,15 @@
   .mu-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
   .mu-sec { margin-top: 36px; }
   .mu-sec h2 { font-size: 17px; font-weight: 600; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
-  .mu-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+  .mu-count { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
 
   .mu-guide { margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
   .mu-step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
   .mu-step b { display: block; color: var(--text); font-size: 13.5px; margin-bottom: 4px; }
-  .mu-step i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--teal); }
+  .mu-step i { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--accent-ink); }
 
   .mu-drop { display: block; border: 1.5px dashed var(--border-strong); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--text-muted); font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
-  .mu-drop.over, .mu-drop:hover { border-color: var(--teal); background: var(--teal-dim); color: var(--text); }
+  .mu-drop.over, .mu-drop:hover { border-color: var(--accent-ink); background: var(--accent-soft); color: var(--text); }
   .mu-drop b { color: var(--text); }
   .mu-bulk { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }
   .mu-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
@@ -39,12 +37,12 @@
   .mu-item .field { padding: 9px 12px; font-size: 13px; }
   .mu-item select.select { padding: 9px 12px; font-size: 13px; }
   .mu-x { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--text-dim); cursor: pointer; }
-  .mu-x:hover { color: #f87171; border-color: #f87171; }
+  .mu-x:hover { color: var(--danger); border-color: var(--danger); }
   .mu-status { font-size: 12px; margin-top: 6px; color: var(--text-muted); }
-  .mu-status.ok { color: var(--teal); }
-  .mu-status.err { color: #f87171; }
+  .mu-status.ok { color: var(--accent-ink); }
+  .mu-status.err { color: var(--danger); }
   .mu-bar { height: 3px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin-top: 8px; }
-  .mu-bar > div { height: 100%; background: var(--teal); transition: width .2s; }
+  .mu-bar > div { height: 100%; background: var(--accent); transition: width .2s; }
   .mu-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
 
   .mu-moods { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -52,10 +50,10 @@
   .mu-track:last-child { border-bottom: 0; }
   .mu-track-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mu-track-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .mu-lic { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; background: var(--surface-3); color: var(--text-muted); }
-  .mu-lic.cc { background: var(--yellow-dim); color: var(--yellow); }
-  .mu-lic.free { background: var(--teal-dim); color: var(--teal); }
-  .mu-lic.none { background: rgba(248, 113, 113, .12); color: #f87171; }
+  .mu-lic { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; background: var(--surface-3); color: var(--text-muted); }
+  .mu-lic.cc { background: var(--warn-soft); color: var(--warn); }
+  .mu-lic.free { background: var(--accent-soft); color: var(--accent-ink); }
+  .mu-lic.none { background: rgba(248, 113, 113, .12); color: var(--danger); }
   .mu-track audio { width: 100%; height: 34px; grid-column: 1 / -1; }
   .mu-track-tools { display: flex; gap: 6px; align-items: center; }
   .mu-track-tools select.select { padding: 7px 30px 7px 10px; font-size: 12.5px; width: auto; background-position: right 10px center; }
@@ -180,7 +178,7 @@
                 <template x-for="m in MOODS" :key="m.id"><option :value="m.id" x-text="m.label" :selected="m.id === t.mood"></option></template>
               </select>
               <button class="btn btn-ghost ap-btn" type="button" @click="t.editing = !t.editing; t.draft = t.credit || ''; t.draftLicense = t.license || 'cc-by'">Kredit</button>
-              <button class="btn btn-ghost ap-btn" type="button" style="color:#f87171" @click="removeTrack(t)">Hapus</button>
+              <button class="btn btn-ghost ap-btn" type="button" style="color:var(--danger)" @click="removeTrack(t)">Hapus</button>
             </div>
             <div class="mu-edit" x-show="t.editing">
               <div class="seg">

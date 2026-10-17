@@ -35,7 +35,7 @@
     <div style="text-align:center;margin-top:10px" x-show="hookEnabled">
       <button class="res-edit" type="button" @click="openEditHook()">✎ Edit teks hook &amp; render ulang</button>
     </div>
-    <div style="margin-top:14px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.05em"
+    <div style="margin-top:14px;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.05em"
          x-text="'H.264 · AAC · ' + (selectedClipObj ? Math.round(selectedClipObj.end_seconds - selectedClipObj.start_seconds) : 0) + 's · ' + currentLayout.title.toUpperCase()"></div>
   </div>
 
@@ -82,7 +82,7 @@
 
       <div x-show="!loadingCaption && !clipCaption" style="padding:16px 0;color:var(--text-dim);font-size:13px">
         Caption belum tersedia.
-        <button style="background:none;border:0;color:var(--teal);cursor:pointer;font-family:inherit;font-size:13px;padding:0;margin-left:6px"
+        <button style="background:none;border:0;color:var(--accent-ink);cursor:pointer;font-family:inherit;font-size:13px;padding:0;margin-left:6px"
           @click="fetchCaption()">Coba lagi →</button>
       </div>
     </div>
@@ -116,7 +116,7 @@
         {{-- Direct post form (TikTok requires creator name, privacy choice, interaction toggles, consent) --}}
         <div x-show="tiktokMode === 'direct'" style="margin-bottom:14px">
           <div x-show="tiktokCreatorLoading" style="font-size:13px;color:var(--text-dim)">Membaca info akun TikTok…</div>
-          <div x-show="tiktokCreatorError" style="font-size:13px;color:#f87171" x-text="tiktokCreatorError"></div>
+          <div x-show="tiktokCreatorError" style="font-size:13px;color:var(--danger)" x-text="tiktokCreatorError"></div>
           <template x-if="tiktokCreator">
             <div>
               <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
@@ -135,7 +135,7 @@
                           x-text="PRIVACY_LABELS[p] || p"></button>
                 </template>
               </div>
-              <div x-show="tiktokTooLong" style="margin-top:8px;font-size:12px;color:#f87171"
+              <div x-show="tiktokTooLong" style="margin-top:8px;font-size:12px;color:var(--danger)"
                    x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik, akun TikTok ini maksimal ${tiktokCreator.max_video_post_duration_sec} detik. Pendekkan clip dulu.`"></div>
 
               <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:13px">
@@ -179,7 +179,7 @@
                 :style="!tiktokCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
                 x-text="tiktokBusy ? 'Mengupload…' : (tiktokMode === 'direct' ? 'Posting ke TikTok' : 'Kirim ke TikTok (draft)')"></button>
         <div x-show="tiktokStatus" style="margin-top:12px;font-size:13px"
-             :style="tiktokStatus === 'failed' ? 'color:#f87171' : 'color:var(--text-muted)'"
+             :style="tiktokStatus === 'failed' ? 'color:var(--danger)' : 'color:var(--text-muted)'"
              x-text="tiktokStatusLabel"></div>
         <div x-show="tiktokStatus === 'failed' && tiktokError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="tiktokError"></div>
       </div>
@@ -209,7 +209,7 @@
 
         <div class="fblock-title" style="margin-bottom:6px">Judul <span style="color:var(--text-dim);font-weight:400" x-text="`(${ytTitle.length}/100)`"></span></div>
         <input class="field" maxlength="100" x-model="ytTitle">
-        <div x-show="/[<>]/.test(ytTitle)" style="margin-top:6px;font-size:12px;color:#f87171">Judul YouTube tidak boleh berisi &lt; atau &gt;.</div>
+        <div x-show="/[<>]/.test(ytTitle)" style="margin-top:6px;font-size:12px;color:var(--danger)">Judul YouTube tidak boleh berisi &lt; atau &gt;.</div>
 
         <div class="fblock-title" style="margin:12px 0 6px">Deskripsi</div>
         <textarea class="field" maxlength="5000" x-model="ytDescription" style="min-height:90px"></textarea>
@@ -220,7 +220,7 @@
           <button :class="{ on: ytPrivacy === 'unlisted' }" @click="ytPrivacy = 'unlisted'" type="button">Tidak publik</button>
           <button :class="{ on: ytPrivacy === 'private' }"  @click="ytPrivacy = 'private'"  type="button">Pribadi</button>
         </div>
-        <div x-show="ytTooLong" style="margin-top:8px;font-size:12px;color:#f87171"
+        <div x-show="ytTooLong" style="margin-top:8px;font-size:12px;color:var(--danger)"
              x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik. YouTube Shorts maksimal 3 menit.`"></div>
         <div style="margin:10px 0 14px;font-size:12px;color:var(--text-dim);line-height:1.5">
           Video vertikal sampai 3 menit otomatis jadi Shorts, dan <code>#Shorts</code> ditambahkan ke deskripsi.
@@ -234,7 +234,7 @@
         <div x-show="ytStatus" style="margin-top:12px;font-size:13px"
              :style="{ color: ytStatus === 'failed' ? '#f87171' : 'var(--text-muted)' }">
           <span x-text="ytStatusLabel"></span>
-          <a x-show="ytUrl && ytStatus !== 'failed'" :href="ytUrl" target="_blank" rel="noopener" style="color:var(--teal);margin-left:6px">Buka di YouTube →</a>
+          <a x-show="ytUrl && ytStatus !== 'failed'" :href="ytUrl" target="_blank" rel="noopener" style="color:var(--accent-ink);margin-left:6px">Buka di YouTube →</a>
         </div>
         <div x-show="ytStatus === 'failed' && ytError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="ytError"></div>
       </div>

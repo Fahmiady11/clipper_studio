@@ -93,7 +93,7 @@
             <span class="sld-val" x-text="musicVolume + '%'"></span>
           </div>
           <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Suara podcast otomatis dikeraskan. 20–35% = musik latar yang pas · 100% = sekeras suara. Musik sedikit mengecil saat ada orang bicara.</div>
-          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Lagu diambil dari <a href="/music" style="color:var(--teal)">library musik</a> sesuai mood; kredit lagu CC BY otomatis masuk caption.</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Lagu diambil dari <a href="/music" style="color:var(--accent-ink)">library musik</a> sesuai mood; kredit lagu CC BY otomatis masuk caption.</div>
           <div class="music-warn" x-show="musicEnabled && musicLibrary && musicLibrary.total === 0">
             Library musik masih kosong — clip akan dirender <b>tanpa musik</b>. <a href="/music">Upload lagu dulu →</a>
           </div>
@@ -106,7 +106,7 @@
     <div class="wiz-preview">
       <div class="preview-label"><span>Live preview · 9:16</span><span x-text="currentLayout.title"></span></div>
       @include('studio._phone-preview')
-      <div style="margin-top:12px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.05em">↻ Hook tampil di awal loop</div>
+      <div style="margin-top:12px;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.05em">↻ Hook tampil di awal loop</div>
     </div>
   </div>
 </div>

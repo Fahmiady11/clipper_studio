@@ -11,6 +11,7 @@
     @isset($guide)
       @include('partials.guide', ['page' => $guide])
     @endisset
+    @include('partials.theme-toggle')
     @include('partials.user-menu')
   </div>
 </div>

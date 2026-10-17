@@ -6,9 +6,7 @@
 <title>Pengguna — Clipper Studio</title>
 @include('partials.favicon')
 <meta name="csrf-token" content="{{ csrf_token() }}" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+@include('partials.head')
 @vite('resources/css/studio.css')
 @include('partials.session-guard')
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -18,26 +16,26 @@
   .us-head p { color: var(--text-muted); margin: 0; font-size: 14px; line-height: 1.6; }
   .us-sec { margin-top: 32px; }
   .us-sec h2 { font-size: 17px; font-weight: 600; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
-  .us-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
-  .us-count.is-hot { color: var(--yellow); background: var(--yellow-dim); border-color: transparent; }
+  .us-count { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+  .us-count.is-hot { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
   .us-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
   .us-row { display: flex; align-items: center; gap: 14px; padding: 14px 18px; }
   .us-row + .us-row { border-top: 1px solid var(--border); }
   .us-who { flex: 1; min-width: 0; }
   .us-who b { display: block; font-size: 14px; font-weight: 600; }
   .us-who span { display: block; font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .us-tag { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--teal); background: var(--teal-dim); padding: 3px 8px; border-radius: 6px; }
+  .us-tag { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-soft); padding: 3px 8px; border-radius: 6px; }
   .us-actions { display: flex; gap: 8px; }
   .us-actions form { margin: 0; }
-  .us-danger { color: #f87171; }
+  .us-danger { color: var(--danger); }
   .us-empty { padding: 22px 18px; text-align: center; color: var(--text-muted); font-size: 13px; }
   .us-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 12px; align-items: end; }
   .us-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
   .us-form .field { width: 100%; }
-  .us-err { grid-column: 1 / -1; font-size: 12.5px; color: #f87171; }
+  .us-err { grid-column: 1 / -1; font-size: 12.5px; color: var(--danger); }
   .us-hint { grid-column: 1 / -1; font-size: 12.5px; color: var(--text-dim); }
   @media (max-width: 760px) { .us-form { grid-template-columns: minmax(0, 1fr); } }
-  .us-status { margin-top: 20px; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--teal-dim); color: var(--text); font-size: 13.5px; }
+  .us-status { margin-top: 20px; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--text); font-size: 13.5px; }
   @media (max-width: 560px) {
     .us-row { flex-wrap: wrap; }
     .us-actions { width: 100%; }

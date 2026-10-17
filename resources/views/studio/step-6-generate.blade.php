@@ -13,7 +13,7 @@
       Generate Clip dengan AI
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 3l4 9-4 9 14-9z"/></svg>
     </button>
-    <div style="margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim)">
+    <div style="margin-top:18px;font-family:var(--font-mono);font-size:11px;color:var(--text-dim)">
       model: gemini-2.5-flash · subtitle: groq-whisper
     </div>
   </div>

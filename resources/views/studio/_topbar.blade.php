@@ -16,6 +16,7 @@
     <a href="#" class="topbar-cta" @click.prevent="restart()" aria-label="Project baru">
       <span aria-hidden="true">+</span><span class="lbl-long">Project baru</span>
     </a>
+    @include('partials.theme-toggle')
     @include('partials.user-menu')
   </div>
 </div>

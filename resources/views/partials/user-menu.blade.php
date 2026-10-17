@@ -16,7 +16,7 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         Pengguna
         @if ($waiting > 0)
-          <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:var(--yellow);background:var(--yellow-dim);padding:1px 7px;border-radius:999px">{{ $waiting }}</span>
+          <span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;font-weight:600;color:var(--warn);background:var(--warn-soft);padding:1px 7px;border-radius:999px">{{ $waiting }}</span>
         @endif
       </a>
     @endif

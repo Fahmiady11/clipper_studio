@@ -152,7 +152,7 @@
 
       {{-- preview meta --}}
       <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
-        <div style="display:flex;align-items:center;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.04em">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.04em">
           <span>↻ diperbarui langsung</span>
           <span x-text="subtitleFont + ' · ' + subtitleSize + 'px'"></span>
         </div>

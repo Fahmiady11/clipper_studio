@@ -1,0 +1,171 @@
+/* Design tokens and base styles shared by every page. Direction: DESIGN.md.
+   Dark is the default; light follows the system setting unless the user picked
+   a theme (html[data-theme], set by partials/head before first paint). */
+
+:root {
+    --bg: #0A0B0A;
+    --surface: #121411;
+    --surface-2: #1A1C18;
+    --surface-3: #23261F;
+    --border: #262923;
+    --border-strong: #363A31;
+    --text: #EDEDE8;
+    --text-muted: #9DA295;
+    --text-dim: #7E8379;
+
+    /* Lime is a fill in both themes; as text it needs --accent-ink */
+    --accent: #D4FF3A;
+    --on-accent: #0A0B0A;
+    --accent-ink: #D4FF3A;
+    --accent-soft: rgba(212, 255, 58, .12);
+
+    --warn: #F5B83D;
+    --warn-soft: rgba(245, 184, 61, .14);
+    --danger: #FF6B5E;
+    --danger-soft: rgba(255, 107, 94, .14);
+    --info: #8AB4FF;
+    --info-soft: rgba(138, 180, 255, .14);
+
+    --scrim: rgba(0, 0, 0, .6);
+    --topbar-bg: rgba(10, 11, 10, .82);
+
+    --radius: 14px;
+    --radius-sm: 8px;
+    --radius-lg: 20px;
+
+    --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+    color-scheme: dark;
+}
+
+/* Light: same accent fill, darker ink for anything drawn in the accent */
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        --bg: #FAFAF7;
+        --surface: #FFFFFF;
+        --surface-2: #F1F1EB;
+        --surface-3: #E7E7DF;
+        --border: #E2E2DA;
+        --border-strong: #CFCFC5;
+        --text: #0A0B0A;
+        --text-muted: #50554B;
+        --text-dim: #6A6F64;
+        --accent-ink: #4A6300;
+        --accent-soft: rgba(110, 150, 0, .14);
+        --warn: #8A5A00;
+        --warn-soft: rgba(245, 184, 61, .22);
+        --danger: #B42318;
+        --danger-soft: rgba(180, 35, 24, .1);
+        --info: #1D4ED8;
+        --info-soft: rgba(29, 78, 216, .1);
+        --scrim: rgba(10, 11, 10, .45);
+        --topbar-bg: rgba(250, 250, 247, .86);
+        color-scheme: light;
+    }
+}
+
+:root[data-theme="light"] {
+    --bg: #FAFAF7;
+    --surface: #FFFFFF;
+    --surface-2: #F1F1EB;
+    --surface-3: #E7E7DF;
+    --border: #E2E2DA;
+    --border-strong: #CFCFC5;
+    --text: #0A0B0A;
+    --text-muted: #50554B;
+    --text-dim: #6A6F64;
+    --accent-ink: #4A6300;
+    --accent-soft: rgba(110, 150, 0, .14);
+    --warn: #8A5A00;
+    --warn-soft: rgba(245, 184, 61, .22);
+    --danger: #B42318;
+    --danger-soft: rgba(180, 35, 24, .1);
+    --info: #1D4ED8;
+    --info-soft: rgba(29, 78, 216, .1);
+    --scrim: rgba(10, 11, 10, .45);
+    --topbar-bg: rgba(250, 250, 247, .86);
+    color-scheme: light;
+}
+
+* {
+    box-sizing: border-box
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    min-height: 100dvh
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit
+}
+
+::selection {
+    background: var(--accent);
+    color: var(--on-accent)
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px
+}
+
+[x-cloak] {
+    display: none !important
+}
+
+/* partials/theme-toggle */
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color .15s, border-color .15s
+}
+
+.theme-toggle:hover {
+    color: var(--text);
+    border-color: var(--border-strong)
+}
+
+.theme-toggle .ic-sun {
+    display: none
+}
+
+:root[data-theme="light"] .theme-toggle .ic-sun {
+    display: block
+}
+
+:root[data-theme="light"] .theme-toggle .ic-moon {
+    display: none
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important
+    }
+}
