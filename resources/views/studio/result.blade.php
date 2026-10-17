@@ -159,7 +159,7 @@
                     <input type="checkbox" x-model="tiktokBrandContent" @change="if (tiktokBrandContent && tiktokPrivacy === 'SELF_ONLY') tiktokPrivacy = ''">
                     <span>Branded content<br><span style="color:var(--text-dim);font-size:12px">Kamu mempromosikan brand lain atau pihak ketiga.</span></span>
                   </label>
-                  <div x-show="tiktokDisclose && !tiktokBrandOrganic && !tiktokBrandContent" style="font-size:12px;color:#fbbf24">Pilih minimal satu jenis promosi.</div>
+                  <div x-show="tiktokDisclose && !tiktokBrandOrganic && !tiktokBrandContent" style="font-size:12px;color:var(--warn)">Pilih minimal satu jenis promosi.</div>
                   <div x-show="tiktokBrandLabel" style="font-size:12px;color:var(--text-muted)" x-text="`Video kamu akan diberi label '${tiktokBrandLabel}'.`"></div>
                 </div>
               </div>
@@ -232,7 +232,7 @@
                 :style="!ytCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
                 x-text="ytBusy ? 'Mengupload…' : 'Upload ke YouTube'"></button>
         <div x-show="ytStatus" style="margin-top:12px;font-size:13px"
-             :style="{ color: ytStatus === 'failed' ? '#f87171' : 'var(--text-muted)' }">
+             :style="{ color: ytStatus === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }">
           <span x-text="ytStatusLabel"></span>
           <a x-show="ytUrl && ytStatus !== 'failed'" :href="ytUrl" target="_blank" rel="noopener" style="color:var(--accent-ink);margin-left:6px">Buka di YouTube →</a>
         </div>

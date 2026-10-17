@@ -24,13 +24,13 @@
     <code>youtube.com/watch?v=…</code><code>youtu.be/…</code><code>youtube.com/shorts/…</code>
   </div>
 
-  <div x-show="metaError" style="margin-top:14px;padding:12px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;font-size:13.5px;color:var(--danger)" x-text="metaError"></div>
+  <div x-show="metaError" style="margin-top:14px;padding:12px 16px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:10px;font-size:13.5px;color:var(--danger)" x-text="metaError"></div>
 
   <div class="meta-card" x-show="meta">
     <div class="meta-thumb">
       <img x-show="meta?.thumbnailUrl" :src="meta?.thumbnailUrl" :alt="meta?.title"
            style="width:100%;height:100%;object-fit:cover;display:block" />
-      <div x-show="!meta?.thumbnailUrl" style="width:100%;height:100%;background:linear-gradient(135deg,#1d3a3a,#0a1a2e)"></div>
+      <div x-show="!meta?.thumbnailUrl" style="width:100%;height:100%;background:var(--surface-3)"></div>
     </div>
     <div class="meta-body">
       <h3 class="meta-vtitle" x-text="meta?.title"></h3>

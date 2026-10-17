@@ -159,11 +159,11 @@
         {{-- color legend --}}
         <div x-show="subtitleEnabled" style="display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-muted)">
           <span style="display:flex;align-items:center;gap:5px">
-            <span :style="'display:inline-block;width:10px;height:10px;border-radius:3px;background:'+subtitleTextColor+';border:1px solid rgba(255,255,255,.15)'"></span>
+            <span :style="'display:inline-block;width:10px;height:10px;border-radius:3px;background:'+subtitleTextColor+';border:1px solid var(--border-strong)'"></span>
             Teks biasa
           </span>
           <span style="display:flex;align-items:center;gap:5px">
-            <span :style="'display:inline-block;width:10px;height:10px;border-radius:3px;background:'+subtitleHighlight"  ></span>
+            <span :style="'display:inline-block;width:10px;height:10px;border-radius:3px;background:'+subtitleHighlight+';border:1px solid var(--border-strong)'"></span>
             Kata aktif
           </span>
         </div>
