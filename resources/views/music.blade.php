@@ -53,7 +53,7 @@
   .mu-lic { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; background: var(--surface-3); color: var(--text-muted); }
   .mu-lic.cc { background: var(--warn-soft); color: var(--warn); }
   .mu-lic.free { background: var(--accent-soft); color: var(--accent-ink); }
-  .mu-lic.none { background: rgba(248, 113, 113, .12); color: var(--danger); }
+  .mu-lic.none { background: var(--danger-soft); color: var(--danger); }
   .mu-track audio { width: 100%; height: 34px; grid-column: 1 / -1; }
   .mu-track-tools { display: flex; gap: 6px; align-items: center; }
   .mu-track-tools select.select { padding: 7px 30px 7px 10px; font-size: 12.5px; width: auto; background-position: right 10px center; }

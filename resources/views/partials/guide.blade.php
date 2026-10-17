@@ -80,8 +80,8 @@
 
 @once
 <style>
-  .gd-bg { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); display: flex; justify-content: flex-end; }
-  .gd-panel { width: min(440px, 100%); height: 100%; background: var(--surface); border-left: 1px solid var(--border-strong); display: flex; flex-direction: column; box-shadow: -20px 0 60px rgba(0, 0, 0, .5); }
+  .gd-bg { position: fixed; inset: 0; z-index: 200; background: var(--scrim); display: flex; justify-content: flex-end; }
+  .gd-panel { width: min(440px, 100%); height: 100%; background: var(--surface); border-left: 1px solid var(--border-strong); display: flex; flex-direction: column; box-shadow: -20px 0 60px var(--phone-shadow); }
   .gd-enter { transition: transform .2s ease; }
   .gd-from { transform: translateX(100%); }
   .gd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
