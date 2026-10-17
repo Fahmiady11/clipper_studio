@@ -342,6 +342,42 @@ class AutopilotTest extends TestCase
         $this->assertModelExists($mixed);
     }
 
+    public function test_clean_pending_removes_unreviewed_clips_but_not_ones_still_rendering(): void
+    {
+        Storage::fake();
+        $user = User::factory()->create();
+        $mkProject = fn () => ClipProject::create([
+            'user_id' => $user->id, 'video_source_id' => $this->source($user)->id, 'youtube_url' => 'https://youtu.be/abcdefg',
+            'layout_type' => 'reframe', 'clip_count' => 2, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        $finished = $mkProject();
+        $busy = $mkProject();
+        $mk = fn ($project, $status, $review = 'pending', $path = null) => GeneratedClip::create([
+            'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
+            'topic' => 't', 'reason' => 'r', 'status' => $status, 'review_status' => $review, 'output_path' => $path,
+        ]);
+        Storage::put('clips/ready.mp4', 'a');
+        $ready = $mk($finished, 'done', 'pending', 'clips/ready.mp4');
+        $broken = $mk($finished, 'failed');
+        $queued = $mk($busy, 'pending');
+        $rendering = $mk($busy, 'processing');
+        $approved = $mk($busy, 'done', 'approved');
+
+        $this->actingAs(User::factory()->create())->postJson('/api/autopilot/review/clean-pending')
+            ->assertOk()->assertJson(['removed' => 0]);
+
+        $this->actingAs($user)->postJson('/api/autopilot/review/clean-pending')->assertOk()->assertJson(['removed' => 2]);
+
+        $this->assertModelMissing($ready);
+        $this->assertModelMissing($broken);
+        Storage::assertMissing('clips/ready.mp4');
+        $this->assertModelMissing($finished);           // nothing left in it
+        $this->assertModelExists($queued);              // waiting for the render worker
+        $this->assertModelExists($rendering);
+        $this->assertModelExists($approved);            // only unreviewed clips go
+        $this->assertModelExists($busy);
+    }
+
     public function test_clip_download_supports_range_requests_for_previews(): void
     {
         Storage::fake();

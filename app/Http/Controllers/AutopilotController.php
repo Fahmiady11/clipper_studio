@@ -16,6 +16,7 @@ use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -230,6 +231,32 @@ class AutopilotController extends Controller
             ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
             ->get();
 
+        return response()->json(['removed' => $this->removeClips($clips, $cleanup)]);
+    }
+
+    /**
+     * Delete unreviewed clips that are finished (rendered or failed). Clips
+     * still queued or rendering are kept, so the render job never loses its row.
+     */
+    public function cleanPending(StorageCleanup $cleanup): JsonResponse
+    {
+        $clips = GeneratedClip::with('clipProject')
+            ->where('review_status', 'pending')
+            ->whereIn('status', ['done', 'failed'])
+            ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
+            ->get();
+
+        return response()->json(['removed' => $this->removeClips($clips, $cleanup)]);
+    }
+
+    /**
+     * Delete the clips and their files; an autopilot project left without
+     * clips goes too, along with its source video.
+     *
+     * @param  Collection<int, GeneratedClip>  $clips
+     */
+    private function removeClips(Collection $clips, StorageCleanup $cleanup): int
+    {
         foreach ($clips as $clip) {
             if ($clip->output_path) {
                 Storage::delete($clip->output_path);
@@ -244,7 +271,7 @@ class AutopilotController extends Controller
             }
         }
 
-        return response()->json(['removed' => $clips->count()]);
+        return $clips->count();
     }
 
     private function latestManualProject(): ?ClipProject

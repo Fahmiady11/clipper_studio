@@ -279,6 +279,13 @@
             <span x-text="cleaning ? 'Membersihkan…' : 'Bersihkan'"></span>
           </button>
         </div>
+        <div class="ap-clean" x-show="reviewStatus === 'pending' && (reviewCounts.pending > 0 || cleanMsg)">
+          <span x-show="cleanMsg" x-text="cleanMsg"></span>
+          <button class="btn btn-ghost ap-btn btn-danger" type="button" x-show="reviewCounts.pending > 0" :disabled="cleaning" @click="cleanPending()"
+                  title="Hapus klip yang belum direview; yang masih dirender tidak disentuh">
+            <span x-text="cleaning ? 'Menghapus…' : 'Hapus semua'"></span>
+          </button>
+        </div>
       </div>
 
       <div x-show="clips.length === 0" class="ap-empty"
@@ -869,6 +876,18 @@ function autopilot() {
       try {
         const r = await api('/api/autopilot/review/clean-approved', { method: 'POST' });
         this.cleanMsg = r.removed ? r.removed + ' klip dibersihkan.' : 'Tidak ada yang bisa dibersihkan (masih diupload).';
+        this.reviewPage = 1;
+        await this.loadClips();
+      } catch (e) { this.cleanMsg = e.message; }
+      finally { this.cleaning = false; }
+    },
+    async cleanPending() {
+      if (!confirm('Hapus semua klip yang belum direview? File videonya ikut dihapus dari server. Klip yang masih dirender tidak disentuh.')) return;
+      this.cleaning = true;
+      this.cleanMsg = '';
+      try {
+        const r = await api('/api/autopilot/review/clean-pending', { method: 'POST' });
+        this.cleanMsg = r.removed ? r.removed + ' klip dihapus.' : 'Tidak ada yang bisa dihapus (masih dirender).';
         this.reviewPage = 1;
         await this.loadClips();
       } catch (e) { this.cleanMsg = e.message; }
