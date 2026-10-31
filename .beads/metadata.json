@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "clipper",
+  "project_id": "d84c576e-8a33-4caa-acce-f0439d3240b8"
+}
