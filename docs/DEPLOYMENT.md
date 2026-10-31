@@ -396,6 +396,22 @@ dc exec app deno --version
 
 Itu **disengaja**. Pada langkah terakhir, `docker compose up -d queue` mengganti container `queue` lama. Compose mengirim `SIGTERM`; worker Laravel menyelesaikan job yang sedang berjalan baru berhenti (butuh ekstensi `pcntl`, sudah ada). `stop_grace_period: 65m` memberi waktu sampai 65 menit sebelum dibunuh paksa, karena job pemrosesan video (unduh, transkripsi, render) bisa sangat lama dan dikembalikan ke antrean kalau terpotong (`retry_after` = 3700 detik). Lalu workflow diberi `timeout-minutes: 100`. Kalau job workflow tetap timeout atau dibatalkan, deploy di VPS tetap jalan sampai selesai (berjalan terlepas dari sesi SSH); hasilnya ada di `/srv/clipper/logs/`. Selama menunggu, web sudah versi baru; hanya worker lama yang menyelesaikan pekerjaannya. Jika tidak ada job aktif, deploy selesai dalam hitungan menit.
 
+### 6.8 TikTok Production Setup
+
+Setelah app TikTok di-*approve* untuk production (dashboard developers.tiktok.com), ikuti langkah berikut di VPS:
+
+1. **Cek Redirect URI di dashboard TikTok** — pastikan terdaftar sebagai `https://clipper.asfahmidev.com/tiktok/callback` (harus sama persis).
+2. **Salin kredensial production** — tab *Production* → salin Client Key dan Client Secret.
+3. **Update `.env` di VPS** (6.4):
+   ```
+   TIKTOK_CLIENT_KEY=<production-key>
+   TIKTOK_CLIENT_SECRET='<production-secret>'
+   TIKTOK_REDIRECT_URI=https://clipper.asfahmidev.com/tiktok/callback
+   TIKTOK_SCOPES=user.info.basic,video.upload,video.publish
+   ```
+4. **Buat ulang container** (6.4) agar env baru terbaca: `docker compose -p clipper -f docker-compose.prod.yml up -d app queue scheduler`.
+5. **Hubungkan ulang akun TikTok** — semua token OAuth yang lama masih milik app sandbox dan **tidak valid** untuk production. Setiap pengguna harus klik *Hubungkan TikTok* lagi dari halaman Studio.
+
 ## 7. Troubleshooting
 
 ### 7.1 Di mana log

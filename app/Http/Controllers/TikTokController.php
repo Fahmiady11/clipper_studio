@@ -103,6 +103,14 @@ class TikTokController extends Controller
             throw ValidationException::withMessages(['privacy_level' => 'Branded content tidak bisa diposting sebagai "Hanya saya".']);
         }
         $mode = $data['mode'] ?? 'inbox';
+        // App belum lolos audit konten TikTok (unaudited_client_can_only_post_to_private_accounts):
+        // hanya SELF_ONLY yang diterima. Hapus override ini setelah audit TikTok lolos.
+        if ($mode === 'direct') {
+            if (! empty($data['brand_content_toggle']) || ! empty($data['brand_organic_toggle'])) {
+                throw ValidationException::withMessages(['privacy_level' => 'Konten branded/bisnis belum tersedia — app TikTok masih menunggu audit konten. Coba lagi nanti.']);
+            }
+            $data['privacy_level'] = 'SELF_ONLY';
+        }
         $clip = $this->ownedClip($clipId);
         $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']);
 

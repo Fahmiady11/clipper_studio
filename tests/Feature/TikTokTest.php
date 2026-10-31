@@ -245,7 +245,7 @@ class TikTokTest extends TestCase
             && $job->postInfo === ['title' => 'caption', 'privacy_level' => 'SELF_ONLY', 'disable_comment' => true, 'disable_duet' => true, 'disable_stitch' => false, 'brand_organic_toggle' => false, 'brand_content_toggle' => false]);
     }
 
-    public function test_direct_upload_passes_commercial_content_disclosure(): void
+    public function test_direct_upload_blocks_branded_content_when_unaudited(): void
     {
         Queue::fake();
         $user = User::factory()->create();
@@ -255,10 +255,22 @@ class TikTokTest extends TestCase
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", [
             'account_id' => $account->id, 'mode' => 'direct', 'privacy_level' => 'PUBLIC_TO_EVERYONE',
             'brand_organic_toggle' => true, 'brand_content_toggle' => true,
+        ])->assertUnprocessable();
+    }
+
+    public function test_direct_upload_forces_self_only_when_unaudited(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create();
+        $clip = $this->doneClip($user);
+        $account = $this->account($user, ['scope' => 'user.info.basic,video.upload,video.publish']);
+
+        $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", [
+            'account_id' => $account->id, 'mode' => 'direct', 'privacy_level' => 'PUBLIC_TO_EVERYONE',
+            'title' => 'test',
         ])->assertOk();
 
-        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->postInfo['brand_organic_toggle'] === true
-            && $job->postInfo['brand_content_toggle'] === true);
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->postInfo['privacy_level'] === 'SELF_ONLY');
     }
 
     public function test_branded_content_cannot_be_private(): void

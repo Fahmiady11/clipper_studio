@@ -129,12 +129,13 @@
               <div class="seg" style="flex-wrap:wrap">
                 <template x-for="p in (tiktokCreator.privacy_level_options || [])" :key="p">
                   <button :class="{ on: tiktokPrivacy === p }" @click="tiktokPrivacy = p" type="button"
-                          :disabled="p === 'SELF_ONLY' && tiktokBrandContent"
-                          :style="p === 'SELF_ONLY' && tiktokBrandContent ? 'opacity:.4;cursor:not-allowed' : ''"
-                          :title="p === 'SELF_ONLY' && tiktokBrandContent ? 'Branded content tidak bisa diposting privat' : ''"
+                          :disabled="p !== 'SELF_ONLY' || (p === 'SELF_ONLY' && tiktokBrandContent)"
+                          :style="p !== 'SELF_ONLY' || (p === 'SELF_ONLY' && tiktokBrandContent) ? 'opacity:.4;cursor:not-allowed' : ''"
+                          :title="p !== 'SELF_ONLY' ? 'App belum lolos audit TikTok — sementara hanya posting privat' : (p === 'SELF_ONLY' && tiktokBrandContent ? 'Branded content tidak bisa diposting privat' : '')"
                           x-text="PRIVACY_LABELS[p] || p"></button>
                 </template>
               </div>
+              <div style="margin-top:6px;font-size:12px;color:var(--warn)">App TikTok belum lolos audit — sementara hanya posting privat (Hanya saya) yang tersedia.</div>
               <div x-show="tiktokTooLong" style="margin-top:8px;font-size:12px;color:var(--danger)"
                    x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik, akun TikTok ini maksimal ${tiktokCreator.max_video_post_duration_sec} detik. Pendekkan clip dulu.`"></div>
 
