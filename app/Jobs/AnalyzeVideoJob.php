@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Models\Transcript;
+use App\Services\ClipPerformanceSummary;
 use App\Services\GeminiService;
 use App\Services\MusicService;
 use App\Services\TranscriptService;
@@ -52,8 +53,13 @@ class AnalyzeVideoJob implements ShouldQueue
         return [(new WithoutOverlapping('analyze:'.$this->projectId))->expireAfter($this->timeout)->dontRelease()];
     }
 
-    public function handle(YtDlpService $ytdlp, TranscriptService $transcriptSvc, GeminiService $gemini): void
-    {
+    public function handle(
+        YtDlpService $ytdlp,
+        TranscriptService $transcriptSvc,
+        GeminiService $gemini,
+        ?ClipPerformanceSummary $performance = null
+    ): void {
+        $performance ??= app(ClipPerformanceSummary::class);
         $project = ClipProject::with(['subtitleSetting', 'hookSetting'])->find($this->projectId);
         if (! $project || $project->cancelled_at) {
             return; // cancelled or deleted from history while still waiting in the queue
@@ -62,7 +68,7 @@ class AnalyzeVideoJob implements ShouldQueue
         try {
             Cancellation::watch(
                 fn () => $this->isCancelled(),
-                fn () => $this->analyze($project, $ytdlp, $transcriptSvc, $gemini)
+                fn () => $this->analyze($project, $ytdlp, $transcriptSvc, $gemini, $performance)
             );
         } catch (JobCancelled) {
             // The cancel endpoint already marked the project; drop the partial download
@@ -73,8 +79,13 @@ class AnalyzeVideoJob implements ShouldQueue
         }
     }
 
-    private function analyze(ClipProject $project, YtDlpService $ytdlp, TranscriptService $transcriptSvc, GeminiService $gemini): void
-    {
+    private function analyze(
+        ClipProject $project,
+        YtDlpService $ytdlp,
+        TranscriptService $transcriptSvc,
+        GeminiService $gemini,
+        ClipPerformanceSummary $performance
+    ): void {
         $log = Log::channel('clipper_jobs');
 
         $this->stage($project, 1);
@@ -128,6 +139,8 @@ class AnalyzeVideoJob implements ShouldQueue
         $minDuration = $project->min_duration ?? 30;
         $maxDuration = $project->max_duration ?? 90;
 
+        $performanceHint = $performance->promptInsight();
+
         $log->info('Calling Gemini', [
             'clip_count' => $project->clip_count,
             'duration_mode' => $durationMode,
@@ -139,7 +152,8 @@ class AnalyzeVideoJob implements ShouldQueue
             $project->layout_type,
             $durationMode,
             $minDuration,
-            $maxDuration
+            $maxDuration,
+            $performanceHint
         );
         $log->info('Gemini returned', ['count' => count($clips)]);
 

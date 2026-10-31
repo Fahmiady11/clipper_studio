@@ -106,6 +106,18 @@
   .ap-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--accent-ink); cursor: pointer; }
   .ap-link:hover { text-decoration: underline; }
 
+  /* TikTok performance summary */
+  .ap-perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .ap-perf-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-width: 0; }
+  .ap-perf-label { font-size: 11px; font-weight: 600; color: var(--text-dim); letter-spacing: .06em; text-transform: uppercase; }
+  .ap-perf-value { margin-top: 8px; font-size: 24px; font-weight: 700; color: var(--text); }
+  .ap-perf-sub { margin-top: 6px; font-size: 12.5px; color: var(--text-muted); }
+  .ap-perf-top { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ap-perf-stats { display: flex; gap: 14px; margin-top: 6px; font-size: 12.5px; color: var(--text-muted); }
+  .ap-perf-metric { margin-top: 12px; display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); }
+  .ap-perf-metric b { color: var(--text); font-family: var(--font-mono); font-weight: 600; }
+  .ap-perf-best { margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--accent-ink); text-transform: uppercase; letter-spacing: .06em; }
+
   /* Look editor */
   .ap-ed { width: 100%; min-width: 0; max-width: 980px; max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: 0 30px 80px var(--phone-shadow); overflow: hidden; }
   .ap-ed-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
@@ -166,6 +178,34 @@
         Tampilan klip (layout, subtitle, gaya hook, musik) diatur per sumber lewat <b>Atur tampilan</b>; hook-nya ditulis AI untuk tiap klip.
       </p>
     </div>
+
+    {{-- ── TikTok performance ───────────────────────────────────── --}}
+    <section class="ap-section" x-show="performance.clip_count > 0">
+      <div class="ap-section-head">
+        <h2>Performa TikTok <span class="ap-count" x-text="performance.clip_count + ' klip'"></span></h2>
+      </div>
+      <div class="ap-perf-grid">
+        <div class="ap-perf-card">
+          <div class="ap-perf-label">Total views</div>
+          <div class="ap-perf-value" x-text="formatNumber(performance.total_views)"></div>
+          <div class="ap-perf-sub">Snapshot terbaru per klip</div>
+        </div>
+        <div class="ap-perf-card">
+          <div class="ap-perf-label">Total likes</div>
+          <div class="ap-perf-value" x-text="formatNumber(performance.total_likes)"></div>
+          <div class="ap-perf-sub">Snapshot terbaru per klip</div>
+        </div>
+        <div class="ap-perf-card" x-show="performance.best_clip">
+          <div class="ap-perf-label">Performa terbaik</div>
+          <div class="ap-perf-top" :title="performance.best_clip?.topic" x-text="performance.best_clip?.topic || ''"></div>
+          <div class="ap-perf-stats">
+            <span x-text="formatNumber(performance.best_clip?.views || 0) + ' views'"></span>
+            <span x-text="formatNumber(performance.best_clip?.likes || 0) + ' likes'"></span>
+          </div>
+          <div class="ap-perf-sub" x-show="performance.top_clips.length > 1" x-text="'Top 3: ' + performance.top_clips.slice(1).map(c => formatNumber(c.views) + ' views').join(' · ')"></div>
+        </div>
+      </div>
+    </section>
 
     {{-- ── Sources ─────────────────────────────────────────────── --}}
     <section class="ap-section">
@@ -306,13 +346,20 @@
               <span class="ap-badge" :class="clipBadge(c).cls" x-text="clipBadge(c).label"></span>
             </div>
 
-            <div class="ap-topic" x-text="c.topic"></div>
+            <div class="ap-topic">
+              <span x-text="c.topic"></span>
+              <span class="ap-perf-best" x-show="isTopClip(c)">Performa terbaik</span>
+            </div>
             <div class="ap-meta">
               <span x-text="c.video_title || c.youtube_url" :title="c.video_title || c.youtube_url"></span>
               <span x-text="c.duration + ' dtk'"></span>
               <span class="ap-viral" :class="'v-' + c.viral_potential" x-text="'viral ' + c.viral_potential"></span>
             </div>
             <div class="ap-reason" x-show="c.reason" x-text="c.reason"></div>
+            <div class="ap-perf-metric" x-show="c.views !== null">
+              <span>Views <b x-text="formatNumber(c.views || 0)"></b></span>
+              <span>Likes <b x-text="formatNumber(c.likes || 0)"></b></span>
+            </div>
             <div class="ap-cap" x-show="c.status === 'done' && c.review_status !== 'rejected'">
               <div class="ap-cap-title">Caption &amp; hashtag</div>
               <template x-if="c.caption">
@@ -675,6 +722,7 @@ function autopilot() {
     formError: null, timer: null, copied: '', captionState: {}, captionBusy: false,
     reviewPage: 1, reviewLastPage: 1, reviewTotal: 0, pendingCount: 0,
     reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
+    performance: { clip_count: 0, total_views: 0, total_likes: 0, best_clip: null, top_clips: [] },
     cleaning: false, cleanMsg: '',
     REVIEW_FILTERS: [
       { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
@@ -920,6 +968,12 @@ function autopilot() {
         published: '✓ Sudah diposting',
         failed: 'Upload gagal',
       }[c.tiktok_status] || 'Disetujui';
+    },
+    formatNumber(value) {
+      return new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value || 0));
+    },
+    isTopClip(c) {
+      return this.performance.top_clips.some(top => top.id === c.id);
     },
   };
 }

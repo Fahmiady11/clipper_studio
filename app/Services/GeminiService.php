@@ -279,7 +279,8 @@ class GeminiService
         string $layoutType,
         string $durationMode,
         int $minDuration,
-        int $maxDuration
+        int $maxDuration,
+        ?string $performanceContext = null
     ): string {
         $langHint = $transcript['language'] ?? 'id';
         $segments = $transcript['segments'] ?? [];
@@ -310,10 +311,20 @@ class GeminiService
             default => '',
         };
 
+        // Analytics is a learning signal, not a dependency: clip selection still
+        // works for new installs and remains unchanged until enough stats exist.
+        $performanceHint = $performanceContext === null
+            ? ''
+            : "\n        == DATA PERFORMA HISTORIS (opsional) ==\n".
+                "        {$performanceContext}\n".
+                "        Gunakan rentang skor yang terbukti berperforma sebagai koreksi bobot, tanpa mengabaikan transcript.\n";
+
         return <<<PROMPT
         Kamu adalah editor TikTok senior dengan rekam jejak video viral jutaan views. Berikut transcript video YouTube dengan timestamp (bahasa: {$langHint}).
 
         {$transcriptText}
+
+        {$performanceHint}
 
         == TUGAS ==
         Pilih TEPAT {$clipCount} segmen dengan potensi viral TERTINGGI untuk TikTok/Reels/Shorts.

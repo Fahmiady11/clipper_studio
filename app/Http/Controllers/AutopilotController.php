@@ -9,6 +9,7 @@ use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
 use App\Models\VideoSource;
+use App\Services\ClipPerformanceSummary;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
 use App\Services\StorageCleanup;
@@ -124,7 +125,7 @@ class AutopilotController extends Controller
      * Autopilot clips, a page at a time: waiting for review first (oldest first),
      * then the most recent decisions. ?status=pending|approved|rejected narrows it.
      */
-    public function review(Request $request, MusicService $music): JsonResponse
+    public function review(Request $request, MusicService $music, ClipPerformanceSummary $performance): JsonResponse
     {
         $status = $request->validate([
             'status' => ['nullable', 'in:pending,approved,rejected'],
@@ -145,9 +146,12 @@ class AutopilotController extends Controller
             ->orderBy('id') // stable order, so no clip shows on two pages
             ->paginate(self::REVIEW_PER_PAGE);
 
+        $clipTotals = $performance->totalsForClips($page->getCollection()->pluck('id'));
+
         return response()->json([
-            'data' => $page->getCollection()->map(function (GeneratedClip $c) use ($music) {
+            'data' => $page->getCollection()->map(function (GeneratedClip $c) use ($music, $clipTotals) {
                 $credit = $music->creditFor($c->music_track);
+                $totals = $clipTotals[$c->id] ?? null;
 
                 return [
                     'id' => $c->id,
@@ -168,6 +172,8 @@ class AutopilotController extends Controller
                     'tiktok_status' => $c->tiktok_status,
                     'tiktok_error' => $c->tiktok_error,
                     'music_credit' => $credit,
+                    'views' => $totals['views'] ?? null,
+                    'likes' => $totals['likes'] ?? null,
                 ];
             }),
             'page' => $page->currentPage(),
@@ -179,6 +185,7 @@ class AutopilotController extends Controller
                 'approved' => $counts['approved'] ?? 0,
                 'rejected' => $counts['rejected'] ?? 0,
             ],
+            'performance' => $performance->forUser(Auth::id()),
         ]);
     }
 

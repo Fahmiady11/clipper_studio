@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class GeneratedClip extends Model
@@ -71,6 +72,11 @@ class GeneratedClip extends Model
     public function clipProject(): BelongsTo
     {
         return $this->belongsTo(ClipProject::class);
+    }
+
+    public function stats(): HasMany
+    {
+        return $this->hasMany(ClipStat::class);
     }
 
     public function durationSeconds(): float

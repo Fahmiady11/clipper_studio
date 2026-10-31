@@ -3,6 +3,7 @@
 use App\Jobs\DiscoverVideosJob;
 use App\Models\VideoSource;
 use App\Services\StorageCleanup;
+use App\Services\TikTokStatsService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
@@ -16,6 +17,11 @@ Schedule::call(function () {
             DiscoverVideosJob::dispatch($source->id);
         });
 })->everyTenMinutes()->name('autopilot-discover')->withoutOverlapping();
+
+// Learning loop: collect one lifetime snapshot per published TikTok clip
+Schedule::call(function (TikTokStatsService $stats) {
+    $stats->collectPublishedStats();
+})->hourly()->name('clip-stats-tiktok')->withoutOverlapping();
 
 // Free disk from downloaded source videos; rendered clips are kept
 Artisan::command('clipper:cleanup {--hours= : Keep files touched within this many hours}', function (StorageCleanup $cleanup) {
