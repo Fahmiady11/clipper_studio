@@ -458,8 +458,25 @@ function studio() {
       return (list || []).map(c => ({
         ranking: c.ranking, start_seconds: c.start_seconds, end_seconds: c.end_seconds,
         topic: c.topic, reason: c.reason, viral_potential: c.viral_potential,
+        viral_score: c.viral_score ?? null, viral_reasons: c.viral_reasons || [],
         hook_text: c.hook_text, id: c.id, status: c.status, error_msg: c.error_msg || null,
       }));
+    },
+
+    viralScoreLabel(score) {
+      return (score === null || score === undefined) ? '—/10' : `${score}/10`;
+    },
+
+    viralScoreClass(score) {
+      if (score === null || score === undefined) return 'rendah';
+      if (score >= 8) return 'tinggi';
+      if (score >= 7) return 'sedang';
+      return 'rendah';
+    },
+
+    viralReasonsLabel(reasons) {
+      const labels = { hook: 'hook kuat', flow: 'flow lancar', value: 'nilai praktis' };
+      return (reasons || []).map(reason => labels[reason] || reason).join(', ');
     },
 
     // Apply a /status response for the project being analysed. Returns false once

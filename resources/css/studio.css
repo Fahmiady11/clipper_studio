@@ -1324,6 +1324,20 @@ textarea.field {
     color: var(--text-muted)
 }
 
+.viral-score {
+    min-width: 48px;
+    text-align: center
+}
+
+.clip-viral-reasons {
+    font-size: 12px;
+    line-height: 1.35;
+    max-width: 170px;
+    color: var(--text-muted);
+    text-align: right;
+    text-wrap: balance
+}
+
 .clip-pick {
     font-size: 13px;
     font-weight: 600;

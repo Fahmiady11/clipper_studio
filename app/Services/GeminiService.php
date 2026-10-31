@@ -336,6 +336,7 @@ class GeminiService
         - Antar clip TIDAK boleh tumpang tindih timestamp
         - Hanya pilih segmen dengan viral_score ≥ 7
         - Urutkan dari viral_score tertinggi ke terendah
+        - viral_reasons HANYA boleh berisi "hook", "flow", atau "value"; pilih yang menjelaskan skor
 
         == HOOK_TEXT — teks besar di layar selama 3 detik pertama ==
         Tujuannya satu: bikin orang BERHENTI scroll karena PENASARAN. Ini judul, BUKAN kutipan transcript dan BUKAN ringkasan.
@@ -376,7 +377,8 @@ class GeminiService
             "end_seconds": float,
             "topic": string (judul singkat topik segmen),
             "reason": string (mengapa segmen ini viral — sebutkan sinyal spesifik dari transcript),
-            "viral_score": int (1-10, berdasarkan kriteria di atas),
+            "viral_score": int (0-10, berdasarkan kriteria di atas),
+            "viral_reasons": ["hook"|"flow"|"value"],
             "viral_potential": "tinggi"|"sedang"|"rendah",
             "hook_text": string (judul overlay MAKSIMAL 5 kata, bikin penasaran, ikuti aturan HOOK_TEXT di atas),
             "completion_check": string (konfirmasi bahwa topik selesai di end_seconds, bukan terpotong),

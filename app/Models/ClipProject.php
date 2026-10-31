@@ -96,6 +96,6 @@ class ClipProject extends Model
 
     public function generatedClips(): HasMany
     {
-        return $this->hasMany(GeneratedClip::class)->orderBy('ranking');
+        return $this->hasMany(GeneratedClip::class)->orderByDesc('viral_score')->orderBy('ranking');
     }
 }

@@ -13,6 +13,7 @@ use App\Support\Cancellation;
 use App\Support\ClipBoundaries;
 use App\Support\HookText;
 use App\Support\JobCancelled;
+use App\Support\ViralityScore;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Queue\Queueable;
@@ -159,6 +160,8 @@ class AnalyzeVideoJob implements ShouldQueue
                 'topic' => $clip['topic'] ?? 'Clip #'.$clip['ranking'],
                 'reason' => $clip['reason'] ?? '',
                 'viral_potential' => $clip['viral_potential'] ?? 'sedang',
+                'viral_score' => ViralityScore::score($clip['viral_score'] ?? null),
+                'viral_reasons' => ViralityScore::reasons($clip['viral_reasons'] ?? null),
                 'hook_text' => HookText::clean($clip['hook_text'] ?? null, shorten: true),
                 'subtitle_json' => $clip['subtitle_segments'] ?? [],
                 // B-roll moments come with the analysis, so rendering needs no extra AI call

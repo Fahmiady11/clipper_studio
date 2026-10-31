@@ -44,6 +44,10 @@
           </div>
         </div>
         <div class="clip-aside">
+          <span class="viral viral-score" :class="viralScoreClass(c.viral_score)"
+                x-text="viralScoreLabel(c.viral_score)"></span>
+          <span class="clip-viral-reasons" x-show="viralReasonsLabel(c.viral_reasons)"
+                x-text="viralReasonsLabel(c.viral_reasons)"></span>
           <span class="viral" :class="c.viral_potential" x-text="'● ' + c.viral_potential"></span>
           <span class="clip-state" x-show="c.status === 'processing' && renderingClipId !== c.id">⏳ Diproses</span>
           <span class="clip-state is-fail" x-show="c.status === 'failed'" :title="c.error_msg || ''">Gagal</span>

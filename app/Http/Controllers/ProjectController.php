@@ -152,6 +152,8 @@ class ProjectController extends Controller
             'topic' => $c->topic,
             'reason' => $c->reason,
             'viral_potential' => $c->viral_potential,
+            'viral_score' => $c->viral_score,
+            'viral_reasons' => $c->viral_reasons,
             'hook_text' => $c->hook_text,
             'status' => $c->status,
             'error_msg' => $c->status === 'failed' ? $c->error_msg : null,
