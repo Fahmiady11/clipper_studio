@@ -10,6 +10,10 @@ use RuntimeException;
 
 class FFmpegService
 {
+    private const LOGO_WIDTH = 180;
+
+    private const LOGO_MARGIN = 40;
+
     private const MAX_CUE_WORDS = 4;    // words per subtitle cue (TikTok-style short lines)
 
     private const CUE_BREAK_GAP = 0.6;  // seconds of silence that starts a new cue
@@ -82,9 +86,9 @@ class FFmpegService
      * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
      * @param  array|null  $pieces  SmartCut pieces to keep (clip-relative); the rest is cut out
      * @param  array  $zoom  SmartCut spans (on the cut timeline) shown punched in
-     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array, broll?: list<array{path: string, start: float, duration: float}>}|null  $overlay
-     *                                                                                                                                                                                                          Subtitles, hook and emoji drawn in the same pass,
-     *                                                                                                                                                                                                          which then is the final encode (one generation, no second pass)
+     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array, broll?: list<array{path: string, start: float, duration: float}>, logo?: ?string}|null  $overlay
+     *                                                                                                                                                                                                                          Subtitles, hook and emoji drawn in the same pass,
+     *                                                                                                                                                                                                                          which then is the final encode (one generation, no second pass)
      */
     public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = [], ?array $overlay = null): void
     {
@@ -122,9 +126,15 @@ class FFmpegService
             $video = "[brd{$i}]";
         }
         if ($overlay !== null) {
+            // Brand logo: a still image looped for as long as the video runs (see overlayChain)
+            $logoInput = null;
+            if (! empty($overlay['logo'])) {
+                $extraInputs .= ' -loop 1 -framerate 30 -i '.escapeshellarg($overlay['logo']);
+                $logoInput = $nextInput++;
+            }
             [$extraInputs2, $chain] = $this->overlayChain($video, '[out]', $nextInput, $overlay['ass'] ?? null,
                 $overlay['hook'] ?? null, (float) ($overlay['hook_duration'] ?? 0), $overlay['emojis'] ?? [],
-                $overlay['title'] ?? null, $overlay['progress'] ?? null);
+                $overlay['title'] ?? null, $overlay['progress'] ?? null, $logoInput);
             $extraInputs .= $extraInputs2;
             $filterGraph .= ';'.$chain;
             $video = '[out]';
@@ -582,7 +592,7 @@ class FFmpegService
      *
      * @return array{0: string, 1: string} [input arguments, filter graph ending in $label]
      */
-    private function overlayChain(string $from, string $label, int $firstInput, ?string $assPath, ?array $hook, float $hookDuration, array $emojis, ?string $titleAss = null, ?array $progress = null): array
+    private function overlayChain(string $from, string $label, int $firstInput, ?string $assPath, ?array $hook, float $hookDuration, array $emojis, ?string $titleAss = null, ?array $progress = null, ?int $logoInput = null): array
     {
         $ass = array_map(fn ($f) => 'ass='.$f.':fontsdir='.$this->layout->fontsDir(), array_filter([$assPath, $titleAss]));
         $subs = $ass ? implode(',', $ass) : 'null';
@@ -618,6 +628,15 @@ class FFmpegService
                 ."[b%d][e%d]overlay=x='%d-overlay_w/2':y='%d-overlay_h/2':eof_action=pass[b%d]",
                 $in++, $s, $e['size'], $pop, $s, $s + EmojiCues::SHOW_FOR - 0.15, $n,
                 $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $n
+            );
+        }
+
+        // Brand logo: small watermark in the top-right corner, below the progress bar's edge
+        if ($logoInput !== null) {
+            $n++;
+            $parts[] = sprintf(
+                "[%d:v]format=rgba,scale=w=%d:h=-1[wm];[b%d][wm]overlay=x='W-w-%d':y=%d:shortest=1:eof_action=pass[b%d]",
+                $logoInput, self::LOGO_WIDTH, $n - 1, self::LOGO_MARGIN, self::LOGO_MARGIN, $n
             );
         }
 

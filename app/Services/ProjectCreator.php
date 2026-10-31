@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Jobs\AnalyzeVideoJob;
+use App\Models\BrandKit;
 use App\Models\ClipProject;
 use App\Models\HookSetting;
 use App\Models\SubtitleSetting;
@@ -18,6 +19,8 @@ class ProjectCreator
     public function create(int $userId, string $youtubeUrl, array $settings, ?int $videoSourceId = null): ClipProject
     {
         $manual = ($settings['duration_mode'] ?? 'auto') === 'manual';
+        // Brand kit fills in only what the request leaves out; explicit values win
+        $brand = BrandKit::where('user_id', $userId)->first()?->projectDefaults() ?? [];
 
         $project = ClipProject::create([
             'user_id' => $userId,
@@ -29,6 +32,7 @@ class ProjectCreator
             'progress_bar' => $settings['edit']['progress'] ?? true,
             'top_title' => $settings['edit']['title'] ?? false,
             'broll' => $settings['edit']['broll'] ?? true,
+            'watermark' => $settings['watermark'] ?? $brand['watermark'] ?? false,
             'clip_count' => $settings['clip_count'] ?? 3,
             'duration_mode' => $settings['duration_mode'] ?? 'auto',
             'min_duration' => $manual ? ($settings['min_duration'] ?? null) : null,
@@ -40,6 +44,7 @@ class ProjectCreator
         ]);
 
         $sub = $settings['subtitle'] ?? [];
+        $sub += array_filter(array_intersect_key($brand, array_flip(['font_family', 'highlight_color', 'text_color'])), fn ($v) => $v !== null);
         SubtitleSetting::create([
             'clip_project_id' => $project->id,
             'enabled' => $sub['enabled'] ?? true,
@@ -55,6 +60,7 @@ class ProjectCreator
         ]);
 
         $hook = $settings['hook'] ?? [];
+        $hook += array_filter(array_intersect_key($brand, array_flip(['text_color', 'background_style'])), fn ($v) => $v !== null);
         HookSetting::create([
             'clip_project_id' => $project->id,
             'enabled' => $hook['enabled'] ?? true,

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\BrandKitController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
@@ -33,7 +34,7 @@ Route::post('/logout', [LogoutController::class, 'destroy'])->name('logout');
 Route::middleware(['auth', 'approved'])->group(function () {
     // no-store: after logout the Back button must not show these pages from cache
     Route::middleware('cache.headers:no_store;private')->group(function () {
-        Route::get('/', fn () => view('studio'))->name('home');
+        Route::get('/', fn () => view('studio', ['brand' => auth()->user()->brandKit?->studioDefaults() ?? []]))->name('home');
         Route::get('/autopilot', fn () => view('autopilot'))->name('autopilot');
         Route::get('/music', fn () => view('music'))->name('music');
         Route::get('/admin/users', [UserApprovalController::class, 'index'])->middleware('admin')->name('admin.users');
@@ -48,6 +49,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
     });
 
     // TikTok OAuth (redirect URI registered on the TikTok app → /tiktok/callback)
+    Route::get('/settings/brand', [BrandKitController::class, 'edit'])->name('brand.edit');
+    Route::put('/settings/brand', [BrandKitController::class, 'update'])->name('brand.update');
+    Route::get('/settings/brand/logo', [BrandKitController::class, 'logo'])->name('brand.logo');
+    Route::delete('/settings/brand/logo', [BrandKitController::class, 'destroyLogo'])->name('brand.logo.destroy');
+
     Route::get('/tiktok/connect', [TikTokController::class, 'connect'])->name('tiktok.connect');
     Route::get('/tiktok/callback', [TikTokController::class, 'callback'])->name('tiktok.callback');
 

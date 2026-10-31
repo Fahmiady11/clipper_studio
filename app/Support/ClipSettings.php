@@ -18,6 +18,9 @@ final class ClipSettings
 
     public const SUBTITLE_STYLES = ['karaoke', 'pop', 'word'];
 
+    /** Bundled in resources/fonts; see VideoLayoutService::resolveFontByFamily. */
+    public const FONT_FAMILIES = ['Arial', 'Roboto', 'Montserrat', 'Oswald', 'Bebas Neue'];
+
     public const DEFAULTS = [
         'layout_type' => 'reframe',
         'clip_count' => 3,
@@ -62,7 +65,7 @@ final class ClipSettings
 
             'subtitle' => ['sometimes', 'array'],
             'subtitle.enabled' => ['sometimes', 'boolean'],
-            'subtitle.font_family' => ['sometimes', 'string', 'in:Arial,Roboto,Montserrat,Oswald,Bebas Neue'],
+            'subtitle.font_family' => ['sometimes', 'string', 'in:'.implode(',', self::FONT_FAMILIES)],
             'subtitle.font_size' => ['sometimes', 'integer', 'min:16', 'max:160'],
             'subtitle.text_color' => $color,
             'subtitle.highlight_color' => $color,
@@ -80,6 +83,8 @@ final class ClipSettings
             'hook.position' => ['sometimes', 'in:top,center,bottom'],
             'hook.text_color' => $color,
             'hook.background_style' => ['sometimes', 'in:none,semi,full'],
+
+            'watermark' => ['sometimes', 'boolean'],
 
             'music' => ['sometimes', 'array'],
             'music.enabled' => ['sometimes', 'boolean'],

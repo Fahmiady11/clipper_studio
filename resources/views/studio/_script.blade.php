@@ -1,6 +1,7 @@
 <script>
 function studio() {
   const SESSION_KEY = 'clipper_studio_v1';
+  const BRAND = @json($brand ?? []);
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
     'url','meta',
@@ -8,6 +9,7 @@ function studio() {
     'clipCount','durationMode','minDuration','maxDuration',
     'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
+    'watermark',
     'musicEnabled','musicMood','musicVolume',
     'generateStarted','generateProgress','generateLogIdx',
     'projectId','clips','selectedClip','renderingClipId',
@@ -42,11 +44,12 @@ function studio() {
     url: '', meta: null, loadingMeta: false, metaError: null,
     layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
-    subtitleEnabled: true, subtitleFont: 'Montserrat', subtitleSize: 56,
-    subtitleTextColor: '#ffffff', subtitleHighlight: '#facc15',
+    subtitleEnabled: true, subtitleFont: BRAND.font_family || 'Montserrat', subtitleSize: 56,
+    subtitleTextColor: BRAND.text_color || '#ffffff', subtitleHighlight: BRAND.highlight_color || '#facc15',
     subtitlePos: 'bottom', subtitleY: null, subtitleBg: 'semi', subtitleStyle: 'karaoke', subtitleEmoji: true, subDragging: false,
     hookEnabled: true, hookText: 'Ingin lebih baik? Coba ini.', hookAi: false,
-    hookDuration: 3, hookPos: 'center', hookTextColor: '#ffffff', hookBg: 'semi',
+    hookDuration: 3, hookPos: 'center', hookTextColor: BRAND.text_color || '#ffffff', hookBg: BRAND.background_style || 'semi',
+    hasLogo: !!BRAND.has_logo, watermark: !!BRAND.watermark,
     musicEnabled: false, musicMood: '', musicVolume: 25, musicLibrary: null, musicMissing: false,
     generateStarted: false, generateProgress: 0, generateLogIdx: 0, generateTimer: null,
     generateError: null, generateLogMsg: null, generateCancelled: false, cancelling: false, retrying: false,
@@ -404,6 +407,7 @@ function studio() {
             youtube_url: this.url,
             layout_type: this.layout,
             edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll },
+            watermark: this.hasLogo && this.watermark,
             clip_count: this.clipCount,
             duration_mode: this.durationMode,
             min_duration: this.durationMode === 'manual' ? this.minDuration : null,

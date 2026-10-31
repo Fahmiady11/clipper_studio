@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -30,6 +31,11 @@ class User extends Authenticatable
     public function isApproved(): bool
     {
         return $this->approved_at !== null;
+    }
+
+    public function brandKit(): HasOne
+    {
+        return $this->hasOne(BrandKit::class);
     }
 
     public function clipProjects(): HasMany

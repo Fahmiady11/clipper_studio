@@ -48,6 +48,13 @@
           </button>
           <div class="fhint" style="margin-top:8px">Emoji muncul sebentar di kata kunci — uang 💰, sukses 🚀, lucu 😂, kaget 😱 — paling banyak satu tiap 3 detik.</div>
         </div>
+        <div class="fblock" x-show="hasLogo">
+          <button class="tgl" :class="{ on: watermark }" @click="watermark = !watermark" type="button">
+            <span class="tgl-track"></span>
+            <span class="tgl-text">Logo watermark</span>
+          </button>
+          <div class="fhint" style="margin-top:8px">Logo dari Brand kit, di pojok kanan atas.</div>
+        </div>
         <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Font</div>
           <select class="select" x-model="subtitleFont">

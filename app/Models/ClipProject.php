@@ -28,6 +28,7 @@ class ClipProject extends Model
         'progress_bar',
         'top_title',
         'broll',
+        'watermark',
         'clip_count',
         'duration_mode',
         'min_duration',
@@ -53,6 +54,7 @@ class ClipProject extends Model
         'progress_bar' => 'boolean',
         'top_title' => 'boolean',
         'broll' => 'boolean',
+        'watermark' => 'boolean',
         'music_volume' => 'integer',
         'cancelled_at' => 'datetime',
     ];

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\BrandKit;
 use App\Models\GeneratedClip;
 use App\Services\FaceTracker;
 use App\Services\FFmpegService;
@@ -224,10 +225,13 @@ class RenderClipJob implements ShouldQueue
             $log->info('B-roll', ['cues' => array_map(fn ($b) => round($b['start'], 1), $broll)]);
         }
 
+        $logo = $project->watermark ? BrandKit::where('user_id', $project->user_id)->value('logo_path') : null;
+        $logoPath = $logo && Storage::disk('local')->exists($logo) ? Storage::disk('local')->path($logo) : null;
+
         $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
         $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
-            'title' => $titlePath, 'progress' => $progress, 'broll' => $broll,
+            'title' => $titlePath, 'progress' => $progress, 'broll' => $broll, 'logo' => $logoPath,
         ]);
         $current = $step2;
         Cancellation::throwIfCancelled();
