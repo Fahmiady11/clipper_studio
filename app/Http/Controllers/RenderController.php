@@ -90,6 +90,7 @@ class RenderController extends Controller
         $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
         abort_if($clip->status === 'processing', 409, 'Clip masih dirender. Tunggu selesai atau batalkan dulu.');
+        abort_if($clip->hookTest()->exists(), 409, 'Clip ini punya tes hook A/B dengan potongan yang sama. Hapus tesnya dulu.');
 
         $data = $request->validate([
             'start_seconds' => ['required', 'numeric', 'min:0'],

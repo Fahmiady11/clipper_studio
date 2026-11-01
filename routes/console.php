@@ -6,6 +6,7 @@ use App\Models\ApiToken;
 use App\Models\InviteCode;
 use App\Models\User;
 use App\Models\VideoSource;
+use App\Services\HookTestService;
 use App\Services\JobWatchdog;
 use App\Services\LoadMonitor;
 use App\Services\ScheduledPublisher;
@@ -29,6 +30,13 @@ Schedule::call(function () {
 Schedule::call(function (TikTokStatsService $stats) {
     $stats->collectPublishedStats();
 })->hourly()->name('clip-stats-tiktok')->withoutOverlapping();
+
+// Hook A/B tests: pick a winner once every variant has reached the comparison age (runs after the stats snapshot)
+Artisan::command('clipper:judge-hook-tests', function (HookTestService $tests) {
+    $this->info('Judged '.$tests->judgeDue().' hook tests');
+})->purpose('Pick the winning hook of finished A/B tests');
+
+Schedule::command('clipper:judge-hook-tests')->hourlyAt(20)->name('judge-hook-tests')->withoutOverlapping();
 
 // Calendar: hand posts whose time has come to the upload jobs
 Artisan::command('clipper:publish-scheduled', function (ScheduledPublisher $publisher) {

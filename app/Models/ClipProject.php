@@ -98,6 +98,7 @@ class ClipProject extends Model
 
     public function generatedClips(): HasMany
     {
-        return $this->hasMany(GeneratedClip::class)->orderByDesc('viral_score')->orderBy('ranking');
+        // Hook A/B variants are not clips of their own to pick, download or review
+        return $this->hasMany(GeneratedClip::class)->whereNull('variant_of_id')->orderByDesc('viral_score')->orderBy('ranking');
     }
 }

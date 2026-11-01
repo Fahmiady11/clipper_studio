@@ -37,7 +37,7 @@ class DownloadController extends Controller
     public function project(string $projectId): BinaryFileResponse
     {
         $project = ClipProject::where('user_id', Auth::id())->findOrFail($projectId);
-        $clips = GeneratedClip::where('clip_project_id', $project->id)->where('status', 'done')
+        $clips = GeneratedClip::where('clip_project_id', $project->id)->whereNull('variant_of_id')->where('status', 'done')
             ->orderBy('ranking')->get()
             ->filter(fn ($c) => $c->output_path && Storage::exists($c->output_path));
         abort_if($clips->isEmpty(), 404, 'Belum ada clip yang selesai dirender.');

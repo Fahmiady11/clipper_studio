@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ClipStat;
 use App\Models\GeneratedClip;
+use App\Models\HookTest;
 use Illuminate\Support\Collection;
 use Throwable;
 
@@ -14,6 +15,8 @@ use Throwable;
 class ClipPerformanceSummary
 {
     private const MIN_CLIPS_FOR_PROMPT = 5;
+
+    private const MIN_HOOK_TESTS_FOR_PROMPT = 2;
 
     /**
      * Latest snapshot per platform, summed for a total across platforms.
@@ -46,6 +49,7 @@ class ClipPerformanceSummary
     {
         $clips = GeneratedClip::query()
             ->whereHas('clipProject', fn ($query) => $query->where('user_id', $userId))
+            ->whereNull('variant_of_id') // hook A/B variants repeat the original's topic
             ->whereHas('stats', fn ($query) => $query->where('platform', 'tiktok'))
             ->get(['id', 'topic', 'viral_score']);
 
@@ -108,6 +112,55 @@ class ClipPerformanceSummary
             // Analytics must never prevent a normal analysis when tables are unavailable.
             return null;
         }
+    }
+
+    /**
+     * Hook angles ordered by how often they won this user's A/B tests (most wins first;
+     * untested angles keep the default order).
+     *
+     * @return list<string>
+     */
+    public function rankedHookAngles(int $userId): array
+    {
+        $wins = $this->hookWins($userId);
+
+        return collect(HookTest::ANGLES)
+            ->sortByDesc(fn (string $angle) => $wins[$angle] ?? 0) // stable: ties keep ANGLES order
+            ->values()
+            ->all();
+    }
+
+    /** Short prompt line about which hook styles won this user's tests; null until two tests were decided. */
+    public function hookInsight(int $userId): ?string
+    {
+        try {
+            $wins = $this->hookWins($userId);
+            $total = array_sum($wins);
+            if ($total < self::MIN_HOOK_TESTS_FOR_PROMPT) {
+                return null;
+            }
+            arsort($wins);
+            $parts = collect($wins)->map(fn (int $n, string $angle) => HookTest::angleLabel($angle)." ({$n}x)")->implode(', ');
+
+            return "Hasil tes A/B hook akun ini ({$total} tes): gaya yang paling sering menang = {$parts}. ".
+                'Condongkan hook ke gaya yang menang, tapi tetap pas dengan isi clip.';
+        } catch (Throwable) {
+            return null; // like promptInsight: analytics never blocks a render or an analysis
+        }
+    }
+
+    /** @return array<string, int> wins per angle over decided tests */
+    private function hookWins(int $userId): array
+    {
+        return HookTest::query()
+            ->where('user_id', $userId)
+            ->where('status', HookTest::STATUS_DECIDED)
+            ->whereNotNull('winner_angle')
+            ->selectRaw('winner_angle, count(*) as n')
+            ->groupBy('winner_angle')
+            ->pluck('n', 'winner_angle')
+            ->map(fn ($n) => (int) $n)
+            ->all();
     }
 
     /** @param  Collection<int, int|string>  $ids */

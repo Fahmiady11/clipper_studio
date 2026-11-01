@@ -261,7 +261,7 @@ class RenderClipJob implements ShouldQueue
         $musicTrack = null;
         if ($project->music_enabled) {
             $mood = $project->music_mood ?? $clip->music_mood;
-            $track = $music->pickTrack($mood, $clip->id);
+            $track = $music->pickTrack($mood, $clip->variant_of_id ?? $clip->id); // hook variants share the original's song
             if ($track) {
                 $log->info('Mixing music', ['mood' => $mood, 'track' => basename($track), 'volume' => $project->music_volume]);
                 $withMusic = $tempDir.'/music_'.$this->clipId.'.mp4';

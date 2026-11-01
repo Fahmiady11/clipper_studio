@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
+use App\Http\Controllers\HookTestController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
 use App\Http\Controllers\ProjectController;
@@ -37,6 +38,12 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/clips/{clipId}/transcript', [RenderController::class, 'transcript']);
     Route::patch('/clips/{clipId}/bounds', [RenderController::class, 'bounds']);
     Route::get('/clips/{clipId}/download', [DownloadController::class, 'download']);
+
+    // Hook A/B test: 2-3 hook variants of a clip, posted staggered, winner picked from TikTok stats
+    Route::get('/clips/{clipId}/hook-test', [HookTestController::class, 'show']);
+    Route::post('/clips/{clipId}/hook-test', [HookTestController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('/clips/{clipId}/hook-test/publish', [HookTestController::class, 'publish'])->middleware('throttle:10,1');
+    Route::delete('/clips/{clipId}/hook-test', [HookTestController::class, 'destroy']);
 
     Route::get('/tiktok/accounts', [TikTokController::class, 'accounts']);
     Route::delete('/tiktok/accounts/{accountId}', [TikTokController::class, 'disconnect']);

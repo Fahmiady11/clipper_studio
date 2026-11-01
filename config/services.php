@@ -101,6 +101,13 @@ return [
         'load_overloaded' => (float) env('CLIPPER_LOAD_OVERLOADED', 1.5),
         'queue_busy' => (int) env('CLIPPER_QUEUE_BUSY', 5),
         'queue_overloaded' => (int) env('CLIPPER_QUEUE_OVERLOADED', 15),
+        // Hook A/B tests: every variant is judged at the same age after its own post
+        'hook_test' => [
+            'window_hours' => (int) env('CLIPPER_HOOK_TEST_WINDOW_HOURS', 48),
+            'grace_hours' => (int) env('CLIPPER_HOOK_TEST_GRACE_HOURS', 24), // after the last window, judge with what exists
+            'min_views' => (int) env('CLIPPER_HOOK_TEST_MIN_VIEWS', 20), // below this nothing can be told apart
+            'margin' => (float) env('CLIPPER_HOOK_TEST_MARGIN', 1.15), // winner needs this much more than the runner-up
+        ],
     ],
 
     'music' => [

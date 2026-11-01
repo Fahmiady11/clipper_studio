@@ -52,6 +52,7 @@ class ScheduleController extends Controller
     {
         $clips = GeneratedClip::with('clipProject:id,video_title,thumbnail_url,user_id')
             ->where('status', 'done')
+            ->whereNull('variant_of_id') // hook test variants are posted from their test
             ->whereNotNull('output_path')
             ->where(fn ($q) => $q->whereNull('review_status')->orWhere('review_status', '!=', 'rejected'))
             ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))

@@ -156,7 +156,8 @@ class AnalyzeVideoJob implements ShouldQueue
             $durationMode,
             $minDuration,
             $maxDuration,
-            $performanceHint
+            $performanceHint,
+            $performance->hookInsight($project->user_id)
         );
         $log->info('Gemini returned', ['count' => count($clips)]);
 

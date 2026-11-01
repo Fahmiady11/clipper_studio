@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\BrollCues;
+use App\Support\HookText;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -18,6 +19,12 @@ use RuntimeException;
 class GeminiService
 {
     private const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
+
+    private const ANGLE_BRIEF = [
+        'curiosity_gap' => 'celah rasa penasaran: janjikan jawaban/kejutan yang baru terungkap di clip, kalimat menggantung atau rahasia',
+        'question' => 'pertanyaan tajam yang bikin penonton merasa harus tahu jawabannya',
+        'bold_claim' => 'klaim berani atau kontroversial yang menantang kebiasaan/anggapan umum',
+    ];
 
     private string $apiKey;
 
@@ -45,9 +52,11 @@ class GeminiService
         string $layoutType,
         string $durationMode = 'auto',
         int $minDuration = 15,
-        int $maxDuration = 60
+        int $maxDuration = 60,
+        ?string $performanceContext = null,
+        ?string $hookInsight = null
     ): array {
-        $prompt = $this->buildPromptFromTranscript($transcript, $clipCount, $layoutType, $durationMode, $minDuration, $maxDuration);
+        $prompt = $this->buildPromptFromTranscript($transcript, $clipCount, $layoutType, $durationMode, $minDuration, $maxDuration, $performanceContext, $hookInsight);
 
         $clips = $this->generate($prompt, 'analyzeTranscript', 0.3, 300, function ($data) {
             // Some models wrap the array: {"clips": [...]}
@@ -92,6 +101,63 @@ class GeminiService
             'caption' => (string) $data['caption'],
             'hashtags' => array_values(array_filter((array) $data['hashtags'], 'is_string')),
         ];
+    }
+
+    /**
+     * Distinct hook texts for one clip, one per angle, for an A/B test.
+     * Each comes back cleaned like an analysis hook; fewer than asked for is possible.
+     *
+     * @param  list<string>  $angles  from HookText angles: curiosity_gap, question, bold_claim
+     * @return list<array{angle: string, text: string}>
+     *
+     * @throws RuntimeException when no AI answers
+     */
+    public function hookVariants(string $topic, string $clipText, array $angles, string $language = 'id', ?string $insight = null, ?string $currentHook = null): array
+    {
+        $clipText = mb_substr($clipText, 0, 2500);
+        $spec = implode("\n", array_map(fn (string $a) => '- '.$a.': '.self::ANGLE_BRIEF[$a], $angles));
+        $styleHint = $insight === null ? '' : "\n{$insight}\n";
+        $current = $currentHook ? "\nHook yang sudah dipakai (JANGAN diulang atau dimirip-miripkan): {$currentHook}\n" : '';
+        $count = count($angles);
+
+        $prompt = <<<PROMPT
+        Kamu editor TikTok senior. Tulis {$count} teks hook BERBEDA untuk satu clip, satu per sudut pandang, untuk diuji A/B.
+        Hook = teks besar di layar 3 detik pertama; tugasnya bikin orang berhenti scroll.
+
+        Topik clip: {$topic}
+        Isi clip:
+        {$clipText}
+        {$current}{$styleHint}
+        Sudut pandang (satu hook per sudut):
+        {$spec}
+
+        Aturan tiap hook:
+        - MAKSIMAL 5 kata, maksimal 30 karakter. Bahasa {$language}, santai mengikuti gaya pembicara.
+        - Apit 1–2 kata terpenting dengan bintang, contoh: "Kenapa kamu *susah kaya*?"
+        - Jangan bocorkan jawabannya, jangan clickbait yang tidak dijawab clip
+        - DILARANG: emoji, hashtag, tanda kutip, kalimat generik ("Wajib nonton!"), nama orang yang tidak dikenal penonton
+        - Tiap hook harus terasa BERBEDA dari yang lain, bukan sekadar ganti urutan kata
+
+        Kembalikan JSON: {"hooks": [{"angle": "question", "text": "..."}]}
+        PROMPT;
+
+        $data = $this->generate($prompt, 'hookVariants', 0.8, 30, fn ($d) => is_array($d['hooks'] ?? null) && $d['hooks'] ? $d['hooks'] : null);
+
+        $out = [];
+        $seen = [HookText::plain((string) $currentHook)];
+        foreach ($data as $row) {
+            $angle = is_array($row) ? ($row['angle'] ?? null) : null;
+            $text = is_array($row) && is_string($row['text'] ?? null) ? HookText::clean($row['text'], shorten: true) : null;
+            $key = $text === null ? '' : mb_strtolower(HookText::plain($text));
+            if (! in_array($angle, $angles, true) || $text === null || in_array($key, array_map('mb_strtolower', $seen), true)
+                || in_array($angle, array_column($out, 'angle'), true)) {
+                continue;
+            }
+            $seen[] = $key;
+            $out[] = ['angle' => $angle, 'text' => $text];
+        }
+
+        return $out;
     }
 
     /**
@@ -280,7 +346,8 @@ class GeminiService
         string $durationMode,
         int $minDuration,
         int $maxDuration,
-        ?string $performanceContext = null
+        ?string $performanceContext = null,
+        ?string $hookInsight = null
     ): string {
         $langHint = $transcript['language'] ?? 'id';
         $segments = $transcript['segments'] ?? [];
@@ -319,6 +386,9 @@ class GeminiService
                 "        {$performanceContext}\n".
                 "        Gunakan rentang skor yang terbukti berperforma sebagai koreksi bobot, tanpa mengabaikan transcript.\n";
 
+        // What won the user's own hook A/B tests, so new hooks lean the same way
+        $hookStyleHint = $hookInsight === null ? '' : "\n        {$hookInsight}\n";
+
         return <<<PROMPT
         Kamu adalah editor TikTok senior dengan rekam jejak video viral jutaan views. Berikut transcript video YouTube dengan timestamp (bahasa: {$langHint}).
 
@@ -350,7 +420,7 @@ class GeminiService
         - viral_reasons HANYA boleh berisi "hook", "flow", atau "value"; pilih yang menjelaskan skor
 
         == HOOK_TEXT — teks besar di layar selama 3 detik pertama ==
-        Tujuannya satu: bikin orang BERHENTI scroll karena PENASARAN. Ini judul, BUKAN kutipan transcript dan BUKAN ringkasan.
+        Tujuannya satu: bikin orang BERHENTI scroll karena PENASARAN. Ini judul, BUKAN kutipan transcript dan BUKAN ringkasan.{$hookStyleHint}
         - MAKSIMAL 5 KATA (idealnya 3–4), maksimal 30 karakter. Hitung katanya.
         - Buka "celah rasa ingin tahu": janjikan jawaban/kejutan yang baru terungkap di dalam clip. JANGAN bocorkan jawabannya.
         - Teknik penasaran yang ampuh:

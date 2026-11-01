@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class GeneratedClip extends Model
@@ -16,6 +17,7 @@ class GeneratedClip extends Model
     protected $fillable = [
         'id',
         'clip_project_id',
+        'variant_of_id',
         'ranking',
         'start_seconds',
         'end_seconds',
@@ -26,6 +28,7 @@ class GeneratedClip extends Model
         'viral_reasons',
         'hook_text',
         'hook_text_override',
+        'hook_angle',
         'subtitle_json',
         'caption',
         'hashtags_json',
@@ -77,6 +80,22 @@ class GeneratedClip extends Model
     public function stats(): HasMany
     {
         return $this->hasMany(ClipStat::class);
+    }
+
+    /** Hook A/B variants: same cut as this clip, another hook text. */
+    public function variants(): HasMany
+    {
+        return $this->hasMany(self::class, 'variant_of_id')->orderBy('created_at')->orderBy('id');
+    }
+
+    public function variantOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'variant_of_id');
+    }
+
+    public function hookTest(): HasOne
+    {
+        return $this->hasOne(HookTest::class);
     }
 
     public function durationSeconds(): float
