@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -54,6 +55,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     });
 
     // TikTok OAuth (redirect URI registered on the TikTok app → /tiktok/callback)
+    Route::get('/settings/api', [ApiTokenController::class, 'page'])->middleware('cache.headers:no_store;private')->name('api.tokens');
     Route::get('/settings/brand', [BrandKitController::class, 'edit'])->name('brand.edit');
     Route::put('/settings/brand', [BrandKitController::class, 'update'])->name('brand.update');
     Route::get('/settings/brand/logo', [BrandKitController::class, 'logo'])->name('brand.logo');

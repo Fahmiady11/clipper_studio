@@ -147,7 +147,7 @@ class RenderController extends Controller
             // Music was requested but the library had nothing to pick from
             'music_missing' => $clip->status === 'done' && $clip->clipProject->music_enabled && ! $clip->music_track,
             'download_url' => $clip->status === 'done'
-                ? url("/api/clips/{$clip->id}/download")
+                ? url((request()->is('api/v1/*') ? '/api/v1' : '/api')."/clips/{$clip->id}/download")
                 : null,
         ]);
     }

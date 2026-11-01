@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\MetaController;
@@ -14,6 +15,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth', 'approved'])->group(function () {
     // Each of these starts yt-dlp / AI work: cap how often a user can fire them
     Route::get('/meta', [MetaController::class, 'show'])->middleware('throttle:20,1');
+
+    Route::get('/tokens', [ApiTokenController::class, 'index']);
+    Route::post('/tokens', [ApiTokenController::class, 'store'])->middleware('throttle:10,1');
+    Route::delete('/tokens/{tokenId}', [ApiTokenController::class, 'destroy']);
 
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::post('/projects', [ProjectController::class, 'store'])->middleware('throttle:10,1');

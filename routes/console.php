@@ -1,7 +1,9 @@
 <?php
 
 use App\Jobs\DiscoverVideosJob;
+use App\Models\ApiToken;
 use App\Models\InviteCode;
+use App\Models\User;
 use App\Models\VideoSource;
 use App\Services\JobWatchdog;
 use App\Services\LoadMonitor;
@@ -59,3 +61,15 @@ Artisan::command('clipper:invite {--uses=1 : How many people can sign up with it
     $this->info($invite->code);
     $this->line(url('/register').'?invite='.$invite->code);
 })->purpose('Create a closed-beta invite code');
+
+Artisan::command('clipper:token {email : Account that owns the token} {name=agent : Label, e.g. the agent using it}', function (string $email, string $name) {
+    $user = User::where('email', $email)->first();
+    if (! $user) {
+        $this->error("Tidak ada akun dengan email {$email}.");
+
+        return self::FAILURE;
+    }
+    [, $plain] = ApiToken::issue($user, $name);
+    $this->info($plain);
+    $this->line('Simpan sekarang, token tidak bisa ditampilkan lagi.');
+})->purpose('Create an API token for the REST API / MCP server');

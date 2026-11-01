@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsApproved;
 use App\Http\Middleware\SecurityHeaders;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -21,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            Route::group([], base_path('routes/agent.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Behind a tunnel/proxy (ngrok, cloudflared) the app sees plain http;
@@ -38,6 +43,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'approved' => EnsureUserIsApproved::class,
             'admin' => EnsureUserIsAdmin::class,
+        ]);
+
+        // Token API for agents (routes/agent.php): no session, throttled per user
+        $middleware->group('agent', [
+            AuthenticateApiToken::class,
+            // Prefixed: unprefixed it shares one counter with every per-route throttle:N,1
+            ThrottleRequests::class.':120,1,agent',
+            SubstituteBindings::class,
         ]);
 
         // Allow API routes to read the web session so Auth::user() works

@@ -397,6 +397,7 @@ composer lint    # rapikan gaya kode (Laravel Pint) — jalankan sebelum commit
 | Autopilot | `app/Services/DiscoveryService.php`, `app/Models/VideoSource.php` |
 | TikTok | `app/Services/TikTokService.php`, `app/Http/Controllers/TikTokController.php` |
 | Pengaturan tampilan klip | `app/Support/ClipSettings.php` |
+| REST API & MCP untuk agent | `routes/agent.php`, `app/Http/Controllers/McpController.php` — panduan di [`docs/agent-api.md`](docs/agent-api.md) |
 | Jadwal otomatis | `routes/console.php` — hapus klip kedaluwarsa, autopilot (tiap 10 menit), bersih-bersih file (03:17) |
 
 ### Alur proses
