@@ -885,8 +885,8 @@ function studio() {
         const data = await res.json();
         this.ytConfigured = data.configured;
         this.ytAccounts = data.accounts || [];
-        // The default channel from Settings → Akun terhubung
-        this.ytAccountId = data.default_id ?? this.ytAccounts[0]?.id ?? null;
+        // The default channel from Settings → Akun terhubung; none when it was disconnected and another must be picked
+        this.ytAccountId = data.default_id ?? null;
       } catch (e) { console.error('loadYoutubeAccounts', e); }
     },
     // Title from the clip topic, description from the AI caption; once per clip, edits are kept
@@ -958,8 +958,8 @@ function studio() {
         const data = await res.json();
         this.tiktokConfigured = data.configured;
         this.tiktokAccounts = data.accounts || [];
-        // The default account from Settings → Akun terhubung
-        this.tiktokAccountId = data.default_id ?? this.tiktokAccounts[0]?.id ?? null;
+        // The default account from Settings → Akun terhubung; none when it was disconnected and another must be picked
+        this.tiktokAccountId = data.default_id ?? null;
       } catch (e) { console.error('loadTiktokAccounts', e); }
     },
     get tiktokCanSubmit() {

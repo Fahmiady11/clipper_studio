@@ -47,6 +47,7 @@ class TikTokController extends Controller
 
         try {
             $this->tiktok->connect(Auth::id(), (string) $request->query('code'));
+            app(ConnectedAccounts::class)->default(Auth::id(), 'tiktok'); // the first account becomes the default
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('TikTok connect failed', ['error' => $e->getMessage()]);
 
@@ -65,6 +66,7 @@ class TikTokController extends Controller
                 ->get(['id', 'display_name', 'avatar_url']),
             // Chosen on Settings → Akun terhubung; Studio and the calendar start from it
             'default_id' => app(ConnectedAccounts::class)->default(Auth::id(), 'tiktok')?->id,
+            'needs_default' => app(ConnectedAccounts::class)->needsDefault(Auth::id(), 'tiktok'),
         ]);
     }
 

@@ -120,14 +120,17 @@ class ConnectedAccountsTest extends TestCase
         $this->assertSame($b->id, ScheduledPost::sole()->account_id);
     }
 
-    public function test_disconnecting_the_default_falls_back_and_threads_takes_its_login_along(): void
+    public function test_disconnecting_the_default_leaves_no_default_and_threads_takes_its_login_along(): void
     {
         $user = User::factory()->create();
         $one = $this->tiktok($user, 'Satu');
         $two = $this->tiktok($user, 'Dua');
         $this->actingAs($user)->putJson('/api/accounts/tiktok/default', ['account_id' => $two->id])->assertOk();
 
-        $this->actingAs($user)->deleteJson("/api/accounts/tiktok/{$two->id}")->assertOk()->assertJson(['default_id' => $one->id]);
+        // One left, but it is not silently promoted
+        $this->actingAs($user)->deleteJson("/api/accounts/tiktok/{$two->id}")->assertOk()->assertJson(['default_id' => null]);
+        $this->actingAs($user)->getJson('/api/tiktok/accounts')->assertOk()->assertJson(['default_id' => null, 'needs_default' => true])
+            ->assertJsonPath('accounts.0.id', $one->id);
         $this->assertModelMissing($two);
 
         $fb = MetaAccount::create(['user_id' => $user->id, 'provider' => 'facebook', 'provider_user_id' => 'f', 'access_token' => 't']);
@@ -186,6 +189,83 @@ class ConnectedAccountsTest extends TestCase
         $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertOk();
         Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $clip->id && $job->accountId === $two->id);
         $this->assertSame([$two->id, 'queued'], [$clip->fresh()->tiktok_account_id, $clip->fresh()->tiktok_status]);
+    }
+
+    public function test_disconnecting_the_default_stops_autopilot_until_another_is_picked(): void
+    {
+        $user = User::factory()->create();
+        $a = $this->channel($user, 'A');
+        $b = $this->channel($user, 'B');
+        PlatformSetting::create(['user_id' => $user->id, 'platform' => 'youtube', 'enabled' => true, 'max_per_day' => 3,
+            'slot_times' => ['15:00'], 'timezone' => 'Asia/Jakarta']);
+        $this->actingAs($user)->getJson('/api/accounts')->assertOk()->assertJsonPath('platforms.1.default_id', $a->id);
+
+        $this->actingAs($user)->deleteJson("/api/accounts/youtube/{$a->id}")->assertOk()->assertJson(['default_id' => null]);
+
+        // No silent switch to B: the page asks for a choice, everything reads "no default"
+        $this->actingAs($user)->getJson('/api/accounts')->assertOk()
+            ->assertJsonPath('platforms.1.default_id', null)
+            ->assertJsonPath('platforms.1.needs_default', true);
+        $this->actingAs($user)->getJson('/api/youtube/accounts')->assertOk()->assertJson(['default_id' => null, 'needs_default' => true]);
+        $this->actingAs($user)->getJson('/api/autopilot/youtube')->assertOk()->assertJson(['account_id' => null, 'needs_default' => true]);
+
+        // Approving skips YouTube with the reason on the card
+        $clip = $this->reviewClip($user);
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertOk()
+            ->assertJsonPath('youtube.error', 'Akun utama YouTube sudah diputus. Pilih akun utama di Akun terhubung.');
+        $this->assertSame(0, ScheduledPost::count());
+        $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
+            ->assertJsonPath('data.0.youtube.status', 'skipped')
+            ->assertJsonPath('data.0.youtube.error', 'Akun utama YouTube sudah diputus. Pilih akun utama di Akun terhubung.');
+
+        // The calendar can still post to B by choosing it
+        $this->actingAs($user)->postJson('/api/schedule', [
+            'clip_id' => $this->reviewClip($user)->id, 'platform' => 'youtube', 'account_id' => $b->id,
+            'scheduled_at' => now()->addHour()->toISOString(), 'title' => 'Judul',
+        ])->assertCreated();
+
+        // Picking B brings autopilot back
+        $this->actingAs($user)->putJson('/api/accounts/youtube/default', ['account_id' => $b->id])->assertOk();
+        $this->actingAs($user)->postJson('/api/autopilot/review/'.$this->reviewClip($user)->id.'/approve')->assertOk()
+            ->assertJsonPath('youtube.scheduled_at', fn ($at) => $at !== null);
+    }
+
+    public function test_tiktok_is_skipped_on_approve_when_its_default_is_gone(): void
+    {
+        $user = User::factory()->create();
+        $one = $this->tiktok($user, 'Satu');
+        $this->tiktok($user, 'Dua');
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', ['enabled' => true])->assertOk()->assertJsonPath('account_id', $one->id);
+        $one->delete(); // e.g. through the old DELETE /api/tiktok/accounts/{id}
+
+        $clip = $this->reviewClip($user);
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertOk()
+            ->assertJsonPath('tiktok.error', 'Akun utama TikTok sudah diputus. Pilih akun utama di Akun terhubung.');
+        Queue::assertNotPushed(UploadToTikTokJob::class);
+        $this->assertSame(['approved', 'skipped'], [$clip->fresh()->review_status, $clip->fresh()->tiktok_status]);
+        $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
+            ->assertJsonPath('data.0.tiktok_status', 'skipped')
+            ->assertJsonPath('data.0.tiktok_error', 'Akun utama TikTok sudah diputus. Pilih akun utama di Akun terhubung.');
+
+        // Nothing went out, so the approval can be undone, and the skip goes with it
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/unapprove")->assertOk();
+        $this->assertSame([null, null], [$clip->fresh()->tiktok_status, $clip->fresh()->tiktok_error]);
+    }
+
+    public function test_the_first_account_is_pinned_and_a_fresh_start_needs_no_choice(): void
+    {
+        $user = User::factory()->create();
+        $first = $this->tiktok($user, 'Satu');
+        $this->tiktok($user, 'Dua');
+        // Reading the default stores it: later disconnects can't move it silently
+        $this->actingAs($user)->getJson('/api/tiktok/accounts')->assertOk()->assertJsonPath('default_id', $first->id);
+        $this->assertSame($first->id, PlatformSetting::where('platform', 'tiktok')->value('account_id'));
+
+        // Everything disconnected: the next account connected is the default, no choice asked
+        TiktokAccount::query()->delete();
+        $this->actingAs($user)->getJson('/api/tiktok/accounts')->assertOk()->assertJson(['default_id' => null, 'needs_default' => false]);
+        $fresh = $this->tiktok($user, 'Baru');
+        $this->actingAs($user)->getJson('/api/tiktok/accounts')->assertOk()->assertJson(['default_id' => $fresh->id, 'needs_default' => false]);
     }
 
     public function test_old_entry_points_lead_to_the_settings_page(): void

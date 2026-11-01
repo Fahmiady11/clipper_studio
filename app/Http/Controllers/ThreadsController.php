@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ConnectedAccounts;
 use App\Services\ThreadsLogin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,6 +41,7 @@ class ThreadsController extends Controller
         try {
             // Meta appends #_ to the code; a browser keeps the fragment, a pasted URL may not
             $this->login->connect(Auth::id(), preg_replace('/#_$/', '', (string) $request->query('code')));
+            app(ConnectedAccounts::class)->default(Auth::id(), 'threads'); // the first profile becomes the default
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('Threads connect failed', ['error' => $e->getMessage()]);
 

@@ -218,8 +218,12 @@ class AutopilotController extends Controller
         $account = isset($data['account_id'])
             ? TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id'])
             : $this->tiktokOnApprove($connected);
+        // TikTok is on but its default account was disconnected: skip TikTok, never pick another account
+        $tiktokSkip = ! $account && $this->tiktokIsOn() && $connected->needsDefault(Auth::id(), 'tiktok')
+            ? ConnectedAccounts::needsDefaultMessage('tiktok')
+            : null;
 
-        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Belum ada tujuan. Nyalakan TikTok atau upload otomatis di Akun terhubung.');
+        abort_if(! $account && ! $tiktokSkip && ! $autopost->isOn(Auth::id()), 422, 'Belum ada tujuan. Nyalakan TikTok atau upload otomatis di Akun terhubung.');
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
         abort_if($clip->review_status === 'rejected', 422, 'Clip sudah ditolak dan filenya dihapus.');
         if ($account) {
@@ -227,12 +231,11 @@ class AutopilotController extends Controller
             abort_unless($account->hasScope('video.upload'), 422, TiktokAccount::scopeMessage('video.upload'));
         }
 
-        $clip->update(['review_status' => 'approved'] + ($account ? [
-            'tiktok_account_id' => $account->id,
-            'tiktok_publish_id' => null,
-            'tiktok_status' => 'queued',
-            'tiktok_error' => null,
-        ] : []));
+        $clip->update(['review_status' => 'approved'] + match (true) {
+            (bool) $account => ['tiktok_account_id' => $account->id, 'tiktok_publish_id' => null, 'tiktok_status' => 'queued', 'tiktok_error' => null],
+            (bool) $tiktokSkip => ['tiktok_account_id' => null, 'tiktok_publish_id' => null, 'tiktok_status' => 'skipped', 'tiktok_error' => $tiktokSkip],
+            default => [],
+        });
         if ($account) {
             UploadToTikTokJob::dispatch($clip->id, $account->id);
             $this->ensureQueueWorkerRunning();
@@ -241,7 +244,7 @@ class AutopilotController extends Controller
         // The approval stands either way; a platform that can't take the clip keeps the reason on its card
         $booked = $autopost->scheduleAll($clip);
 
-        $result = ['success' => true];
+        $result = ['success' => true, 'tiktok' => $tiktokSkip ? ['error' => $tiktokSkip] : null];
         foreach (array_keys($autopost->platforms()) as $platform) {
             $result[$platform] = $booked[$platform] ?? null; // {scheduled_at} or {error}; null when off
         }
@@ -254,7 +257,7 @@ class AutopilotController extends Controller
     {
         $clip = $this->ownedReviewClip($clipId);
         abort_unless($clip->review_status === 'approved', 422, 'Clip ini belum disetujui.');
-        abort_if($clip->tiktok_status !== null, 422, 'Clip sudah dikirim ke TikTok, approve tidak bisa dibatalkan.');
+        abort_if(! in_array($clip->tiktok_status, [null, 'skipped'], true), 422, 'Clip sudah dikirim ke TikTok, approve tidak bisa dibatalkan.');
         $sent = $clip->scheduledPosts()->whereIn('status', [ScheduledPost::STATUS_PUBLISHING, ScheduledPost::STATUS_QUEUED])->first();
         abort_if($clip->youtube_status !== null || $sent?->platform === 'youtube', 422, 'Clip sudah dikirim ke YouTube, approve tidak bisa dibatalkan.');
         $platform = $sent?->platform ?? $clip->publications()->where('status', '!=', ClipPublication::SKIPPED)->value('platform');
@@ -263,7 +266,7 @@ class AutopilotController extends Controller
         }
 
         $autopost->cancelWaiting($clip);
-        $clip->update(['review_status' => 'pending']);
+        $clip->update(['review_status' => 'pending'] + ($clip->tiktok_status === 'skipped' ? ['tiktok_status' => null, 'tiktok_error' => null] : []));
 
         return response()->json(['success' => true]);
     }
@@ -431,6 +434,7 @@ class AutopilotController extends Controller
             'enabled' => $settings->enabled,
             // The default account: posts go there
             'account_id' => $connected->default(Auth::id(), $platform)?->id,
+            'needs_default' => $connected->needsDefault(Auth::id(), $platform),
             'max_per_day' => $settings->max_per_day,
             'slot_times' => $settings->slot_times,
             'timezone' => $settings->timezone,
@@ -441,9 +445,12 @@ class AutopilotController extends Controller
     /** The default TikTok account when TikTok is switched on for approvals, else null. */
     private function tiktokOnApprove(ConnectedAccounts $connected): ?TiktokAccount
     {
-        $on = PlatformSetting::where('user_id', Auth::id())->where('platform', 'tiktok')->where('enabled', true)->exists();
+        return $this->tiktokIsOn() ? $connected->default(Auth::id(), 'tiktok') : null;
+    }
 
-        return $on ? $connected->default(Auth::id(), 'tiktok') : null;
+    private function tiktokIsOn(): bool
+    {
+        return PlatformSetting::where('user_id', Auth::id())->where('platform', 'tiktok')->where('enabled', true)->exists();
     }
 
     private function latestManualProject(): ?ClipProject

@@ -104,7 +104,8 @@
       </div>
 
       <div x-show="tiktokConfigured && tiktokAccounts.length > 0">
-        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">Ke <b style="color:var(--text)" x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b></div>
+        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)" x-show="tiktokAccountId">Ke <b style="color:var(--text)" x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b></div>
+        <div style="margin-bottom:12px;font-size:13px;color:var(--warn)" x-show="!tiktokAccountId">Akun utama TikTok sudah diputus. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Pilih akun utama</a> dulu.</div>
         <div class="seg" style="margin-bottom:12px">
           <button :class="{ on: tiktokMode === 'inbox' }"  @click="tiktokMode = 'inbox'"  type="button">Draft (inbox)</button>
           <button :class="{ on: tiktokMode === 'direct' }" @click="tiktokMode = 'direct'" type="button">Posting langsung</button>
@@ -199,7 +200,8 @@
       </div>
 
       <div x-show="ytConfigured && ytAccounts.length > 0">
-        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">Ke <b style="color:var(--text)" x-text="accountLabel(ytAccounts, ytAccountId)"></b></div>
+        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)" x-show="ytAccountId">Ke <b style="color:var(--text)" x-text="accountLabel(ytAccounts, ytAccountId)"></b></div>
+        <div style="margin-bottom:12px;font-size:13px;color:var(--warn)" x-show="!ytAccountId">Channel utama YouTube sudah diputus. <a href="/settings/accounts#youtube" style="color:var(--accent-ink)">Pilih channel utama</a> dulu.</div>
 
         <div class="fblock-title" style="margin-bottom:6px">Judul <span style="color:var(--text-dim);font-weight:400" x-text="`(${ytTitle.length}/100)`"></span></div>
         <input class="field" maxlength="100" x-model="ytTitle">
@@ -295,7 +297,8 @@
               <p class="ht-note">Hubungkan akun TikTok dulu untuk memposting dan membaca views-nya. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Buka Akun terhubung</a>.</p>
             </div>
             <div x-show="tiktokAccounts.length">
-              <p class="ht-note" style="margin:0 0 12px">Semua versi diposting ke <b x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b>, akun TikTok utama. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Ganti</a></p>
+              <p class="ht-note" style="margin:0 0 12px" x-show="tiktokAccountId">Semua versi diposting ke <b x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b>, akun TikTok utama. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Ganti</a></p>
+              <p class="ht-note" style="margin:0 0 12px;color:var(--warn)" x-show="!tiktokAccountId">Akun utama TikTok sudah diputus. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Pilih akun utama</a> dulu.</p>
               <div class="fblock-title" style="margin-bottom:6px">Jarak antar posting</div>
               <div class="seg" role="group" aria-label="Jarak antar posting" style="margin-bottom:10px">
                 <template x-for="h in [12, 24, 48]" :key="h">

@@ -32,6 +32,7 @@ class Autopost
         private FacebookAutopost $facebook,
         private InstagramAutopost $instagram,
         private ThreadsAutopost $threads,
+        private ConnectedAccounts $connected,
     ) {}
 
     /** @return array<string, AutopostPlatform> */
@@ -86,7 +87,11 @@ class Autopost
     public function schedule(GeneratedClip $clip, PlatformSetting $settings): ScheduledPost
     {
         $platform = $this->platform($settings->platform);
-        $account = $platform->account($settings) ?? throw new RuntimeException($platform->missingAccount());
+        $account = $platform->account($settings) ?? throw new RuntimeException(
+            $this->connected->needsDefault($settings->user_id, $settings->platform)
+                ? ConnectedAccounts::needsDefaultMessage($settings->platform)
+                : $platform->missingAccount()
+        );
 
         // Approving twice keeps the slot it already has
         $existing = $clip->scheduledPosts()->where('platform', $settings->platform)

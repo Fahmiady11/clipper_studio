@@ -76,6 +76,9 @@ class MetaAccountController extends Controller
         abort_unless($account->provider === 'facebook', 404);
         try {
             $count = $this->login->savePages($account, array_values(array_unique($data['page_ids'])), array_values(array_unique($data['instagram_ids'] ?? [])));
+            // The first Page / Instagram account becomes the default
+            app(ConnectedAccounts::class)->default(Auth::id(), 'facebook');
+            app(ConnectedAccounts::class)->default(Auth::id(), 'instagram');
         } catch (Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -100,6 +103,7 @@ class MetaAccountController extends Controller
             'blocked' => $platform === 'facebook' ? null : $this->media->problem(),
             'accounts' => MetaTarget::ownedBy(Auth::id(), $platform)->orderBy('name')->get(['id', 'name', 'username', 'picture_url']),
             'default_id' => app(ConnectedAccounts::class)->default(Auth::id(), $platform)?->id,
+            'needs_default' => app(ConnectedAccounts::class)->needsDefault(Auth::id(), $platform),
         ]);
     }
 

@@ -190,6 +190,7 @@
                   <option :value="c.id" x-text="clipOption(c)" :selected="c.id === form.clipId"></option>
                 </template>
               </select>
+              <div class="cal-hint warn" style="margin-top:8px" x-show="$data[form.platform]?.needsDefault">Akun utama platform ini sudah diputus. Jadwal ini memakai akun yang dipilih di atas; <a href="/settings/accounts" style="color:var(--accent-ink)">pilih akun utama</a> untuk autopilot.</div>
             </div>
 
             <div>
@@ -206,7 +207,7 @@
               </div>
             </div>
 
-            <div x-show="form.platform && currentAccounts.length > 1">
+            <div x-show="form.platform && (currentAccounts.length > 1 || $data[form.platform]?.needsDefault)">
               <label class="cal-label" for="cal-account" x-text="(({ youtube: 'Channel', facebook: 'Page', threads: 'Profil' })[form.platform] || 'Akun') + ' untuk jadwal ini'"></label>
               <select id="cal-account" class="select" x-model.number="form.accountId" style="min-height:44px">
                 <template x-for="a in currentAccounts" :key="a.id">
@@ -485,9 +486,9 @@ function scheduleCalendar() {
       const get = async url => { try { const r = await fetch(url, { headers: { 'Accept': 'application/json' } }); return r.ok ? await r.json() : null; } catch { return null; } };
       const meta = ['facebook', 'instagram', 'threads'];
       const [tt, yt, ...rest] = await Promise.all([get('/api/tiktok/accounts'), get('/api/youtube/accounts'), ...meta.map(p => get('/api/meta/targets/' + p))]);
-      if (tt) this.tiktok = { configured: tt.configured, accounts: tt.accounts || [], defaultId: tt.default_id };
-      if (yt) this.youtube = { configured: yt.configured, accounts: yt.accounts || [], defaultId: yt.default_id };
-      meta.forEach((p, i) => { if (rest[i]) this[p] = { configured: rest[i].configured, accounts: rest[i].accounts || [], blocked: rest[i].blocked, defaultId: rest[i].default_id }; });
+      if (tt) this.tiktok = { configured: tt.configured, accounts: tt.accounts || [], defaultId: tt.default_id, needsDefault: tt.needs_default };
+      if (yt) this.youtube = { configured: yt.configured, accounts: yt.accounts || [], defaultId: yt.default_id, needsDefault: yt.needs_default };
+      meta.forEach((p, i) => { if (rest[i]) this[p] = { configured: rest[i].configured, accounts: rest[i].accounts || [], blocked: rest[i].blocked, defaultId: rest[i].default_id, needsDefault: rest[i].needs_default }; });
     },
 
     // ── status text (always words, never color alone) ──────────────────────

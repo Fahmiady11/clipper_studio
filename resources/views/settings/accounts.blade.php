@@ -86,7 +86,7 @@
     <template x-for="p in platforms" :key="p.id">
       <li><a :href="'#' + p.id">
         <span x-text="p.name"></span>
-        <small :class="{ bad: p.accounts.some(a => a.reconnect) }" x-text="jumpLabel(p)"></small>
+        <small :class="{ bad: p.needs_default || p.accounts.some(a => a.reconnect) }" x-text="jumpLabel(p)"></small>
       </a></li>
     </template>
   </ul>
@@ -117,6 +117,9 @@
         <template x-if="p.configured && !p.accounts.length">
           <p class="ac-empty" x-text="INFO[p.id].empty"></p>
         </template>
+        <p class="ac-note bad" style="margin:0 0 12px" x-show="p.needs_default" role="alert">
+          <b>Pilih akun utama.</b> Akun utama sebelumnya sudah diputus, jadi autopilot tidak mengirim ke <span x-text="p.name"></span> sampai kamu memilih akun di bawah.
+        </p>
 
         <ul class="ac-list" x-show="p.accounts.length">
           <template x-for="a in p.accounts" :key="a.id">
@@ -131,7 +134,7 @@
                 </div>
               </div>
               <div class="ac-acts">
-                <button type="button" class="btn btn-secondary btn-sm" x-show="p.accounts.length > 1 && a.id !== p.default_id" @click="setDefault(p, a)" :aria-label="'Jadikan ' + (a.name || 'akun ini') + ' akun utama ' + p.name">Jadikan utama</button>
+                <button type="button" class="btn btn-secondary btn-sm" x-show="(p.accounts.length > 1 || p.needs_default) && a.id !== p.default_id" @click="setDefault(p, a)" :aria-label="'Jadikan ' + (a.name || 'akun ini') + ' akun utama ' + p.name">Jadikan utama</button>
                 <template x-if="confirming !== p.id + a.id">
                   <button type="button" class="btn btn-ghost btn-sm" @click="confirming = p.id + a.id" :aria-label="'Putuskan ' + (a.name || 'akun') + ' dari ' + p.name">Putuskan</button>
                 </template>
@@ -333,6 +336,7 @@ function connectedAccounts() {
     initials(name) { return String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(); },
     jumpLabel(p) {
       if (!p.configured) return 'belum diatur';
+      if (p.needs_default) return 'pilih akun utama';
       if (p.accounts.some(a => a.reconnect)) return 'perlu dicek';
       return p.accounts.length ? p.accounts.length + ' akun' : 'belum ada';
     },

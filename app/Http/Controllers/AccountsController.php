@@ -41,6 +41,8 @@ class AccountsController extends Controller
                     'configured' => $this->connected->isConfigured($platform),
                     'connect_url' => ConnectedAccounts::CONNECT_URLS[$platform],
                     'default_id' => $this->connected->default($userId, $platform)?->id,
+                    // The default was disconnected and others remain: autopilot skips this platform until one is picked
+                    'needs_default' => $this->connected->needsDefault($userId, $platform),
                     'accounts' => $accounts->map(fn ($a) => $this->connected->present($platform, $a))->values(),
                     'autopost' => [
                         'enabled' => (bool) $setting->enabled,

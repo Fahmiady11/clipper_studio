@@ -411,9 +411,10 @@
                       :disabled="c.status !== 'done' || c.busy || !anyDestination()" x-text="approveLabel()"></button>
               <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
             </div>
-            <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': c.tiktok_status === 'failed' }">
+            <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': ['failed', 'skipped'].includes(c.tiktok_status) }">
               <span x-text="reviewLabel(c)"></span>
-              <small x-show="c.tiktok_status === 'failed' && c.tiktok_error" x-text="c.tiktok_error"></small>
+              <small x-show="['failed', 'skipped'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
+              <a class="ap-link" x-show="c.tiktok_status === 'skipped'" href="/settings/accounts#tiktok">Pilih akun utama TikTok</a>
               <template x-for="pf in AUTOPOST" :key="pf.id">
                 <div class="ap-ytline" :class="{ 'is-fail': autopostFailed(c, pf.id) }" x-show="c.review_status === 'approved' && c[pf.id]">
                   <span><span x-text="pf.name + ': '"></span><b x-text="autopostLabel(c, pf.id)"></b></span>
@@ -937,6 +938,7 @@ function autopilot() {
           const account = p.accounts.find(a => a.id === p.default_id);
           const on = p.autopost.enabled && !!account;
           let text = !p.configured ? 'belum diatur di server'
+            : p.needs_default ? 'akun utama diputus, pilih akun utama' + (p.autopost.enabled ? ' (dilewati sampai dipilih)' : '')
             : !account ? 'belum terhubung'
             : !p.autopost.enabled ? 'nonaktif'
             : p.id === 'tiktok' ? 'langsung ke inbox ' + account.name
@@ -1009,7 +1011,7 @@ function autopilot() {
     },
     // Nothing went out yet: TikTok untouched and every calendar post still waiting
     canUnapprove(c) {
-      return c.review_status === 'approved' && !c.tiktok_status
+      return c.review_status === 'approved' && (!c.tiktok_status || c.tiktok_status === 'skipped')
         && this.AUTOPOST.every(p => !c[p.id] || ['scheduled', 'failed', 'skipped'].includes(c[p.id].status));
     },
 
@@ -1089,6 +1091,7 @@ function autopilot() {
         inbox: '✓ Terkirim ke inbox TikTok',
         published: '✓ Sudah diposting',
         failed: 'Upload gagal',
+        skipped: 'Disetujui · tidak dikirim ke TikTok',
       }[c.tiktok_status] || 'Disetujui';
     },
     formatNumber(value) {

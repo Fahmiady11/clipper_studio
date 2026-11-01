@@ -17,7 +17,9 @@ use RuntimeException;
  * Every account a user publishes to, whatever the platform: what Settings →
  * Akun terhubung lists, and which one is the default that Studio, the
  * calendar and autopilot use. The default is the platform's PlatformSetting
- * account_id, or the oldest connected account when that one is gone.
+ * account_id. The first account connected becomes it; once that account is
+ * disconnected while others remain, there is no default until the user picks
+ * one ("Pilih akun utama"), so nothing moves to another account unasked.
  */
 class ConnectedAccounts
 {
@@ -78,12 +80,42 @@ class ConnectedAccounts
         return $this->query($userId, $platform)->findOrFail($accountId);
     }
 
+    /** Null when nothing is connected, or when the default was disconnected and the user has to pick one. */
     public function default(int $userId, string $platform): ?Model
     {
         $accounts = $this->accounts($userId, $platform);
-        $chosen = PlatformSetting::where('user_id', $userId)->where('platform', $platform)->value('account_id');
+        $settings = PlatformSetting::where('user_id', $userId)->where('platform', $platform)->first();
+        $chosen = $settings?->account_id;
 
-        return $accounts->firstWhere('id', $chosen) ?? $accounts->first();
+        if ($chosen) {
+            if ($found = $accounts->firstWhere('id', $chosen)) {
+                return $found;
+            }
+            // The default was disconnected. With nothing left the next account connected takes over
+            if ($accounts->isEmpty()) {
+                $settings->update(['account_id' => null]);
+            }
+
+            return null;
+        }
+        if ($accounts->isEmpty()) {
+            return null;
+        }
+        // Nothing chosen yet: pin the first account, so disconnecting it later never moves posts silently
+        $this->setDefault($userId, $platform, $accounts->first()->id);
+
+        return $accounts->first();
+    }
+
+    /** The default was disconnected while other accounts remain: the user must pick one. */
+    public function needsDefault(int $userId, string $platform): bool
+    {
+        return $this->default($userId, $platform) === null && $this->query($userId, $platform)->exists();
+    }
+
+    public static function needsDefaultMessage(string $platform): string
+    {
+        return 'Akun utama '.self::NAMES[$platform].' sudah diputus. Pilih akun utama di Akun terhubung.';
     }
 
     public function setDefault(int $userId, string $platform, int $accountId): void

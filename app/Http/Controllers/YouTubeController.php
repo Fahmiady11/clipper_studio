@@ -51,6 +51,7 @@ class YouTubeController extends Controller
 
         try {
             $this->youtube->connect(Auth::id(), (string) $request->query('code'));
+            app(ConnectedAccounts::class)->default(Auth::id(), 'youtube'); // the first channel becomes the default
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('YouTube connect failed', ['error' => $e->getMessage()]);
 
@@ -69,6 +70,7 @@ class YouTubeController extends Controller
                 ->get(['id', 'title', 'thumbnail_url']),
             // Chosen on Settings → Akun terhubung; Studio and the calendar start from it
             'default_id' => app(ConnectedAccounts::class)->default(Auth::id(), 'youtube')?->id,
+            'needs_default' => app(ConnectedAccounts::class)->needsDefault(Auth::id(), 'youtube'),
         ]);
     }
 
