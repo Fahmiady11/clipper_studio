@@ -38,6 +38,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'approved_at' => 'datetime',
+            'publish_platforms' => 'array',
         ];
     }
 

@@ -2,29 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\CannotPost;
 use App\Models\GeneratedClip;
 use App\Models\MetaTarget;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\YoutubeAccount;
-use App\Services\FFmpegService;
-use App\Services\InstagramReels;
-use App\Services\MetaPublishing;
-use App\Services\ThreadsPosts;
+use App\Services\PostOptions;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 class ScheduleController extends Controller
 {
-    // The scheduler ticks once a minute, so anything sooner than this would be late by design
-    private const MIN_LEAD_MINUTES = 2;
-
-    private const MAX_LEAD_DAYS = 365;
+    public function __construct(private PostOptions $posts) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -83,28 +76,19 @@ class ScheduleController extends Controller
             'platform' => ['required', 'in:'.implode(',', ScheduledPost::PLATFORMS)],
             'account_id' => ['required', 'integer'],
             'scheduled_at' => ['required', 'date'],
-            'title' => ['nullable', 'string', 'max:2200'],
-            'description' => ['nullable', 'string', 'max:5000'],
-            'privacy' => ['nullable', 'in:public,unlisted,private'],
-            'tags' => ['sometimes', 'array', 'max:30'],
-            'tags.*' => ['string', 'max:60'],
-            'mode' => ['nullable', 'in:inbox,direct'],
-            'allow_comment' => ['sometimes', 'boolean'],
-            'allow_duet' => ['sometimes', 'boolean'],
-            'allow_stitch' => ['sometimes', 'boolean'],
-        ]);
-        $when = $this->validTime($data['scheduled_at']);
+        ] + PostOptions::rules());
+        $when = $this->posts->scheduledTime($data['scheduled_at']);
 
         $clip = GeneratedClip::with('clipProject')->findOrFail($data['clip_id']);
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
 
-        $options = match ($data['platform']) {
-            'youtube' => $this->youtubeOptions($data, $clip),
-            'facebook', 'instagram', 'threads' => $this->metaOptions($data['platform'], $data, $clip),
-            default => $this->tiktokOptions($data),
-        };
-        $accountId = $this->ownedAccountId($data['platform'], (int) $data['account_id'], $options['mode'] ?? null);
+        try {
+            $options = $this->posts->build($data['platform'], $data, $clip);
+            $accountId = $this->posts->ownedAccountId(Auth::id(), $data['platform'], (int) $data['account_id'], $options['mode'] ?? null);
+        } catch (CannotPost $e) {
+            abort(422, $e->getMessage());
+        }
 
         $taken = ScheduledPost::where('generated_clip_id', $clip->id)
             ->where('platform', $data['platform'])
@@ -134,7 +118,7 @@ class ScheduleController extends Controller
         $post = $this->ownedPost($postId);
         abort_unless(in_array($post->status, [ScheduledPost::STATUS_SCHEDULED, ScheduledPost::STATUS_FAILED], true), 422, 'Jadwal ini sudah diproses dan tidak bisa diubah.');
 
-        $post->update(['scheduled_at' => $this->validTime($data['scheduled_at']), 'status' => ScheduledPost::STATUS_SCHEDULED, 'error' => null]);
+        $post->update(['scheduled_at' => $this->posts->scheduledTime($data['scheduled_at']), 'status' => ScheduledPost::STATUS_SCHEDULED, 'error' => null]);
 
         return response()->json(['post' => $this->present($post->load('clip.clipProject', 'clip.publications'), $this->accountLabels($post->platform))]);
     }
@@ -151,87 +135,6 @@ class ScheduleController extends Controller
     private function ownedPost(int $postId): ScheduledPost
     {
         return ScheduledPost::where('user_id', Auth::id())->findOrFail($postId);
-    }
-
-    private function validTime(string $value): CarbonImmutable
-    {
-        $when = CarbonImmutable::parse($value)->utc();
-        if ($when->lt(now()->addMinutes(self::MIN_LEAD_MINUTES))) {
-            throw ValidationException::withMessages(['scheduled_at' => 'Waktu publish minimal '.self::MIN_LEAD_MINUTES.' menit dari sekarang.']);
-        }
-        if ($when->gt(now()->addDays(self::MAX_LEAD_DAYS))) {
-            throw ValidationException::withMessages(['scheduled_at' => 'Jadwal maksimal '.self::MAX_LEAD_DAYS.' hari ke depan.']);
-        }
-
-        return $when;
-    }
-
-    private function youtubeOptions(array $data, GeneratedClip $clip): array
-    {
-        $title = trim((string) ($data['title'] ?? ''));
-        if ($title === '' || mb_strlen($title) > 100 || preg_match('/[<>]/', $title)) {
-            throw ValidationException::withMessages(['title' => 'Judul YouTube wajib diisi, maksimal 100 karakter, tanpa < atau >.']);
-        }
-
-        // Rendered length: jump cuts make it shorter than end - start
-        try {
-            $seconds = app(FFmpegService::class)->probeDuration(Storage::path($clip->output_path));
-        } catch (Throwable) {
-            $seconds = $clip->durationSeconds();
-        }
-        abort_if($seconds > YouTubeController::MAX_SHORT_SECONDS + 0.5, 422, 'YouTube Shorts maksimal 3 menit, clip ini '.round($seconds).' detik. Pendekkan clip dulu.');
-
-        return [
-            'title' => $title,
-            'description' => (string) ($data['description'] ?? ''),
-            'privacy' => $data['privacy'] ?? 'private',
-            'tags' => $data['tags'] ?? [],
-        ];
-    }
-
-    /** The post text arrives as `description` for every Meta platform and is checked against its limits. */
-    private function metaOptions(string $platform, array $data, GeneratedClip $clip): array
-    {
-        $text = trim((string) ($data['description'] ?? ''));
-        $problem = match ($platform) {
-            'instagram' => InstagramReels::captionProblem($text),
-            'threads' => ThreadsPosts::textProblem($text),
-            default => null,
-        };
-        if ($problem) {
-            throw ValidationException::withMessages(['description' => $problem]);
-        }
-        $reason = app(MetaPublishing::class)->publisher($platform)->refusal($clip);
-        abort_if($reason !== null, 422, (string) $reason);
-
-        return [MetaPublishing::textOption($platform) => $text];
-    }
-
-    private function tiktokOptions(array $data): array
-    {
-        return [
-            'mode' => $data['mode'] ?? 'inbox',
-            'title' => (string) ($data['title'] ?? ''),
-            'allow_comment' => (bool) ($data['allow_comment'] ?? false),
-            'allow_duet' => (bool) ($data['allow_duet'] ?? false),
-            'allow_stitch' => (bool) ($data['allow_stitch'] ?? false),
-        ];
-    }
-
-    private function ownedAccountId(string $platform, int $accountId, ?string $mode): int
-    {
-        if ($platform === 'youtube') {
-            return YoutubeAccount::where('user_id', Auth::id())->findOrFail($accountId)->id;
-        }
-        if (in_array($platform, MetaPublishing::PLATFORMS, true)) {
-            return MetaTarget::ownedBy(Auth::id(), $platform)->findOrFail($accountId)->id;
-        }
-
-        $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($accountId);
-        $scope = $mode === 'direct' ? 'video.publish' : 'video.upload';
-        abort_unless($account->hasScope($scope), 422, TiktokAccount::scopeMessage($scope));
-
-        return $account->id;
     }
 
     private function accountLabels(string $platform)

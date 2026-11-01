@@ -1,10 +1,10 @@
-<div class="result2 fade-in" x-show="done">
+{{-- Result screen. Order follows what the user does next: check the video, read what it is,
+     settle the caption, publish, then optionally test hooks. Lime marks only the send button. --}}
+<div class="rs fade-in" x-show="done">
 
-  {{-- LEFT: phone preview sticky --}}
-  <div class="result2-aside">
-    <div class="preview-label"><span>Hasil render · 9:16</span><span>1080×1920</span></div>
-
-    <div class="phone-frame">
+  {{-- Preview: the rendered clip and what can be done to the file itself --}}
+  <aside class="rs-aside" aria-label="Pratinjau clip">
+    <div class="phone-frame rs-phone">
       <div class="phone-notch"></div>
       <div x-html="layoutBg(layout)"></div>
       <div style="position:absolute;top:52px;left:12px;z-index:5;display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);padding:4px 10px 4px 4px;border-radius:999px;font-size:9px;font-weight:600;color:#fff">
@@ -23,225 +23,184 @@
         <div :style="'width:'+pvProgress+'%;height:100%;background:#fff'"></div>
       </div>
     </div>
+    <div class="rs-spec" x-text="'1080×1920 · H.264 · ' + (selectedClipObj ? Math.round(selectedClipObj.end_seconds - selectedClipObj.start_seconds) : 0) + ' dtk · ' + currentLayout.title"></div>
 
-    <div class="dl-row" style="justify-content:center;margin-top:16px">
-      <a :href="downloadUrl || '#'" :download="downloadUrl ? 'clip.mp4' : null"
-         class="btn" :style="!downloadUrl ? 'opacity:.5;pointer-events:none' : ''">
+    <div class="rs-file-acts">
+      <a :href="downloadUrl || '#'" :download="downloadUrl ? 'clip.mp4' : null" class="btn btn-secondary"
+         :aria-disabled="!downloadUrl" :style="!downloadUrl ? 'opacity:.5;pointer-events:none' : ''">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
         Download MP4
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
       </a>
-      <button class="btn btn-secondary" @click="done = false; step = 7">Pilih clip lain</button>
-      <a class="btn btn-secondary" :href="'/calendar?clip=' + selectedClipObj?.id" x-show="selectedClipObj">Jadwalkan publish</a>
+      <button class="btn btn-ghost" type="button" x-show="hookEnabled && !hookTest" @click="openEditHook()">Edit hook &amp; render ulang</button>
     </div>
-    <div style="text-align:center;margin-top:10px" x-show="hookEnabled && !hookTest">
-      <button class="res-edit" type="button" @click="openEditHook()">✎ Edit teks hook &amp; render ulang</button>
-    </div>
-    <div style="margin-top:14px;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.05em"
-         x-text="'H.264 · AAC · ' + (selectedClipObj ? Math.round(selectedClipObj.end_seconds - selectedClipObj.start_seconds) : 0) + 's · ' + currentLayout.title.toUpperCase()"></div>
-  </div>
+  </aside>
 
-  {{-- RIGHT: caption & hashtag --}}
-  <div>
-    <div class="done-banner">
-      <div class="done-banner-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="rs-main">
+
+    {{-- What this clip is --}}
+    <header class="rs-head">
+      <div class="rs-eyebrow">Selesai dirender</div>
+      <h1 class="rs-title" x-text="selectedClipObj ? selectedClipObj.topic : ''"></h1>
+      <p class="rs-meta">
+        <span x-text="selectedClipObj ? 'Clip #' + selectedClipObj.ranking : ''"></span>
+        <span x-show="selectedClipObj?.viral_potential" x-text="'Potensi viral ' + (selectedClipObj?.viral_potential || '')"></span>
+        <span x-show="meta?.title" x-text="meta?.title"></span>
+      </p>
+      <div class="music-warn" x-show="musicMissing" style="margin-top:14px">
+        Musik latar aktif, tapi library musik kosong saat dirender, jadi clip ini <b>tanpa musik</b>.
+        <a href="/music">Upload lagu</a>, lalu render ulang lewat "Edit hook &amp; render ulang".
       </div>
-      <div class="done-banner-txt">
-        <h3>Clip berhasil dirender</h3>
-        <p x-text="selectedClipObj ? '“' + selectedClipObj.topic + '” · ranking #' + selectedClipObj.ranking + ' · potensi viral ' + selectedClipObj.viral_potential : ''"></p>
+    </header>
+
+    {{-- Caption: one text for every platform; the panel below says where a platform cuts it --}}
+    <section class="rs-card" aria-labelledby="rs-cap-title">
+      <div class="rs-card-head">
+        <h2 id="rs-cap-title">Caption &amp; hashtag</h2>
+        <button class="btn btn-ghost btn-sm" type="button" x-show="!loadingCaption && pub.caption"
+                @click="copyText('cap', pub.caption + '\n\n' + pubTags.join(' '))" x-text="copied === 'cap' ? 'Tersalin' : 'Salin semua'"></button>
       </div>
-      <span class="status-pill">DONE</span>
-    </div>
-
-    <div class="music-warn" x-show="musicMissing" style="margin:-16px 0 24px">
-      Musik latar aktif, tapi library musik kosong saat dirender — clip ini <b>tanpa musik</b>.
-      <a href="/music">Upload lagu</a>, lalu render ulang lewat "Edit teks hook &amp; render ulang".
-    </div>
-
-    {{-- Caption & Hashtag (AI-generated) --}}
-    <div class="res-sec">
-      <div class="res-sec-head">
-        <span class="res-sec-title">Caption & hashtag</span>
-        <button class="res-edit"
-          x-show="!loadingCaption && clipCaption"
-          @click="copyText('cap', clipCaption + '\n\n' + clipHashtags.join(' '))"
-          x-text="copied === 'cap' ? '✓ tersalin' : 'Copy semua'">
-        </button>
+      <p class="rs-muted" x-show="loadingCaption">Membuat caption dengan AI…</p>
+      <p class="rs-muted" x-show="!loadingCaption && !clipCaption && !pub.caption">
+        Caption belum tersedia. <button class="rs-link" type="button" @click="fetchCaption()">Coba buat lagi</button>, atau tulis sendiri di bawah.
+      </p>
+      <div class="rs-fields" x-show="!loadingCaption">
+        <label class="rs-field">
+          <span class="rs-label">Caption</span>
+          <textarea class="field" rows="4" maxlength="5000" x-model="pub.caption"></textarea>
+        </label>
+        <label class="rs-field">
+          <span class="rs-label">Hashtag <span class="rs-dim">pisahkan dengan spasi</span></span>
+          <input class="field" x-model="pub.hashtags" placeholder="#bisnis #umkm" style="font-family:var(--font-mono)">
+        </label>
       </div>
+    </section>
 
-      <div x-show="loadingCaption" style="display:flex;align-items:center;gap:10px;padding:20px 0;color:var(--text-dim);font-size:13px">
-        <div class="proc-status" style="margin:0">Membuat caption dengan AI…</div>
+    {{-- Publish: every ticked platform gets the clip on its default account, now or at a time --}}
+    <section class="rs-card rs-pub" aria-labelledby="rs-pub-title">
+      <div class="rs-card-head">
+        <h2 id="rs-pub-title">Publikasikan</h2>
+        <a class="rs-link" href="/settings/accounts">Akun terhubung</a>
       </div>
+      <p class="rs-muted" x-show="pub.loading && !pub.platforms.length">Memuat platform…</p>
+      <p class="rs-error" x-show="pub.loadError" role="alert">
+        <span x-text="pub.loadError"></span> <button class="rs-link" type="button" @click="loadPublishPanel()">Coba lagi</button>
+      </p>
 
-      <div x-show="!loadingCaption && clipCaption" class="caption-box" x-text="clipCaption"></div>
+      <ul class="rs-plats">
+        <template x-for="p in pub.platforms" :key="p.id">
+          <li class="rs-plat" :class="{ on: pubChecked(p.id), off: !!pubBlocked(p), err: !!pub.errors['platforms.' + p.id] }">
+            <label class="rs-plat-row">
+              <input type="checkbox" :checked="pubChecked(p.id)" :disabled="!!pubBlocked(p)" @change="pubToggle(p)">
+              <span class="rs-plat-name" x-text="PUB_NAMES[p.id]"></span>
+              <span class="rs-plat-acct" x-show="p.account && !pubBlocked(p)" x-text="p.account?.name"></span>
+            </label>
+            <a class="rs-link rs-plat-side" :href="p.settings_url" x-show="p.configured && (!p.refusal || !p.account)" x-text="p.account ? 'Ganti' : (p.needs_default ? 'Pilih akun' : 'Hubungkan')"></a>
+            <p class="rs-plat-why" x-show="pubBlocked(p)" x-text="pubBlocked(p)"></p>
 
-      <div x-show="!loadingCaption && clipHashtags.length > 0" class="hashtags" style="margin-top:12px">
-        <template x-for="h in clipHashtags" :key="h">
-          <span class="hashtag" @click="copyText(h, h)" x-text="h"></span>
-        </template>
-      </div>
+            {{-- Only what this platform needs beyond the shared caption --}}
+            <div class="rs-plat-more" x-show="pubChecked(p.id)">
+              <p class="rs-dim" x-show="pubAdjust(p.id)" x-text="pubAdjust(p.id)"></p>
 
-      <div x-show="!loadingCaption && !clipCaption" style="padding:16px 0;color:var(--text-dim);font-size:13px">
-        Caption belum tersedia.
-        <button style="background:none;border:0;color:var(--accent-ink);cursor:pointer;font-family:inherit;font-size:13px;padding:0;margin-left:6px"
-          @click="fetchCaption()">Coba lagi →</button>
-      </div>
-    </div>
-
-    {{-- Upload ke TikTok (draft / inbox) --}}
-    <div class="res-sec">
-      <div class="res-sec-head">
-        <span class="res-sec-title">Upload ke TikTok</span>
-        <a class="res-edit" href="/settings/accounts#tiktok" x-show="tiktokAccounts.length > 0">Ganti akun</a>
-      </div>
-
-      <div x-show="!tiktokConfigured" style="padding:8px 0;color:var(--text-dim);font-size:13px">
-        Isi <code>TIKTOK_CLIENT_KEY</code>, <code>TIKTOK_CLIENT_SECRET</code>, dan <code>TIKTOK_REDIRECT_URI</code> di <code>.env</code> untuk mengaktifkan upload.
-      </div>
-
-      <div x-show="tiktokConfigured && tiktokAccounts.length === 0" style="padding:8px 0;font-size:13px;color:var(--text-muted)">
-        Belum ada akun TikTok. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Hubungkan di Akun terhubung</a>.
-      </div>
-
-      <div x-show="tiktokConfigured && tiktokAccounts.length > 0">
-        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)" x-show="tiktokAccountId">Ke <b style="color:var(--text)" x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b></div>
-        <div style="margin-bottom:12px;font-size:13px;color:var(--warn)" x-show="!tiktokAccountId">Akun utama TikTok sudah diputus. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Pilih akun utama</a> dulu.</div>
-        <div class="seg" style="margin-bottom:12px">
-          <button :class="{ on: tiktokMode === 'inbox' }"  @click="tiktokMode = 'inbox'"  type="button">Draft (inbox)</button>
-          <button :class="{ on: tiktokMode === 'direct' }" @click="tiktokMode = 'direct'" type="button">Posting langsung</button>
-        </div>
-
-        {{-- Direct post form (TikTok requires creator name, privacy choice, interaction toggles, consent) --}}
-        <div x-show="tiktokMode === 'direct'" style="margin-bottom:14px">
-          <div x-show="tiktokCreatorLoading" style="font-size:13px;color:var(--text-dim)">Membaca info akun TikTok…</div>
-          <div x-show="tiktokCreatorError" style="font-size:13px;color:var(--danger)" x-text="tiktokCreatorError"></div>
-          <template x-if="tiktokCreator">
-            <div>
-              <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
-                Posting sebagai <b style="color:var(--text)" x-text="tiktokCreator.creator_nickname || tiktokCreator.creator_username"></b>
-              </div>
-              <div class="fblock-title" style="margin-bottom:6px">Caption</div>
-              <textarea class="field" maxlength="2200" x-model="tiktokTitle" style="min-height:90px"></textarea>
-
-              <div class="fblock-title" style="margin:12px 0 6px">Siapa yang bisa melihat</div>
-              <div class="seg" style="flex-wrap:wrap">
-                <template x-for="p in (tiktokCreator.privacy_level_options || [])" :key="p">
-                  <button :class="{ on: tiktokPrivacy === p }" @click="tiktokPrivacy = p" type="button"
-                          :disabled="p !== 'SELF_ONLY' || (p === 'SELF_ONLY' && tiktokBrandContent)"
-                          :style="p !== 'SELF_ONLY' || (p === 'SELF_ONLY' && tiktokBrandContent) ? 'opacity:.4;cursor:not-allowed' : ''"
-                          :title="p !== 'SELF_ONLY' ? 'App belum lolos audit TikTok — sementara hanya posting privat' : (p === 'SELF_ONLY' && tiktokBrandContent ? 'Branded content tidak bisa diposting privat' : '')"
-                          x-text="PRIVACY_LABELS[p] || p"></button>
-                </template>
-              </div>
-              <div style="margin-top:6px;font-size:12px;color:var(--warn)">App TikTok belum lolos audit — sementara hanya posting privat (Hanya saya) yang tersedia.</div>
-              <div x-show="tiktokTooLong" style="margin-top:8px;font-size:12px;color:var(--danger)"
-                   x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik, akun TikTok ini maksimal ${tiktokCreator.max_video_post_duration_sec} detik. Pendekkan clip dulu.`"></div>
-
-              <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:13px">
-                <label :style="tiktokCreator.comment_disabled ? 'opacity:.5' : ''"><input type="checkbox" x-model="tiktokAllowComment" :disabled="tiktokCreator.comment_disabled"> Izinkan komentar</label>
-                <label :style="tiktokCreator.duet_disabled ? 'opacity:.5' : ''"><input type="checkbox" x-model="tiktokAllowDuet" :disabled="tiktokCreator.duet_disabled"> Izinkan duet</label>
-                <label :style="tiktokCreator.stitch_disabled ? 'opacity:.5' : ''"><input type="checkbox" x-model="tiktokAllowStitch" :disabled="tiktokCreator.stitch_disabled"> Izinkan stitch</label>
-              </div>
-
-              {{-- Commercial content disclosure (required by TikTok's Content Sharing Guidelines) --}}
-              <div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:13px">
-                <label style="display:flex;gap:8px;align-items:flex-start">
-                  <input type="checkbox" x-model="tiktokDisclose" @change="if (!tiktokDisclose) { tiktokBrandOrganic = false; tiktokBrandContent = false }">
-                  <span><b>Ungkapkan konten video</b><br><span style="color:var(--text-dim);font-size:12px">Aktifkan kalau video ini mempromosikan brand, produk, atau jasa.</span></span>
-                </label>
-                <div x-show="tiktokDisclose" style="margin:10px 0 0 24px;display:flex;flex-direction:column;gap:8px">
-                  <label style="display:flex;gap:8px;align-items:flex-start">
-                    <input type="checkbox" x-model="tiktokBrandOrganic">
-                    <span>Brand kamu sendiri<br><span style="color:var(--text-dim);font-size:12px">Kamu mempromosikan diri sendiri atau bisnismu sendiri.</span></span>
+              <template x-if="p.id === 'youtube'">
+                <div class="rs-fields">
+                  <label class="rs-field">
+                    <span class="rs-label">Judul <span class="rs-dim" x-text="pub.ytTitle.length + '/100'"></span></span>
+                    <input class="field" maxlength="100" x-model="pub.ytTitle">
                   </label>
-                  <label style="display:flex;gap:8px;align-items:flex-start">
-                    <input type="checkbox" x-model="tiktokBrandContent" @change="if (tiktokBrandContent && tiktokPrivacy === 'SELF_ONLY') tiktokPrivacy = ''">
-                    <span>Branded content<br><span style="color:var(--text-dim);font-size:12px">Kamu mempromosikan brand lain atau pihak ketiga.</span></span>
-                  </label>
-                  <div x-show="tiktokDisclose && !tiktokBrandOrganic && !tiktokBrandContent" style="font-size:12px;color:var(--warn)">Pilih minimal satu jenis promosi.</div>
-                  <div x-show="tiktokBrandLabel" style="font-size:12px;color:var(--text-muted)" x-text="`Video kamu akan diberi label '${tiktokBrandLabel}'.`"></div>
+                  <p class="rs-error" x-show="/[<>]/.test(pub.ytTitle)">Judul YouTube tidak boleh berisi &lt; atau &gt;.</p>
+                  <div>
+                    <span class="rs-label" id="rs-yt-priv">Siapa yang bisa melihat</span>
+                    <div class="seg" role="group" aria-labelledby="rs-yt-priv">
+                      <button type="button" :class="{ on: pub.ytPrivacy === 'public' }" @click="pub.ytPrivacy = 'public'">Publik</button>
+                      <button type="button" :class="{ on: pub.ytPrivacy === 'unlisted' }" @click="pub.ytPrivacy = 'unlisted'">Tidak publik</button>
+                      <button type="button" :class="{ on: pub.ytPrivacy === 'private' }" @click="pub.ytPrivacy = 'private'">Pribadi</button>
+                    </div>
+                  </div>
+                  <p class="rs-dim">Selama app belum lolos audit YouTube API, video tersimpan sebagai Pribadi; ubah ke Publik di YouTube Studio.</p>
                 </div>
-              </div>
+              </template>
 
-              <div style="margin-top:10px;font-size:12px;color:var(--text-dim)">
-                Dengan memposting, kamu menyetujui
-                <template x-if="tiktokBrandContent"><span><a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener" style="color:var(--text-muted)">Branded Content Policy</a> dan </span></template>
-                <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener" style="color:var(--text-muted)">Music Usage Confirmation</a> TikTok.
-                Video mungkin butuh beberapa menit sampai tampil di profil.
-              </div>
+              <template x-if="p.id === 'tiktok'">
+                <div class="rs-fields">
+                  <div class="seg" role="group" aria-label="Cara kirim ke TikTok">
+                    <button type="button" :class="{ on: tiktokMode === 'inbox' }" @click="tiktokMode = 'inbox'">Draft (inbox)</button>
+                    <button type="button" :class="{ on: tiktokMode === 'direct' }" @click="tiktokMode = 'direct'">Posting langsung</button>
+                  </div>
+                  {{-- TikTok's rules for a direct post: creator name, privacy, interaction toggles, disclosure, consent --}}
+                  <div x-show="tiktokMode === 'direct'" class="rs-fields">
+                    <p class="rs-dim" x-show="tiktokCreatorLoading">Membaca info akun TikTok…</p>
+                    <p class="rs-error" x-show="tiktokCreatorError" x-text="tiktokCreatorError"></p>
+                    <template x-if="tiktokCreator">
+                      <div class="rs-fields">
+                        <p class="rs-muted">Posting sebagai <b x-text="tiktokCreator.creator_nickname || tiktokCreator.creator_username"></b>, hanya terlihat oleh kamu (Hanya saya) sampai app TikTok lolos audit.</p>
+                        <p class="rs-error" x-show="tiktokTooLong" x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik, akun TikTok ini maksimal ${tiktokCreator.max_video_post_duration_sec} detik.`"></p>
+                        <div class="rs-checks">
+                          <label :class="{ off: tiktokCreator.comment_disabled }"><input type="checkbox" x-model="tiktokAllowComment" :disabled="tiktokCreator.comment_disabled"> Izinkan komentar</label>
+                          <label :class="{ off: tiktokCreator.duet_disabled }"><input type="checkbox" x-model="tiktokAllowDuet" :disabled="tiktokCreator.duet_disabled"> Izinkan duet</label>
+                          <label :class="{ off: tiktokCreator.stitch_disabled }"><input type="checkbox" x-model="tiktokAllowStitch" :disabled="tiktokCreator.stitch_disabled"> Izinkan stitch</label>
+                        </div>
+                        <div class="rs-box">
+                          <label class="rs-check-row">
+                            <input type="checkbox" x-model="tiktokDisclose" @change="if (!tiktokDisclose) { tiktokBrandOrganic = false; tiktokBrandContent = false }">
+                            <span><b>Ungkapkan konten video</b><span class="rs-dim">Aktifkan kalau video ini mempromosikan brand, produk, atau jasa.</span></span>
+                          </label>
+                          <div x-show="tiktokDisclose" class="rs-fields" style="margin:10px 0 0 30px">
+                            <label class="rs-check-row"><input type="checkbox" x-model="tiktokBrandOrganic"><span>Brand kamu sendiri<span class="rs-dim">Kamu mempromosikan diri sendiri atau bisnismu.</span></span></label>
+                            <label class="rs-check-row"><input type="checkbox" x-model="tiktokBrandContent"><span>Branded content<span class="rs-dim">Kamu mempromosikan brand lain atau pihak ketiga.</span></span></label>
+                            <p class="rs-warn" x-show="!tiktokBrandOrganic && !tiktokBrandContent">Pilih minimal satu jenis promosi.</p>
+                            <p class="rs-dim" x-show="tiktokBrandLabel" x-text="`Video kamu akan diberi label '${tiktokBrandLabel}'. Konten branded belum bisa diposting selama app TikTok menunggu audit.`"></p>
+                          </div>
+                        </div>
+                        <p class="rs-dim">
+                          Dengan memposting, kamu menyetujui
+                          <template x-if="tiktokBrandContent"><span><a class="rs-link" href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener">Branded Content Policy</a> dan </span></template>
+                          <a class="rs-link" href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> TikTok.
+                        </p>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
             </div>
-          </template>
+
+            <p class="rs-error" x-show="pub.errors['platforms.' + p.id]" x-text="(pub.errors['platforms.' + p.id] || [])[0]" role="alert"></p>
+
+            {{-- After sending: where this platform is --}}
+            <div class="rs-plat-state" x-show="p.state" :class="pubStateTone(p.state)">
+              <span class="rs-plat-state-label" x-text="pubStateLabel(p)"></span>
+              <span class="rs-dim" x-show="p.state?.error" x-text="p.state?.error"></span>
+              <span class="rs-dim" x-show="p.state?.note" x-text="p.state?.note"></span>
+              <span class="rs-plat-links">
+                <a class="rs-link" x-show="p.state?.url" :href="p.state?.url" target="_blank" rel="noopener" x-text="'Buka di ' + p.name"></a>
+                <a class="rs-link" x-show="p.state?.reconnect_url" :href="p.state?.reconnect_url">Hubungkan ulang</a>
+                <a class="rs-link" x-show="['scheduled', 'failed'].includes(p.state?.status)" href="/calendar">Atur di kalender</a>
+              </span>
+            </div>
+          </li>
+        </template>
+      </ul>
+
+      <div class="rs-send" x-show="pub.platforms.length">
+        <div class="seg" role="group" aria-label="Kapan dikirim">
+          <button type="button" :class="{ on: pub.when === 'now' }" @click="pub.when = 'now'">Sekarang</button>
+          <button type="button" :class="{ on: pub.when === 'later' }"
+                  @click="pub.when = 'later'; if (!pub.at) { const d = new Date(Date.now() + 3600000); d.setMinutes(0, 0, 0); pub.at = new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }">Jadwalkan</button>
         </div>
-
-        <button class="btn" @click="uploadToTiktok()"
-                :disabled="!tiktokCanSubmit"
-                :style="!tiktokCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
-                x-text="tiktokBusy ? 'Mengupload…' : (tiktokMode === 'direct' ? 'Posting ke TikTok' : 'Kirim ke TikTok (draft)')"></button>
-        <div x-show="tiktokStatus" style="margin-top:12px;font-size:13px"
-             :style="tiktokStatus === 'failed' ? 'color:var(--danger)' : tiktokStatus === 'skipped' ? 'color:var(--warn)' : 'color:var(--text-muted)'"
-             x-text="tiktokStatusLabel"></div>
-        <div x-show="['failed', 'skipped'].includes(tiktokStatus) && tiktokError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="tiktokError"></div>
-        <a x-show="tiktokStatus === 'skipped'" href="/settings/accounts#tiktok" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--accent-ink)">Pilih akun utama TikTok</a>
+        <label class="rs-when" x-show="pub.when === 'later'">
+          <span class="rs-label">Tanggal dan jam</span>
+          <input class="field" type="datetime-local" x-model="pub.at" style="font-family:var(--font-mono)">
+        </label>
+        <button class="btn rs-send-btn" type="button" @click="sendPublish()" :disabled="!pubCanSend" x-text="pubSendLabel()"></button>
       </div>
-    </div>
-
-    {{-- Upload ke YouTube Shorts --}}
-    <div class="res-sec">
-      <div class="res-sec-head">
-        <span class="res-sec-title">Upload ke YouTube Shorts</span>
-        <a class="res-edit" href="/settings/accounts#youtube" x-show="ytAccounts.length > 0">Ganti channel</a>
-      </div>
-
-      <div x-show="!ytConfigured" style="padding:8px 0;color:var(--text-dim);font-size:13px">
-        Isi <code>YOUTUBE_CLIENT_ID</code>, <code>YOUTUBE_CLIENT_SECRET</code>, dan <code>YOUTUBE_REDIRECT_URI</code> di <code>.env</code> untuk mengaktifkan upload.
-      </div>
-
-      <div x-show="ytConfigured && ytAccounts.length === 0" style="padding:8px 0;font-size:13px;color:var(--text-muted)">
-        Belum ada channel YouTube. <a href="/settings/accounts#youtube" style="color:var(--accent-ink)">Hubungkan di Akun terhubung</a>.
-      </div>
-
-      <div x-show="ytConfigured && ytAccounts.length > 0">
-        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)" x-show="ytAccountId">Ke <b style="color:var(--text)" x-text="accountLabel(ytAccounts, ytAccountId)"></b></div>
-        <div style="margin-bottom:12px;font-size:13px;color:var(--warn)" x-show="!ytAccountId">Channel utama YouTube sudah diputus. <a href="/settings/accounts#youtube" style="color:var(--accent-ink)">Pilih channel utama</a> dulu.</div>
-
-        <div class="fblock-title" style="margin-bottom:6px">Judul <span style="color:var(--text-dim);font-weight:400" x-text="`(${ytTitle.length}/100)`"></span></div>
-        <input class="field" maxlength="100" x-model="ytTitle">
-        <div x-show="/[<>]/.test(ytTitle)" style="margin-top:6px;font-size:12px;color:var(--danger)">Judul YouTube tidak boleh berisi &lt; atau &gt;.</div>
-
-        <div class="fblock-title" style="margin:12px 0 6px">Deskripsi</div>
-        <textarea class="field" maxlength="5000" x-model="ytDescription" style="min-height:90px"></textarea>
-
-        <div class="fblock-title" style="margin:12px 0 6px">Siapa yang bisa melihat</div>
-        <div class="seg" style="flex-wrap:wrap">
-          <button :class="{ on: ytPrivacy === 'public' }"   @click="ytPrivacy = 'public'"   type="button">Publik</button>
-          <button :class="{ on: ytPrivacy === 'unlisted' }" @click="ytPrivacy = 'unlisted'" type="button">Tidak publik</button>
-          <button :class="{ on: ytPrivacy === 'private' }"  @click="ytPrivacy = 'private'"  type="button">Pribadi</button>
-        </div>
-        <div x-show="ytTooLong" style="margin-top:8px;font-size:12px;color:var(--danger)"
-             x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik. YouTube Shorts maksimal 3 menit.`"></div>
-        <div style="margin:10px 0 14px;font-size:12px;color:var(--text-dim);line-height:1.5">
-          Video vertikal sampai 3 menit otomatis jadi Shorts, dan <code>#Shorts</code> ditambahkan ke deskripsi.
-          Selama app belum lolos audit YouTube API, video tetap tersimpan sebagai <b>Pribadi</b>; ubah ke Publik di YouTube Studio.
-        </div>
-
-        <button class="btn" @click="uploadToYoutube()"
-                :disabled="!ytCanSubmit"
-                :style="!ytCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
-                x-text="ytBusy ? 'Mengupload…' : 'Upload ke YouTube'"></button>
-        <div x-show="ytStatus" style="margin-top:12px;font-size:13px"
-             :style="{ color: ytStatus === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }">
-          <span x-text="ytStatusLabel"></span>
-          <a x-show="ytUrl && ytStatus !== 'failed'" :href="ytUrl" target="_blank" rel="noopener" style="color:var(--accent-ink);margin-left:6px">Buka di YouTube →</a>
-        </div>
-        <div x-show="ytStatus === 'failed' && ytError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="ytError"></div>
-      </div>
-    </div>
+      <p class="rs-dim" x-show="pub.when === 'later'">Jadwal masuk ke <a class="rs-link" href="/calendar">kalender</a>; worker mengirimnya saat waktunya tiba.</p>
+      <p class="rs-error" x-show="pub.error" x-text="pub.error" role="alert"></p>
+    </section>
 
     {{-- Tes hook A/B: hook asli lawan 2-3 hook baru, pemenang dari views TikTok --}}
-    <div class="res-sec" x-show="selectedClipObj" aria-labelledby="ht-title">
-      <div class="res-sec-head">
-        <span class="res-sec-title" id="ht-title">Tes hook A/B</span>
-        <button class="res-edit" type="button" x-show="hookTest && hookTest.status !== 'testing'" :disabled="hookTestBusy" @click="deleteHookTest()">Hapus tes</button>
+    <section class="rs-card" x-show="selectedClipObj" aria-labelledby="ht-title">
+      <div class="rs-card-head">
+        <h2 id="ht-title">Tes hook A/B</h2>
+        <button class="btn btn-ghost btn-sm" type="button" x-show="hookTest && hookTest.status !== 'testing'" :disabled="hookTestBusy" @click="deleteHookTest()">Hapus tes</button>
       </div>
 
       {{-- Belum ada tes --}}
@@ -252,7 +211,7 @@
           <button type="button" :class="{ on: hookTestCount === 3 }" :aria-pressed="hookTestCount === 3" @click="hookTestCount = 3">3 hook baru</button>
         </div>
         <p class="ht-note" x-text="hookTestCostText"></p>
-        <button class="btn" type="button" @click="createHookTest()" :disabled="hookTestBusy" :style="hookTestBusy ? 'opacity:.5;pointer-events:none' : ''"
+        <button class="btn btn-secondary" type="button" @click="createHookTest()" :disabled="hookTestBusy" :style="hookTestBusy ? 'opacity:.5;pointer-events:none' : ''"
                 x-text="hookTestBusy ? 'Menulis hook…' : 'Buat varian'"></button>
       </div>
       <div x-show="hookTestLoading && !hookTest" class="ht-note">Memuat tes hook…</div>
@@ -285,29 +244,29 @@
                 </div>
                 <div class="ht-arm-side">
                   <div class="ht-arm-num" x-text="hookArmStats(arm)"></div>
-                  <a class="res-edit" x-show="arm.download_url && arm.status === 'done'" :href="arm.download_url + '?inline=1'" target="_blank" rel="noopener" :aria-label="'Lihat video: ' + plainHook(arm.hook_text)">Lihat video</a>
-                  <button class="res-edit" type="button" x-show="arm.status === 'failed' || (arm.status === 'pending' && !arm.is_control)" @click="renderHookArm(arm)">Render ulang</button>
+                  <a class="rs-link" x-show="arm.download_url && arm.status === 'done'" :href="arm.download_url + '?inline=1'" target="_blank" rel="noopener" :aria-label="'Lihat video: ' + plainHook(arm.hook_text)">Lihat video</a>
+                  <button class="rs-link" type="button" x-show="arm.status === 'failed' || (arm.status === 'pending' && !arm.is_control)" @click="renderHookArm(arm)">Render ulang</button>
                 </div>
               </li>
             </template>
           </ul>
 
-          {{-- Semua versi sudah jadi: pilih akun lalu jadwalkan --}}
+          {{-- Semua versi sudah jadi: jadwalkan ke akun TikTok utama --}}
           <div x-show="hookTest.status === 'draft' && hookTestAllDone" style="margin-top:16px">
             <div x-show="!tiktokAccounts.length">
-              <p class="ht-note">Hubungkan akun TikTok dulu untuk memposting dan membaca views-nya. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Buka Akun terhubung</a>.</p>
+              <p class="ht-note">Hubungkan akun TikTok dulu untuk memposting dan membaca views-nya. <a class="rs-link" href="/settings/accounts#tiktok">Buka Akun terhubung</a>.</p>
             </div>
             <div x-show="tiktokAccounts.length">
-              <p class="ht-note" style="margin:0 0 12px" x-show="tiktokAccountId">Semua versi diposting ke <b x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b>, akun TikTok utama. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Ganti</a></p>
-              <p class="ht-note" style="margin:0 0 12px;color:var(--warn)" x-show="!tiktokAccountId">Akun utama TikTok sudah diputus. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Pilih akun utama</a> dulu.</p>
-              <div class="fblock-title" style="margin-bottom:6px">Jarak antar posting</div>
-              <div class="seg" role="group" aria-label="Jarak antar posting" style="margin-bottom:10px">
+              <p class="ht-note" x-show="tiktokAccountId">Semua versi diposting ke <b x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b>, akun TikTok utama. <a class="rs-link" href="/settings/accounts#tiktok">Ganti</a></p>
+              <p class="ht-note rs-warn" x-show="!tiktokAccountId">Akun utama TikTok sudah diputus. <a class="rs-link" href="/settings/accounts#tiktok">Pilih akun utama</a> dulu.</p>
+              <span class="rs-label" id="ht-gap">Jarak antar posting</span>
+              <div class="seg" role="group" aria-labelledby="ht-gap" style="margin-bottom:10px">
                 <template x-for="h in [12, 24, 48]" :key="h">
                   <button type="button" :class="{ on: hookTestGap === h }" :aria-pressed="hookTestGap === h" @click="hookTestGap = h" x-text="h + ' jam'"></button>
                 </template>
               </div>
               <p class="ht-note">Butuh izin <code>video.publish</code> dan <code>video.list</code> di akun TikTok. Selama app TikTok belum lolos audit, posting bersifat privat dan views bisa terlalu sedikit untuk dibandingkan.</p>
-              <button class="btn" type="button" @click="publishHookTest()" :disabled="hookTestBusy || !tiktokAccountId" :style="hookTestBusy || !tiktokAccountId ? 'opacity:.5;pointer-events:none' : ''"
+              <button class="btn btn-secondary" type="button" @click="publishHookTest()" :disabled="hookTestBusy || !tiktokAccountId" :style="hookTestBusy || !tiktokAccountId ? 'opacity:.5;pointer-events:none' : ''"
                       x-text="hookTestBusy ? 'Menjadwalkan…' : 'Jadwalkan tes ke TikTok'"></button>
             </div>
           </div>
@@ -315,11 +274,12 @@
           <p class="ht-note" x-show="hookTest.status === 'testing'" style="margin-top:14px" x-text="hookTestTestingText"></p>
         </div>
       </template>
-    </div>
+    </section>
 
-    <div class="dl-row">
-      <button class="btn btn-ghost" @click="restart()">← Buat project baru</button>
-    </div>
+    {{-- Leaving this clip --}}
+    <nav class="rs-foot" aria-label="Lanjut">
+      <button class="btn btn-ghost" type="button" @click="done = false; step = 7">Pilih clip lain</button>
+      <button class="btn btn-ghost" type="button" @click="restart()">Buat project baru</button>
+    </nav>
   </div>
-
 </div>

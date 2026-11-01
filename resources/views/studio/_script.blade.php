@@ -64,13 +64,13 @@ function studio() {
     trim: { open: false, clip: null, words: [], start: 0, end: 0, mode: 'start', loading: false, saving: false, error: null },
     clipCaption: '', clipHashtags: [], loadingCaption: false,
     tiktokConfigured: false, tiktokAccounts: [], tiktokAccountId: null,
-    tiktokStatus: null, tiktokError: null, tiktokTimer: null,
     tiktokMode: 'inbox', tiktokCreator: null, tiktokCreatorError: null, tiktokCreatorLoading: false,
-    tiktokTitle: '', tiktokPrivacy: '', tiktokAllowComment: false, tiktokAllowDuet: false, tiktokAllowStitch: false,
+    tiktokPrivacy: '', tiktokAllowComment: false, tiktokAllowDuet: false, tiktokAllowStitch: false,
     tiktokDisclose: false, tiktokBrandOrganic: false, tiktokBrandContent: false,
-    ytConfigured: false, ytAccounts: [], ytAccountId: null,
-    ytTitle: '', ytDescription: '', ytPrivacy: 'public', ytTags: [], ytFilledFor: null,
-    ytStatus: null, ytError: null, ytUrl: null, ytPrivacyNow: null, ytTimer: null,
+    // Publish panel: one clip to the ticked platforms, each on its default account
+    pub: { clipId: null, loading: false, loadError: '', platforms: [], checked: [], when: 'now', at: '',
+           caption: '', hashtags: '', ytTitle: '', ytPrivacy: 'public', textFor: null,
+           sending: false, error: '', errors: {}, timer: null },
     PRIVACY_LABELS: {
       PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya',
     },
@@ -849,99 +849,157 @@ function studio() {
       this.copied = key;
       setTimeout(() => { this.copied = ''; }, 1200);
     },
-    // ── TikTok upload (inbox / draft) ──────────────────────────────────────
-    get tiktokBusy() { return ['queued', 'uploading', 'processing'].includes(this.tiktokStatus); },
-    get tiktokStatusLabel() {
-      return {
-        queued:     'Menunggu antrian…',
-        uploading:  'Mengupload video ke TikTok…',
-        processing: 'TikTok sedang memproses video…',
-        inbox:      '✓ Terkirim ke inbox TikTok — buka app TikTok untuk menambah sound & posting.',
-        published:  '✓ Sudah diposting di TikTok — cek profil kamu.',
-        failed:     'Upload gagal.',
-        // Autopilot approved it while TikTok had no default account
-        skipped:    'Tidak dikirim ke TikTok: akun utama belum dipilih.',
-      }[this.tiktokStatus] || '';
+    // ── publish panel ──────────────────────────────────────────────────────
+    PUB_NAMES: { tiktok: 'TikTok', youtube: 'YouTube Shorts', facebook: 'Reels Facebook', instagram: 'Reels Instagram', threads: 'Threads' },
+    get pubTags() {
+      return this.pub.hashtags.split(/[\s,]+/).map(h => h.trim()).filter(Boolean).map(h => '#' + h.replace(/^#+/, ''));
     },
-    // ── YouTube Shorts upload ──────────────────────────────────────────────
-    get ytBusy() { return ['queued', 'uploading'].includes(this.ytStatus); },
-    get ytStatusLabel() {
-      return {
-        queued:     'Menunggu antrian…',
-        uploading:  'Mengupload video ke YouTube…',
-        processing: '✓ Terupload — YouTube sedang memproses video…',
-        published:  this.ytPrivacyNow === 'private'
-          ? '✓ Sudah di YouTube sebagai Pribadi — ubah ke Publik di YouTube Studio.'
-          : '✓ Sudah di YouTube Shorts.',
-        failed:     'Upload gagal.',
-      }[this.ytStatus] || '';
+    // Why a platform can't be ticked: not set up, no default account, or the clip doesn't fit
+    pubBlocked(p) {
+      if (!p.configured) return p.name + ' belum diatur di server.';
+      if (p.needs_default) return 'Akun utama sudah diputus. Pilih akun utama dulu.';
+      if (!p.account) return 'Belum terhubung.';
+      if (['scheduled', 'publishing'].includes(p.state?.status)) return 'Sudah dijadwalkan. Ubah atau batalkan di kalender.';
+      return p.refusal || '';
     },
-    get ytTooLong() { return this.tiktokClipSeconds > 181; },
-    get ytCanSubmit() {
-      return !this.ytBusy && !!this.ytAccountId && !!this.ytTitle.trim() && !/[<>]/.test(this.ytTitle) && !this.ytTooLong;
+    pubChecked(id) { return this.pub.checked.includes(id); },
+    pubToggle(p) {
+      if (this.pubBlocked(p)) return;
+      this.pub.checked = this.pubChecked(p.id) ? this.pub.checked.filter(x => x !== p.id) : [...this.pub.checked, p.id];
+      delete this.pub.errors['platforms.' + p.id];
     },
-    async loadYoutubeAccounts() {
+    // What each platform gets out of the shared caption, said where it differs
+    pubAdjust(id) {
+      const tags = this.pubTags;
+      if (id === 'threads') {
+        const text = (this.pub.caption.trim() + '\n\n' + (tags[0] || '')).trim();
+        const bytes = new TextEncoder().encode(text).length;
+        return 'Caption' + (tags[0] ? ' + ' + tags[0] : '') + (bytes > 500 ? ', dipotong jadi 500 karakter.' : '. Threads hanya memakai satu hashtag.');
+      }
+      if (id === 'instagram' && tags.length > 30) return 'Hanya 30 hashtag pertama yang dipakai.';
+      if (id === 'tiktok' && this.tiktokMode === 'inbox') return 'Draft masuk inbox TikTok tanpa caption; salin caption saat memposting.';
+      return '';
+    },
+    get pubTiktokReady() {
+      if (this.tiktokMode === 'inbox') return true;
+      if (!this.tiktokCreator || this.tiktokTooLong) return false;
+      return !this.tiktokDisclose || this.tiktokBrandOrganic || this.tiktokBrandContent;
+    },
+    get pubCanSend() {
+      if (this.pub.sending || !this.pub.checked.length) return false;
+      if (this.pub.when === 'later' && !this.pub.at) return false;
+      if (this.pubChecked('youtube') && (!this.pub.ytTitle.trim() || /[<>]/.test(this.pub.ytTitle))) return false;
+      return !this.pubChecked('tiktok') || this.pubTiktokReady;
+    },
+    pubSendLabel() {
+      if (this.pub.sending) return this.pub.when === 'now' ? 'Mengirim…' : 'Menjadwalkan…';
+      const n = this.pub.checked.length;
+      return (this.pub.when === 'now' ? 'Kirim sekarang' : 'Jadwalkan') + (n ? ' ke ' + n + ' platform' : '');
+    },
+    async loadPublishPanel(silent = false) {
+      const clip = this.selectedClipObj;
+      if (!clip) return;
+      if (!silent) { this.pub.loading = true; this.pub.loadError = ''; }
       try {
-        const res = await fetch('/api/youtube/accounts', { headers: { 'Accept': 'application/json' } });
-        if (!res.ok) return;
+        const res = await fetch(`/api/clips/${clip.id}/publish`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('Server menjawab ' + res.status + '.');
         const data = await res.json();
-        this.ytConfigured = data.configured;
-        this.ytAccounts = data.accounts || [];
-        // The default channel from Settings → Akun terhubung; none when it was disconnected and another must be picked
-        this.ytAccountId = data.default_id ?? null;
-      } catch (e) { console.error('loadYoutubeAccounts', e); }
+        if (this.selectedClipObj?.id !== clip.id) return;
+        this.pub.platforms = data.platforms;
+        if (this.pub.clipId !== clip.id) {
+          // A new clip: tick what was sent last time, where it can still go
+          this.pub.clipId = clip.id;
+          this.pub.checked = data.remembered.filter(id => { const p = data.platforms.find(x => x.id === id); return p && !this.pubBlocked(p); });
+          this.pub.errors = {}; this.pub.error = '';
+          this.pub.ytTitle = String(clip.topic || '').replace(/[<>]/g, '').slice(0, 100);
+        }
+        this.pubWatch();
+      } catch (e) {
+        if (!silent) this.pub.loadError = 'Panel publish gagal dimuat: ' + e.message;
+      } finally { this.pub.loading = false; }
     },
-    // Title from the clip topic, description from the AI caption; once per clip, edits are kept
-    fillYoutubeFields(captionArrived = false) {
+    // Caption and hashtags come from the AI caption once per clip; edits stay
+    fillPublishText() {
       const c = this.selectedClipObj;
-      if (!c) return;
-      if (this.ytFilledFor !== c.id) {
-        this.ytFilledFor = c.id;
-        this.ytTitle = String(c.topic || c.hook_text || '').replace(/[<>]/g, '').slice(0, 100);
-        this.ytDescription = '';
-      }
-      if (captionArrived && !this.ytDescription && this.clipCaption) {
-        this.ytDescription = (this.clipCaption + '\n\n' + this.clipHashtags.join(' ')).trim().slice(0, 5000);
-        this.ytTags = this.clipHashtags.map(h => String(h).replace(/^#/, '')).filter(Boolean).slice(0, 30);
-      }
+      if (!c || this.pub.textFor === c.id || !this.clipCaption) return;
+      this.pub.textFor = c.id;
+      this.pub.caption = this.clipCaption;
+      this.pub.hashtags = this.clipHashtags.join(' ');
     },
-    async uploadToYoutube() {
-      const clipId = this.selectedClipObj?.id;
-      if (!clipId || !this.ytCanSubmit) return;
-      this.ytError = null;
+    pubBusy(st) { return !!st && (['publishing'].includes(st.status) || (st.status === 'queued' && ['queued', 'uploading', 'processing'].includes(st.delivery))); },
+    // Keep the lines live while something is on its way; TikTok and YouTube are asked directly
+    pubWatch() {
+      clearTimeout(this.pub.timer);
+      const states = this.pub.platforms.map(p => [p.id, p.state]).filter(([, st]) => this.pubBusy(st));
+      if (!states.length) return;
+      this.pub.timer = setTimeout(async () => {
+        const clipId = this.selectedClipObj?.id;
+        if (!clipId) return;
+        const live = states.filter(([id, st]) => ['tiktok', 'youtube'].includes(id) && st.delivery === 'processing')
+          .map(([id]) => fetch(`/api/clips/${clipId}/${id}-status`, { headers: { 'Accept': 'application/json' } }).catch(() => null));
+        await Promise.all(live);
+        this.loadPublishPanel(true);
+      }, 5000);
+    },
+    async sendPublish() {
+      const clip = this.selectedClipObj;
+      if (!clip || !this.pubCanSend) return;
+      this.pub.error = ''; this.pub.errors = {};
+      let at = null;
+      if (this.pub.when === 'later') {
+        at = new Date(this.pub.at);
+        if (isNaN(at) || at.getTime() < Date.now() + 2 * 60 * 1000) { this.pub.error = 'Pilih waktu minimal 2 menit dari sekarang.'; return; }
+      }
+      const body = {
+        platforms: this.pub.checked, scheduled_at: at ? at.toISOString() : null,
+        caption: this.pub.caption, hashtags: this.pubTags,
+        youtube_title: this.pub.ytTitle.trim(), youtube_privacy: this.pub.ytPrivacy,
+        tiktok_mode: this.tiktokMode, tiktok_allow_comment: this.tiktokAllowComment, tiktok_allow_duet: this.tiktokAllowDuet,
+        tiktok_allow_stitch: this.tiktokAllowStitch, tiktok_branded: this.tiktokDisclose && (this.tiktokBrandOrganic || this.tiktokBrandContent),
+      };
+      this.pub.sending = true;
       try {
-        const res = await fetch(`/api/clips/${clipId}/youtube`, {
+        const res = await fetch(`/api/clips/${clip.id}/publish`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
-          body: JSON.stringify({ account_id: this.ytAccountId, title: this.ytTitle.trim(), description: this.ytDescription, privacy: this.ytPrivacy, tags: this.ytTags }),
+          body: JSON.stringify(body),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.ytStatus = 'failed';
-          this.ytError = data.message || 'Gagal memulai upload.';
+          this.pub.errors = data.errors || {};
+          this.pub.error = Object.keys(this.pub.errors).some(k => k.startsWith('platforms.'))
+            ? 'Belum ada yang dikirim. Perbaiki platform yang ditandai, lalu coba lagi.'
+            : (data.errors ? Object.values(data.errors)[0][0] : data.message) || 'Gagal mengirim.';
           return;
         }
-        this.applyYoutubeStatus(data);
+        this.pub.platforms = data.platforms;
+        this.pubWatch();
       } catch (e) {
-        this.ytStatus = 'failed'; this.ytError = 'Koneksi gagal.';
-      }
+        this.pub.error = 'Koneksi gagal. Coba lagi.';
+      } finally { this.pub.sending = false; }
     },
-    async fetchYoutubeStatus() {
-      const clipId = this.selectedClipObj?.id;
-      if (!clipId) return;
-      try {
-        const res = await fetch(`/api/clips/${clipId}/youtube-status`, { headers: { 'Accept': 'application/json' } });
-        if (res.ok) this.applyYoutubeStatus(await res.json());
-      } catch (e) { console.error('fetchYoutubeStatus', e); }
+    // One line per platform after sending: always words, never colour alone
+    pubStateLabel(p) {
+      const st = p.state;
+      if (!st) return '';
+      if (st.status === 'scheduled') return 'Terjadwal ' + new Date(st.scheduled_at).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      if (st.status === 'publishing') return 'Sedang dikirim…';
+      if (st.status === 'failed') return 'Gagal dikirim';
+      return {
+        queued: 'Menunggu antrian…', uploading: 'Mengupload…', processing: 'Terupload, ' + p.name + ' sedang memproses…',
+        inbox: 'Masuk inbox TikTok. Selesaikan posting di aplikasi TikTok.',
+        published: st.privacy === 'private' ? 'Sudah di YouTube sebagai Pribadi' : 'Sudah tayang',
+        failed: 'Upload gagal', skipped: 'Tidak dikirim ke ' + p.name + ': akun utama belum dipilih.',
+      }[st.delivery] || 'Dikirim';
     },
-    applyYoutubeStatus(data) {
-      if (data.clip_id !== this.selectedClipObj?.id) return;
-      this.ytStatus = data.status;
-      this.ytError = data.error;
-      this.ytUrl = data.url;
-      if (data.privacy) this.ytPrivacyNow = data.privacy;
-      clearTimeout(this.ytTimer);
-      if (this.ytBusy || this.ytStatus === 'processing') this.ytTimer = setTimeout(() => this.fetchYoutubeStatus(), 5000);
+    pubStateTone(st) {
+      if (!st) return '';
+      if (st.status === 'failed' || st.delivery === 'failed' || st.delivery === 'skipped') return 'bad';
+      return ['published', 'inbox'].includes(st.delivery) ? 'good' : '';
+    },
+    accountLabel(list, id) {
+      const a = list.find(x => x.id === id);
+      return a ? (a.display_name || a.title || a.name || ('Akun #' + a.id)) : '';
     },
     async loadMusicLibrary() {
       try {
@@ -949,10 +1007,7 @@ function studio() {
         if (res.ok) { const d = await res.json(); this.musicLibrary = { total: d.total, counts: d.counts }; }
       } catch (e) { console.error('loadMusicLibrary', e); }
     },
-    accountLabel(list, id) {
-      const a = list.find(x => x.id === id);
-      return a ? (a.display_name || a.title || a.name || ('Akun #' + a.id)) : '';
-    },
+    // Hook tests post to the default TikTok account
     async loadTiktokAccounts() {
       try {
         const res = await fetch('/api/tiktok/accounts', { headers: { 'Accept': 'application/json' } });
@@ -963,13 +1018,6 @@ function studio() {
         // The default account from Settings → Akun terhubung; none when it was disconnected and another must be picked
         this.tiktokAccountId = data.default_id ?? null;
       } catch (e) { console.error('loadTiktokAccounts', e); }
-    },
-    get tiktokCanSubmit() {
-      if (this.tiktokBusy || !this.tiktokAccountId) return false;
-      if (this.tiktokMode === 'inbox') return true;
-      if (!this.tiktokCreator || !this.tiktokPrivacy || this.tiktokTooLong) return false;
-      if (this.tiktokBrandContent && this.tiktokPrivacy === 'SELF_ONLY') return false;
-      return !this.tiktokDisclose || this.tiktokBrandOrganic || this.tiktokBrandContent;
     },
     get tiktokClipSeconds() {
       const c = this.selectedClipObj;
@@ -985,12 +1033,10 @@ function studio() {
       if (this.tiktokBrandOrganic) return 'Promotional content';
       return '';
     },
+    // TikTok asks for the creator's name and limits on screen before a direct post
     async loadTiktokCreator() {
       this.tiktokCreator = null; this.tiktokCreatorError = null; this.tiktokPrivacy = '';
       if (this.tiktokMode !== 'direct' || !this.tiktokAccountId) return;
-      if (!this.tiktokTitle && this.clipCaption) {
-        this.tiktokTitle = (this.clipCaption + '\n\n' + this.clipHashtags.join(' ')).trim().slice(0, 2200);
-      }
       this.tiktokCreatorLoading = true;
       try {
         const res = await fetch(`/api/tiktok/accounts/${this.tiktokAccountId}/creator-info`, { headers: { 'Accept': 'application/json' } });
@@ -1004,50 +1050,6 @@ function studio() {
       } catch (e) {
         this.tiktokCreatorError = 'Koneksi gagal.';
       } finally { this.tiktokCreatorLoading = false; }
-    },
-    async uploadToTiktok() {
-      const clipId = this.selectedClipObj?.id;
-      if (!clipId || !this.tiktokCanSubmit) return;
-      this.tiktokError = null;
-      const direct = this.tiktokMode === 'direct' ? {
-        title: this.tiktokTitle,
-        privacy_level: this.tiktokPrivacy,
-        disable_comment: !this.tiktokAllowComment,
-        disable_duet: !this.tiktokAllowDuet,
-        disable_stitch: !this.tiktokAllowStitch,
-        brand_organic_toggle: this.tiktokDisclose && this.tiktokBrandOrganic,
-        brand_content_toggle: this.tiktokDisclose && this.tiktokBrandContent,
-      } : {};
-      try {
-        const res = await fetch(`/api/clips/${clipId}/tiktok`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json', 'Accept': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-          },
-          body: JSON.stringify({ account_id: this.tiktokAccountId, mode: this.tiktokMode, ...direct }),
-        });
-        const data = await res.json();
-        if (!res.ok) { this.tiktokStatus = 'failed'; this.tiktokError = data.message || 'Gagal memulai upload.'; return; }
-        this.applyTiktokStatus(data);
-      } catch (e) {
-        this.tiktokStatus = 'failed'; this.tiktokError = 'Koneksi gagal.';
-      }
-    },
-    async fetchTiktokStatus() {
-      const clipId = this.selectedClipObj?.id;
-      if (!clipId) return;
-      try {
-        const res = await fetch(`/api/clips/${clipId}/tiktok-status`, { headers: { 'Accept': 'application/json' } });
-        if (res.ok) this.applyTiktokStatus(await res.json());
-      } catch (e) { console.error('fetchTiktokStatus', e); }
-    },
-    applyTiktokStatus(data) {
-      if (data.clip_id !== this.selectedClipObj?.id) return;
-      this.tiktokStatus = data.status;
-      this.tiktokError = data.error;
-      clearTimeout(this.tiktokTimer);
-      if (this.tiktokBusy) this.tiktokTimer = setTimeout(() => this.fetchTiktokStatus(), 4000);
     },
     // ── tes hook A/B ───────────────────────────────────────────────────────
     plainHook(t) { return (t || '').replace(/\*/g, ''); },
@@ -1168,7 +1170,7 @@ function studio() {
         }
         this.clipCaption  = data.caption  || '';
         this.clipHashtags = data.hashtags || [];
-        this.fillYoutubeFields(true);
+        this.fillPublishText();
       } catch (e) {
         console.error('fetchCaption exception', e);
       }
@@ -1244,19 +1246,19 @@ function studio() {
       // Re-fetch caption when user switches to a different clip
       this.$watch('selectedClip', () => {
         this.clipCaption = ''; this.clipHashtags = [];
-        this.tiktokStatus = null; this.tiktokError = null;
         this.hookTest = null; this.hookTestError = null; clearTimeout(this.hookTestTimer);
-        this.ytStatus = null; this.ytError = null; this.ytUrl = null; this.ytPrivacyNow = null; clearTimeout(this.ytTimer);
-        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); }
+        clearTimeout(this.pub.timer); this.pub.platforms = [];
+        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.loadPublishPanel(); this.loadHookTest(); }
       });
-      this.$watch('done', val => { if (val && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); } });
+      this.$watch('done', val => { if (val && this.selectedClipObj) { this.loadPublishPanel(); this.loadHookTest(); } });
       this.$watch('tiktokMode', () => this.loadTiktokCreator());
       this.$watch('tiktokAccountId', () => this.loadTiktokCreator());
 
-      await Promise.all([this.loadTiktokAccounts(), this.loadYoutubeAccounts(), this.loadMusicLibrary()]);
-      if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); }
+      await Promise.all([this.loadTiktokAccounts(), this.loadMusicLibrary()]);
+      if (this.done && this.selectedClipObj) { this.loadPublishPanel(); this.loadHookTest(); }
       // If restored from session and already done
       if (this.done && this.selectedClipObj && !this.clipCaption) this.fetchCaption();
+      else this.fillPublishText();
     },
   };
 }

@@ -84,8 +84,11 @@
   .ap-cap-copy button:hover { color: var(--text); border-color: var(--text-dim); }
   .ap-cap-copy button.is-done { color: var(--accent-ink); border-color: var(--accent-ink); }
   .ap-cap-muted { font-size: 12.5px; color: var(--text-muted); }
-  .ap-actions { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; }
-  .ap-actions .btn:first-child { flex: 1; justify-content: center; }
+  .ap-decide { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .ap-dest-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+  .ap-chip { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-size: 12px; line-height: 1.5; white-space: nowrap; }
+  .ap-actions { display: flex; gap: 8px; }
+  .ap-actions .btn:first-child { flex: 1; justify-content: center; min-width: 0; }
   .ap-result { margin-top: auto; padding-top: 14px; font-size: 13px; color: var(--text-muted); }
   .ap-result.is-fail { color: var(--danger); }
   .ap-result small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
@@ -406,10 +409,20 @@
             <div class="ap-reason" x-show="c.music_credit && !c.caption" style="font-size:12px">🎵 <span x-text="c.music_credit"></span>
               <button class="ap-link" style="font-size:12px;margin-left:4px" type="button" @click="navigator.clipboard?.writeText(c.music_credit)">salin kredit</button></div>
 
-            <div class="ap-actions" x-show="c.review_status === 'pending'">
-              <button class="btn ap-btn" type="button" @click="approve(c)"
-                      :disabled="c.status !== 'done' || c.busy || !anyDestination()" x-text="approveLabel()"></button>
-              <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
+            <div class="ap-decide" x-show="c.review_status === 'pending'">
+              {{-- Where approving sends it, apart from the button so the label stays short at any width --}}
+              <div class="ap-dest-chips" x-show="anyDestination()">
+                <span>Ke</span>
+                <template x-for="d in destinations.filter(d => d.on)" :key="d.id">
+                  <span class="ap-chip" x-text="d.name"></span>
+                </template>
+              </div>
+              <div class="ap-dest-chips" x-show="destLoaded && !anyDestination()">Belum ada tujuan. <a class="ap-link" href="/settings/accounts">Atur di Akun terhubung</a></div>
+              <div class="ap-actions">
+                <button class="btn ap-btn" type="button" @click="approve(c)"
+                        :disabled="c.status !== 'done' || c.busy || !anyDestination()">Approve</button>
+                <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
+              </div>
             </div>
             <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': ['failed', 'skipped'].includes(c.tiktok_status) }">
               <span x-text="reviewLabel(c)"></span>
@@ -1004,10 +1017,6 @@ function autopilot() {
         await this.loadClips();
       } catch (e) { c.actionError = e.message; }
       finally { c.busy = false; }
-    },
-    approveLabel() {
-      const to = this.destinations.filter(d => d.on).map(d => d.name);
-      return to.length ? 'Approve → ' + to.join(' + ') : 'Approve';
     },
     // Nothing went out yet: TikTok untouched and every calendar post still waiting
     canUnapprove(c) {

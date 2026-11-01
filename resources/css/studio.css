@@ -1396,59 +1396,13 @@ textarea.field {
     color: var(--accent-ink)
 }
 
-.result2 {
-    max-width: 1180px;
-    margin: 0 auto;
-    padding: 40px 32px 96px;
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    gap: 48px;
-    align-items: start
-}
 
-@media(max-width:960px) {
-    .result2 {
-        grid-template-columns: 1fr
-    }
-}
 
-.result2-aside {
-    position: sticky;
-    top: 130px
-}
 
-.res-sec {
-    margin-bottom: 30px
-}
 
-.res-sec-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px
-}
 
-.res-sec-title {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--text-dim)
-}
 
-.res-edit {
-    font-size: 12px;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 4px 9px;
-    border-radius: 6px;
-    background: var(--surface);
-    border: 1px solid var(--border)
-}
 
-.res-edit:hover {
-    color: var(--text)
-}
 
 .sub-line {
     display: flex;
@@ -1476,25 +1430,7 @@ textarea.field {
     color: var(--text-muted)
 }
 
-.caption-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px;
-    font-size: 14px;
-    line-height: 1.55;
-    color: var(--text);
-    white-space: pre-wrap
-}
 
-.dl-row {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 8px
-}
 
 .hook-pill {
     display: inline-flex;
@@ -1526,44 +1462,10 @@ textarea.field {
     cursor: pointer
 }
 
-.done-banner {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 32px;
-    padding: 16px 20px;
-    border-radius: var(--radius);
-    background: var(--accent-soft);
-    border: 1px solid var(--accent-soft)
-}
 
-.done-banner-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: var(--accent);
-    color: var(--on-accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0
-}
 
-.done-banner-txt {
-    flex: 1
-}
 
-.done-banner-txt h3 {
-    margin: 0 0 2px;
-    font-size: 15px;
-    font-weight: 600
-}
 
-.done-banner-txt p {
-    margin: 0;
-    font-size: 13px;
-    color: var(--text-muted)
-}
 
 .status-pill {
     display: inline-flex;
@@ -1997,8 +1899,7 @@ textarea.field {
 
 /* ── Tablet & below: one column, nothing sticky beside content ────────── */
 @media (max-width: 1000px) {
-    .wiz-preview,
-    .result2-aside {
+    .wiz-preview {
         position: static
     }
 }
@@ -2196,23 +2097,8 @@ textarea.field {
         width: 100%
     }
 
-    /* Result */
-    .result2 {
-        padding: 24px 16px 64px;
-        gap: 28px
-    }
-
     .phone-frame {
         max-width: 280px
-    }
-
-    .dl-row .btn {
-        flex: 1;
-        justify-content: center
-    }
-
-    .done-banner {
-        flex-wrap: wrap
     }
 
     .modal {
@@ -2401,8 +2287,444 @@ textarea.field {
 .ht-arm-state.is-fail { color: var(--danger) }
 .ht-arm-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right }
 .ht-arm-num { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums }
-.ht-arm .res-edit { text-decoration: none; font-family: inherit }
-.ht-arm .res-edit:focus-visible, .ht-verdict button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px }
+.ht-arm .rs-link { font-size: 12.5px }
+.ht-arm .rs-link:focus-visible, .ht-verdict button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px }
 @media (max-width: 520px) {
     .ht-arm-side { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; text-align: left }
+}
+
+/* ── Studio result screen ─────────────────────────────────────────────────
+   The preview sits beside the work on wide screens; the work runs in the order it
+   happens: what the clip is, its caption, publishing, the hook test. Lime fills only
+   the send button. Three states: wide (sticky preview), tablet (smaller preview),
+   phone (one column). */
+.rs {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 32px 32px 96px;
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 48px;
+    align-items: start
+}
+
+.rs-aside {
+    position: sticky;
+    top: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px
+}
+
+.rs-phone {
+    max-width: 300px
+}
+
+.rs-spec {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center
+}
+
+.rs-file-acts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px
+}
+
+.rs-file-acts .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center
+}
+
+.rs-main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0
+}
+
+.rs-eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted)
+}
+
+.rs-title {
+    margin: 4px 0 8px;
+    font-size: 26px;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    overflow-wrap: anywhere
+}
+
+.rs-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted)
+}
+
+.rs-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px
+}
+
+.rs-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 32px;
+    margin-bottom: 14px
+}
+
+.rs-card-head h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 650
+}
+
+.rs-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px
+}
+
+.rs-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.rs-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted)
+}
+
+span.rs-label {
+    margin-bottom: 6px
+}
+
+.rs-field > .rs-label {
+    margin-bottom: 0
+}
+
+.rs-label .rs-dim {
+    margin-left: 6px
+}
+
+.rs-dim {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text-dim)
+}
+
+.rs-muted {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-muted)
+}
+
+.rs-muted b {
+    color: var(--text)
+}
+
+.rs-error {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--danger)
+}
+
+.rs-warn {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--warn)
+}
+
+.rs-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 13px;
+    color: var(--accent-ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer
+}
+
+/* Platforms: one row each, details open under the ticked ones */
+.rs-plats {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--border)
+}
+
+.rs-plat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border)
+}
+
+.rs-plat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    min-height: 44px;
+    cursor: pointer
+}
+
+.rs-plat-row input {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-ink)
+}
+
+.rs-plat-name {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 600
+}
+
+.rs-plat-acct {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-muted)
+}
+
+.rs-plat.off .rs-plat-row {
+    cursor: not-allowed
+}
+
+.rs-plat.off .rs-plat-name {
+    color: var(--text-dim)
+}
+
+.rs-plat-side {
+    justify-self: end
+}
+
+/* Why a platform can't be ticked, under its name */
+.rs-plat-why {
+    margin: -6px 0 6px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-dim)
+}
+
+.rs-plat-why,
+.rs-plat-more,
+.rs-plat > .rs-error,
+.rs-plat-state {
+    grid-column: 1 / -1;
+    margin-left: 30px
+}
+
+.rs-plat-more {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 2px 0 10px
+}
+
+.rs-plat > .rs-error {
+    padding-bottom: 6px
+}
+
+.rs-plat-state {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 13px
+}
+
+.rs-plat-state-label {
+    font-weight: 600;
+    color: var(--text)
+}
+
+.rs-plat-state.bad .rs-plat-state-label {
+    color: var(--danger)
+}
+
+.rs-plat-state .rs-dim {
+    flex-basis: 100%;
+    overflow-wrap: anywhere
+}
+
+.rs-plat-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px
+}
+
+.rs-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 18px;
+    font-size: 13px
+}
+
+.rs-checks label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px
+}
+
+.rs-checks label.off {
+    opacity: .5
+}
+
+.rs-box {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px
+}
+
+.rs-check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px
+}
+
+.rs-check-row input {
+    margin-top: 3px
+}
+
+.rs-check-row .rs-dim {
+    display: block
+}
+
+/* Sending: when, then the one lime button */
+.rs-send {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin-top: 16px
+}
+
+.rs-send .seg button {
+    min-height: 44px
+}
+
+.rs-when {
+    display: flex;
+    flex: 1 1 200px;
+    flex-direction: column;
+    gap: 6px
+}
+
+.rs-send-btn {
+    min-height: 44px;
+    margin-left: auto
+}
+
+.rs-pub > p.rs-dim,
+.rs-pub > .rs-error {
+    margin-top: 10px
+}
+
+.rs-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px
+}
+
+.rs-foot .btn {
+    min-height: 44px
+}
+
+@media (max-width: 1000px) {
+    .rs {
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 32px;
+        padding: 28px 24px 80px
+    }
+
+    .rs-phone {
+        max-width: 220px
+    }
+}
+
+@media (max-width: 720px) {
+    .rs {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
+        padding: 20px 16px 64px
+    }
+
+    .rs-aside {
+        position: static
+    }
+
+    .rs-phone {
+        max-width: 220px
+    }
+
+    .rs-file-acts {
+        flex-direction: row;
+        flex-wrap: wrap
+    }
+
+    .rs-file-acts .btn {
+        flex: 1 1 160px;
+        width: auto
+    }
+
+    .rs-title {
+        font-size: 22px
+    }
+
+    .rs-card {
+        padding: 16px
+    }
+
+    .rs-send .seg {
+        width: 100%
+    }
+
+    .rs-send .seg button {
+        flex: 1
+    }
+
+    .rs-send-btn {
+        width: 100%;
+        margin-left: 0;
+        justify-content: center
+    }
+
+    .rs-foot .btn {
+        flex: 1
+    }
 }

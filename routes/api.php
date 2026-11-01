@@ -10,6 +10,7 @@ use App\Http\Controllers\MetaAccountController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\PublishController;
 use App\Http\Controllers\RenderController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\TikTokController;
@@ -73,6 +74,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::delete('/meta/targets/{targetId}', [MetaAccountController::class, 'destroyTarget'])->whereNumber('targetId');
     Route::get('/facebook/pages', [MetaAccountController::class, 'facebookPages']);
     Route::get('/meta/targets/{platform}', [MetaAccountController::class, 'platformTargets'])->whereIn('platform', ['facebook', 'instagram', 'threads']);
+
+    // Studio's publish panel: one clip to several platforms, now or at a time (calendar posts)
+    Route::get('/clips/{clipId}/publish', [PublishController::class, 'show']);
+    Route::post('/clips/{clipId}/publish', [PublishController::class, 'store'])->middleware('throttle:20,1');
 
     Route::get('/schedule', [ScheduleController::class, 'index']);
     Route::get('/schedule/clips', [ScheduleController::class, 'clips']);
