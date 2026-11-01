@@ -96,7 +96,10 @@ class PublishController extends Controller
         if (! $when) {
             $this->ensureQueueWorkerRunning();
         }
-        $request->user()->forceFill(['publish_platforms' => array_values($data['platforms'])])->save();
+        // Remembered for the next clip; the TikTok mode only when TikTok was part of this send
+        $request->user()->forceFill(['publish_platforms' => array_values($data['platforms'])] + (in_array('tiktok', $data['platforms'], true)
+            ? ['publish_tiktok_mode' => $data['tiktok_mode'] ?? 'inbox']
+            : []))->save();
 
         return response()->json($this->panel($clip->fresh(['clipProject', 'publications'])));
     }
@@ -153,6 +156,7 @@ class PublishController extends Controller
 
         return [
             'remembered' => Auth::user()->publish_platforms ?? [],
+            'tiktok_mode' => Auth::user()->publish_tiktok_mode ?? 'inbox',
             'platforms' => collect(ConnectedAccounts::PLATFORMS)->map(function (string $platform) use ($userId, $clip, $posts) {
                 $account = $this->connected->default($userId, $platform);
 

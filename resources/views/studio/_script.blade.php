@@ -912,6 +912,8 @@ function studio() {
           this.pub.checked = data.remembered.filter(id => { const p = data.platforms.find(x => x.id === id); return p && !this.pubBlocked(p); });
           this.pub.errors = {}; this.pub.error = '';
           this.pub.ytTitle = String(clip.topic || '').replace(/[<>]/g, '').slice(0, 100);
+          // Direct posting still loads TikTok's required form (creator info) every time
+          this.tiktokMode = data.tiktok_mode === 'direct' ? 'direct' : 'inbox';
         }
         this.pubWatch();
       } catch (e) {

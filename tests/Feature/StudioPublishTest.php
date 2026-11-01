@@ -179,6 +179,24 @@ class StudioPublishTest extends TestCase
         $this->actingAs(User::factory()->create())->postJson("/api/clips/{$long->id}/publish", ['platforms' => ['youtube']])->assertForbidden();
     }
 
+    public function test_the_tiktok_mode_is_remembered_only_from_sends_that_include_tiktok(): void
+    {
+        $this->connectAll();
+        $first = $this->clip();
+        $this->actingAs($this->user)->getJson("/api/clips/{$first->id}/publish")->assertJsonPath('tiktok_mode', 'inbox');
+
+        $this->send($first, ['platforms' => ['tiktok'], 'tiktok_mode' => 'direct', 'tiktok_allow_comment' => true])->assertOk()
+            ->assertJsonPath('tiktok_mode', 'direct');
+        // Still TikTok's private-only direct post, with the creator's choices
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->mode === 'direct'
+            && $job->postInfo['privacy_level'] === 'SELF_ONLY' && $job->postInfo['disable_comment'] === false && $job->postInfo['disable_duet'] === true);
+
+        // A send without TikTok leaves the remembered mode alone
+        $this->send($this->clip(), ['platforms' => ['youtube']])->assertOk()->assertJsonPath('tiktok_mode', 'direct');
+        $this->send($this->clip(), ['platforms' => ['tiktok'], 'tiktok_mode' => 'inbox'])->assertOk()->assertJsonPath('tiktok_mode', 'inbox');
+        $this->send($this->clip(), ['platforms' => ['tiktok'], 'tiktok_mode' => 'sideways'])->assertUnprocessable()->assertJsonValidationErrors('tiktok_mode');
+    }
+
     public function test_a_failed_hand_off_shows_on_the_platform_line(): void
     {
         $this->connectAll();

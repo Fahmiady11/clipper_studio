@@ -1904,10 +1904,74 @@ textarea.field {
     }
 }
 
+/* ── Tablets and narrow windows: one row still fits once the labels go ───── */
+@media (min-width: 641px) and (max-width: 960px) {
+    .topbar {
+        padding: 14px 20px
+    }
+
+    .topbar-left {
+        gap: 16px
+    }
+
+    .brand-name,
+    .user-menu-name,
+    .lbl-long {
+        display: none
+    }
+
+    .lbl-short {
+        display: inline
+    }
+}
+
 /* ── Phones ─────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
+    /* Four sections and the page actions don't fit one row: logo and actions on top,
+       the sections as a full-width row below. The bar scrolls away instead of
+       sticking, so two rows don't take the phone screen. */
     .topbar {
-        padding: 12px 12px
+        position: static;
+        flex-wrap: wrap;
+        row-gap: 8px;
+        padding: 8px 12px 10px
+    }
+
+    .topbar-left {
+        display: contents
+    }
+
+    .topbar .brand {
+        order: 1;
+        min-height: 44px
+    }
+
+    .topbar-nav {
+        order: 2;
+        margin-left: auto
+    }
+
+    .main-nav {
+        order: 3;
+        flex: 1 1 100%
+    }
+
+    .main-nav a {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px
+    }
+
+    .topbar-nav a,
+    .topbar-nav > .user-menu .user-menu-btn,
+    .topbar-nav .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        min-width: 44px
     }
 
     .brand-sub,
@@ -1917,15 +1981,11 @@ textarea.field {
         display: none
     }
 
-    .topbar-left {
-        gap: 8px
-    }
-
     /* history count becomes a dot: the bar has no room for digits */
     .topbar-badge {
         position: absolute;
-        top: 3px;
-        right: 3px;
+        top: 11px;
+        right: 11px;
         width: 7px;
         height: 7px;
         padding: 0;
@@ -1934,7 +1994,7 @@ textarea.field {
 
     .main-nav a {
         padding: 5px 8px;
-        font-size: 12.5px
+        font-size: 13px
     }
 
     .topbar-nav a.topbar-cta {
@@ -1945,7 +2005,7 @@ textarea.field {
         display: none
     }
 
-    /* No room in the bar: the account menu carries the theme switch */
+    /* The account menu carries the theme switch on phones */
     .topbar-nav > .theme-toggle {
         display: none
     }
@@ -1963,8 +2023,9 @@ textarea.field {
         padding: 6px 8px
     }
 
+    /* The top bar scrolls away on phones, so the step bar sticks to the top */
     .wizbar {
-        top: 53px;
+        top: 0;
         padding: 10px 16px
     }
 
@@ -2259,7 +2320,7 @@ textarea.field {
     color: var(--text-muted)
 }
 
-/* Very small phones (≤359px): drop the logo so the menu still fits on one row */
+/* Very small phones (≤359px): the logo goes, the actions keep the top row */
 @media (max-width: 359px) {
     .topbar .brand {
         display: none
