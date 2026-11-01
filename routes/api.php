@@ -84,4 +84,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/autopilot/review/clean-pending', [AutopilotController::class, 'cleanPending']);
     Route::post('/autopilot/review/{clipId}/approve', [AutopilotController::class, 'approve']);
     Route::post('/autopilot/review/{clipId}/reject', [AutopilotController::class, 'reject']);
+    Route::post('/autopilot/review/{clipId}/unapprove', [AutopilotController::class, 'unapprove']);
+    Route::get('/autopilot/youtube', [AutopilotController::class, 'youtubeSettings']);
+    Route::put('/autopilot/youtube', [AutopilotController::class, 'updateYoutubeSettings']);
 });

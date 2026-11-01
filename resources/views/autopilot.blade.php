@@ -139,7 +139,31 @@
   .ap-pv-bg.gaussian::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); aspect-ratio: 16/9; background: linear-gradient(135deg, oklch(0.42 0.08 280), oklch(0.2 0.05 330)); outline: 1px solid rgba(255,255,255,.25); }
   .ap-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+  /* YouTube autopost */
+  .ap-yt { display: flex; flex-direction: column; gap: 16px; }
+  .ap-yt-lead { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin: 0; max-width: 720px; }
+  .ap-yt-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .6fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+  .ap-slots { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ap-slot { display: inline-flex; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .ap-slot input { width: 104px; min-height: 42px; border: 0; background: transparent; color: var(--text); font-family: var(--font-mono); font-size: 14px; padding: 0 4px 0 12px; }
+  .ap-slot button { width: 36px; min-height: 42px; border: 0; background: none; color: var(--text-dim); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 0 10px 10px 0; }
+  .ap-slot button:hover { color: var(--danger); }
+  .ap-yt-tz { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+  .ap-yt-tz b { font-family: var(--font-mono); font-weight: 500; color: var(--text-muted); }
+  .ap-yt-priv { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; border-left: 2px solid var(--warn); padding: 2px 0 2px 10px; margin: 0; }
+  .ap-yt-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ap-yt-saved { font-size: 12.5px; color: var(--text-muted); }
+
+  /* YouTube line on an approved card */
+  .ap-ytline { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-muted); }
+  .ap-ytline b { color: var(--text); font-weight: 600; }
+  .ap-ytline.is-fail b { color: var(--danger); }
+  .ap-ytline small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
+  .ap-ytline .ap-row { margin-top: 6px; gap: 14px; }
+
   @media (max-width: 820px) {
+    .ap-yt-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .ap-yt-grid > :last-child { grid-column: 1 / -1; }
     .ap-ed-body { grid-template-columns: minmax(0, 1fr); }
     .ap-ed-aside { position: static; order: -1; }
     .ap-ed-aside .phone-frame { max-width: 170px; }
@@ -164,6 +188,8 @@
     .ap-wrap { padding: 28px 16px 72px; }
     .ap-head h1 { font-size: 24px; }
     .ap-form-top .btn { width: 100%; justify-content: center; }
+    .ap-yt-grid { grid-template-columns: minmax(0, 1fr); }
+    .ap-yt-foot .btn { width: 100%; justify-content: center; }
   }
 </style>
 </head>
@@ -176,7 +202,7 @@
     <div class="ap-head">
       <h1>Autopilot</h1>
       <p>
-        Cari video baru dari channel atau keyword secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok.
+        Cari video baru dari channel atau keyword secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok atau dijadwalkan ke YouTube Shorts.
         Tampilan klip (layout, subtitle, gaya hook, musik) diatur per sumber lewat <b>Atur tampilan</b>; hook-nya ditulis AI untuk tiap klip.
       </p>
     </div>
@@ -282,6 +308,68 @@
       </div>
     </section>
 
+    {{-- ── YouTube autopost ────────────────────────────────────── --}}
+    <section class="ap-section">
+      <div class="ap-section-head">
+        <h2>Upload otomatis ke YouTube Shorts</h2>
+        <button class="tgl" :class="{ on: yt.enabled }" @click="toggleYt()" type="button" role="switch" :aria-checked="yt.enabled ? 'true' : 'false'"
+                :disabled="yt.saving || !yt.loaded" x-show="yt.accounts.length > 0">
+          <span class="tgl-text" x-text="yt.enabled ? 'Aktif' : 'Nonaktif'"></span><span class="tgl-track"></span>
+        </button>
+      </div>
+
+      <div class="ap-card ap-yt">
+        <div class="ap-cap-muted" x-show="!yt.loaded && !yt.loadError">Memuat pengaturan YouTube…</div>
+        <div class="ap-error" x-show="yt.loadError" x-text="yt.loadError"></div>
+        <template x-if="yt.loaded && !yt.configured">
+          <p class="ap-yt-lead">Isi kredensial YouTube di <code>.env</code> untuk bisa upload ke YouTube.</p>
+        </template>
+        <template x-if="yt.loaded && yt.configured && yt.accounts.length === 0">
+          <p class="ap-yt-lead">Belum ada channel YouTube. <a class="ap-link" href="/youtube/connect">Hubungkan channel</a></p>
+        </template>
+
+        <template x-if="yt.loaded && yt.accounts.length > 0">
+          <div class="ap-yt">
+            <p class="ap-yt-lead">Clip yang kamu approve masuk ke <a class="ap-link" href="/calendar">kalender</a> di jam upload kosong berikutnya. Kalau jatah hari ini sudah penuh, clip pindah ke besok. Jadwalnya bisa digeser atau dibatalkan dari kalender.</p>
+            <div class="ap-yt-grid">
+              <label>
+                <span class="ap-label">Channel</span>
+                <select class="select" x-model="yt.form.youtube_account_id">
+                  <option value="">Pilih channel</option>
+                  <template x-for="a in yt.accounts" :key="a.id">
+                    <option :value="String(a.id)" x-text="a.title || ('Channel #' + a.id)" :selected="yt.form.youtube_account_id === String(a.id)"></option>
+                  </template>
+                </select>
+              </label>
+              <label>
+                <span class="ap-label">Maks per hari</span>
+                <div class="ap-suffix"><input class="field" type="number" min="1" max="10" x-model.number="yt.form.max_per_day"><span>clip</span></div>
+              </label>
+              <div>
+                <span class="ap-label" id="ap-yt-slots">Jam upload</span>
+                <div class="ap-slots" role="group" aria-labelledby="ap-yt-slots">
+                  <template x-for="(t, i) in yt.form.slot_times" :key="i">
+                    <span class="ap-slot">
+                      <input type="time" x-model="yt.form.slot_times[i]" :aria-label="'Jam upload ' + (i + 1)">
+                      <button type="button" @click="yt.form.slot_times.splice(i, 1)" x-show="yt.form.slot_times.length > 1" :aria-label="'Hapus jam ' + t">×</button>
+                    </span>
+                  </template>
+                  <button class="btn btn-ghost ap-btn" type="button" @click="addSlot()" x-show="yt.form.slot_times.length < 10">Tambah jam</button>
+                </div>
+                <div class="ap-yt-tz">Zona waktu <b x-text="yt.form.timezone"></b>, ikut browser ini.</div>
+              </div>
+            </div>
+            <p class="ap-yt-priv">Video dikirim sebagai publik. Selama app ini belum lolos audit YouTube API, YouTube menguncinya jadi privat. Ubah ke publik dari YouTube Studio.</p>
+            <div class="ap-error" x-show="yt.error" x-text="yt.error"></div>
+            <div class="ap-yt-foot">
+              <button class="btn ap-btn" type="button" @click="saveYt()" :disabled="yt.saving" x-text="yt.saving ? 'Menyimpan…' : 'Simpan'"></button>
+              <span class="ap-yt-saved" x-show="yt.savedMsg" x-text="yt.savedMsg" role="status"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
     {{-- ── Review queue ────────────────────────────────────────── --}}
     <section class="ap-section" x-ref="review">
       <div class="ap-section-head">
@@ -300,6 +388,7 @@
                 <template x-for="a in accounts" :key="a.id">
                   <button :class="{ on: accountId === a.id }" @click="accountId = a.id" type="button" x-text="a.display_name || ('Akun #' + a.id)"></button>
                 </template>
+                <button x-show="ytOn()" :class="{ on: accountId === null }" @click="accountId = null" type="button">Tanpa TikTok</button>
               </div>
             </div>
           </template>
@@ -391,12 +480,27 @@
 
             <div class="ap-actions" x-show="c.review_status === 'pending'">
               <button class="btn ap-btn" type="button" @click="approve(c)"
-                      :disabled="c.status !== 'done' || !accountId">Approve → TikTok</button>
+                      :disabled="c.status !== 'done' || c.busy || (!accountId && !ytOn())" x-text="approveLabel()"></button>
               <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
             </div>
             <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': c.tiktok_status === 'failed' }">
               <span x-text="reviewLabel(c)"></span>
               <small x-show="c.tiktok_status === 'failed' && c.tiktok_error" x-text="c.tiktok_error"></small>
+              <template x-if="c.review_status === 'approved' && (c.youtube || c.ytNote)">
+                <div class="ap-ytline" :class="{ 'is-fail': ytFailed(c) }">
+                  <span>YouTube: <b x-text="ytLabel(c)"></b></span>
+                  <small x-show="ytError(c)" x-text="ytError(c)"></small>
+                  <div class="ap-row">
+                    <a class="ap-link" x-show="c.youtube?.url" :href="c.youtube?.url" target="_blank" rel="noopener">Buka di YouTube</a>
+                    <a class="ap-link" x-show="/hubungkan ulang/i.test(ytError(c) || '')" href="/youtube/connect">Hubungkan ulang channel</a>
+                    <a class="ap-link" x-show="c.youtube && ['scheduled', 'failed'].includes(c.youtube.status)" href="/calendar">Atur di kalender</a>
+                    <button class="ap-link" type="button" x-show="c.youtube?.status === 'scheduled'" :disabled="c.busy" @click="cancelYt(c)">Batalkan jadwal</button>
+                  </div>
+                </div>
+              </template>
+              <div class="ap-row" style="margin-top:10px" x-show="canUnapprove(c)">
+                <button class="ap-link" type="button" :disabled="c.busy" @click="unapprove(c)">Batalkan approve</button>
+              </div>
             </div>
             <div x-show="c.actionError" class="ap-error" style="margin-top:10px;font-size:12px" x-text="c.actionError"></div>
           </div>
@@ -739,6 +843,8 @@ function autopilot() {
     reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
     performance: { clip_count: 0, total_views: 0, total_likes: 0, best_clip: null, top_clips: [] },
     cleaning: false, cleanMsg: '',
+    yt: { loaded: false, loadError: '', configured: false, accounts: [], enabled: false, saving: false, error: '', savedMsg: '',
+          form: { youtube_account_id: null, max_per_day: 3, slot_times: ['09:00', '15:00', '20:00'], timezone: 'Asia/Jakarta' } },
     REVIEW_FILTERS: [
       { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
       { id: 'approved', label: 'Disetujui' }, { id: 'rejected', label: 'Ditolak' },
@@ -756,7 +862,7 @@ function autopilot() {
 
     async init() {
       document.fonts?.ready.then(() => this.fontsTick++);
-      await Promise.all([this.loadSources(), this.loadClips(), this.loadAccounts(), this.loadDefaults(),
+      await Promise.all([this.loadSources(), this.loadClips(), this.loadAccounts(), this.loadDefaults(), this.loadYt(),
         api('/api/music').then(d => { this.musicTotal = d.total; }).catch(() => {})]);
       // Rendering and uploads progress in the background; keep the page fresh
       this.timer = setInterval(() => { this.loadClips(); this.loadSources(); }, 10000);
@@ -828,7 +934,8 @@ function autopilot() {
           this.reviewPage = res.last_page;
           return this.loadClips();
         }
-        this.clips = res.data.map(c => ({ ...c, actionError: errors[c.id] || null }));
+        const notes = Object.fromEntries(this.clips.filter(c => c.ytNote).map(c => [c.id, c.ytNote]));
+        this.clips = res.data.map(c => ({ ...c, actionError: errors[c.id] || null, ytNote: notes[c.id] || null, busy: false }));
         Object.assign(this, { reviewLastPage: res.last_page, reviewTotal: res.total, pendingCount: res.pending, reviewCounts: res.counts });
       } catch (e) { console.error(e); }
       this.fillCaptions();
@@ -927,10 +1034,102 @@ function autopilot() {
     },
     async approve(c) {
       c.actionError = null;
+      c.busy = true;
       try {
-        await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST', body: JSON.stringify({ account_id: this.accountId }) });
+        const r = await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST', body: JSON.stringify({ account_id: this.accountId }) });
+        c.ytNote = r.youtube?.error || null; // approved, but YouTube could not take it: keep the reason on the card
         await this.loadClips();
       } catch (e) { c.actionError = e.message; }
+      finally { c.busy = false; }
+    },
+    async unapprove(c) {
+      c.actionError = null;
+      c.busy = true;
+      try {
+        await api(`/api/autopilot/review/${c.id}/unapprove`, { method: 'POST' });
+        c.ytNote = null;
+        await this.loadClips();
+      } catch (e) { c.actionError = e.message; }
+      finally { c.busy = false; }
+    },
+    async cancelYt(c) {
+      c.actionError = null;
+      c.busy = true;
+      try {
+        await api(`/api/schedule/${c.youtube.post_id}`, { method: 'DELETE' });
+        await this.loadClips();
+      } catch (e) { c.actionError = e.message; }
+      finally { c.busy = false; }
+    },
+    approveLabel() {
+      const to = [this.accountId ? 'TikTok' : null, this.ytOn() ? 'YouTube' : null].filter(Boolean);
+      return to.length ? 'Approve → ' + to.join(' + ') : 'Approve';
+    },
+    // Nothing went out yet: TikTok untouched and the YouTube post still waiting
+    canUnapprove(c) {
+      return c.review_status === 'approved' && !c.tiktok_status && (!c.youtube || ['scheduled', 'failed'].includes(c.youtube.status));
+    },
+
+    // ── YouTube autopost ─────────────────────────────────────────
+    ytOn() { return this.yt.loaded && this.yt.enabled; },
+    async loadYt() {
+      try {
+        const d = await api('/api/autopilot/youtube');
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        Object.assign(this.yt, { loaded: true, loadError: '', configured: d.configured, accounts: d.accounts, enabled: d.enabled });
+        this.yt.form = {
+          youtube_account_id: String(d.youtube_account_id ?? (d.accounts.length === 1 ? d.accounts[0].id : '')),
+          max_per_day: d.max_per_day, slot_times: [...d.slot_times],
+          // Slots are wall-clock times: follow the browser until the user has saved once
+          timezone: d.saved ? d.timezone : (browserTz || d.timezone),
+        };
+        if (d.enabled && !d.youtube_account_id) this.yt.error = 'Channel yang dipilih sudah diputus. Pilih channel lain, lalu simpan.';
+      } catch (e) { this.yt.loadError = 'Pengaturan YouTube gagal dimuat: ' + e.message; }
+    },
+    addSlot() {
+      const last = this.yt.form.slot_times[this.yt.form.slot_times.length - 1] || '09:00';
+      const h = (parseInt(last, 10) + 3) % 24;
+      this.yt.form.slot_times.push(String(h).padStart(2, '0') + ':00');
+    },
+    async saveYt(enabled = this.yt.enabled) {
+      this.yt.error = ''; this.yt.savedMsg = '';
+      const f = this.yt.form;
+      if (enabled && !f.youtube_account_id) { this.yt.error = 'Pilih channel YouTube dulu.'; return false; }
+      if (!(f.max_per_day >= 1 && f.max_per_day <= 10)) { this.yt.error = 'Maks per hari antara 1 dan 10 clip.'; return false; }
+      if (f.slot_times.some(t => !t)) { this.yt.error = 'Ada jam upload yang masih kosong.'; return false; }
+      this.yt.saving = true;
+      try {
+        const body = { ...f, enabled, youtube_account_id: f.youtube_account_id ? Number(f.youtube_account_id) : null };
+        const d = await api('/api/autopilot/youtube', { method: 'PUT', body: JSON.stringify(body) });
+        Object.assign(this.yt, { enabled: d.enabled });
+        this.yt.form.slot_times = [...d.slot_times];
+        this.yt.savedMsg = d.enabled ? 'Tersimpan. Clip yang di-approve dijadwalkan ke YouTube.' : 'Tersimpan. Upload YouTube otomatis mati.';
+        if (!this.yt.enabled && this.accountId === null) this.accountId = this.accounts[0]?.id ?? null;
+        return true;
+      } catch (e) { this.yt.error = e.message; return false; }
+      finally { this.yt.saving = false; }
+    },
+    toggleYt() { this.saveYt(!this.yt.enabled); },
+    ytFailed(c) {
+      const y = c.youtube;
+      return !y ? !!c.ytNote : (y.status === 'failed' || y.delivery === 'failed');
+    },
+    ytError(c) { return c.youtube?.error || (!c.youtube ? c.ytNote : null); },
+    ytLabel(c) {
+      const y = c.youtube;
+      if (!y) return 'tidak dijadwalkan';
+      if (y.status === 'scheduled') {
+        return 'terjadwal ' + new Date(y.scheduled_at).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      }
+      if (y.status === 'publishing') return 'sedang dikirim…';
+      if (y.status === 'failed') return 'gagal dikirim';
+      return {
+        queued: 'menunggu antrian upload…',
+        uploading: 'mengupload…',
+        processing: 'terupload, YouTube sedang memproses',
+        published: 'sudah tayang',
+        failed: 'upload gagal',
+      }[y.delivery] || 'dikirim';
     },
     // Approved clips are already in TikTok: drop their files and cards
     async cleanApproved() {
@@ -970,8 +1169,9 @@ function autopilot() {
       if (c.review_status === 'pending') {
         return c.status === 'done' ? { label: 'Perlu review', cls: 'b-pending' } : { label: 'Rendering', cls: 'b-busy' };
       }
-      if (c.tiktok_status === 'failed') return { label: 'Upload gagal', cls: 'b-fail' };
-      if (['inbox', 'published'].includes(c.tiktok_status)) return { label: 'Terkirim', cls: 'b-ok' };
+      if (c.tiktok_status === 'failed' || (c.youtube && this.ytFailed(c))) return { label: 'Upload gagal', cls: 'b-fail' };
+      if (['inbox', 'published'].includes(c.tiktok_status) || ['processing', 'published'].includes(c.youtube?.delivery)) return { label: 'Terkirim', cls: 'b-ok' };
+      if (c.youtube?.status === 'scheduled') return { label: 'Terjadwal', cls: 'b-busy' };
       return { label: 'Disetujui', cls: 'b-busy' };
     },
     reviewLabel(c) {

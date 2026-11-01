@@ -98,6 +98,11 @@ class GeneratedClip extends Model
         return $this->hasOne(HookTest::class);
     }
 
+    public function scheduledPosts(): HasMany
+    {
+        return $this->hasMany(ScheduledPost::class);
+    }
+
     public function durationSeconds(): float
     {
         return $this->end_seconds - $this->start_seconds;

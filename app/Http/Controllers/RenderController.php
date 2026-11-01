@@ -6,7 +6,7 @@ use App\Exceptions\QuotaExceeded;
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\RenderClipJob;
 use App\Models\GeneratedClip;
-use App\Services\GeminiService;
+use App\Services\ClipCaption;
 use App\Services\MusicService;
 use App\Services\RenderQuota;
 use App\Support\HookText;
@@ -154,43 +154,17 @@ class RenderController extends Controller
         ]);
     }
 
-    public function caption(string $clipId, GeminiService $gemini, MusicService $music): JsonResponse
+    public function caption(string $clipId, ClipCaption $captions, MusicService $music): JsonResponse
     {
         $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
 
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
 
         $credit = $music->creditFor($clip->music_track);
-        $withCredit = fn (string $caption) => $music->captionWithCredit($caption, $credit);
-
-        // Return cached caption if already generated (an empty one was a failed call: retry)
-        if ($clip->caption !== null && $clip->caption !== '') {
-            return response()->json([
-                'caption' => $withCredit($clip->caption),
-                'hashtags' => $clip->hashtags_json ?? [],
-                'music_credit' => $credit,
-            ]);
-        }
-
-        $lang = $clip->clipProject->transcript?->language ?? 'id';
-        $segments = $clip->subtitle_json ?? [];
-
-        $result = $gemini->generateCaption(
-            $clip->topic,
-            HookText::plain($clip->hook_text_override ?? $clip->hook_text ?? ''),
-            $segments,
-            $lang,
-        );
-
-        if ($result['caption'] !== '') {
-            $clip->update([
-                'caption' => $result['caption'],
-                'hashtags_json' => $result['hashtags'],
-            ]);
-        }
+        $result = $captions->ensure($clip);
 
         return response()->json([
-            'caption' => $withCredit($result['caption']),
+            'caption' => $music->captionWithCredit($result['caption'], $credit),
             'hashtags' => $result['hashtags'],
             'music_credit' => $credit,
         ]);

@@ -215,7 +215,7 @@ class YouTubeService
         $json = $res->json() ?? [];
         if (! $res->successful() || empty($json['access_token'])) {
             if (($json['error'] ?? '') === 'invalid_grant') {
-                throw new RuntimeException('Sesi YouTube kedaluwarsa atau dicabut — hubungkan ulang channel YouTube.');
+                throw new RuntimeException('Sesi YouTube kedaluwarsa atau dicabut. Hubungkan ulang channel YouTube.');
             }
             $msg = $json['error_description'] ?? $json['error'] ?? $res->body();
             throw new RuntimeException("Google token gagal ({$res->status()}): {$msg}");
