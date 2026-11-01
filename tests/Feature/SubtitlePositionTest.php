@@ -3,16 +3,16 @@
 namespace Tests\Feature;
 
 use App\Models\SubtitleSetting;
+use App\Models\User;
 use App\Services\FFmpegService;
 use App\Services\ProjectCreator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
-use Tests\Concerns\VerifiesYouTubeChannel;
 use Tests\TestCase;
 
 class SubtitlePositionTest extends TestCase
 {
-    use RefreshDatabase, VerifiesYouTubeChannel;
+    use RefreshDatabase;
 
     private function ass(?float $y): string
     {
@@ -60,7 +60,7 @@ class SubtitlePositionTest extends TestCase
     public function test_project_stores_position_and_rejects_off_screen_values(): void
     {
         Queue::fake();
-        $user = $this->verifiedUser();
+        $user = User::factory()->create();
         $base = [
             'youtube_url' => 'https://youtu.be/abcdefghijk', 'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto',
         ];

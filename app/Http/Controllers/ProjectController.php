@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Http\Requests\StoreProjectRequest;
-use App\Http\Requests\StoreUploadedProjectRequest;
 use App\Jobs\AnalyzeVideoJob;
 use App\Models\ClipProject;
 use App\Services\ProjectCreator;
@@ -14,7 +13,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class ProjectController extends Controller
 {
@@ -23,50 +21,14 @@ class ProjectController extends Controller
     public function store(StoreProjectRequest $request, ProjectCreator $creator): JsonResponse
     {
         $data = $request->validated();
-        $url = YoutubeUrl::canonical($data['youtube_url']);
-
-        // Only ever store/hand yt-dlp a URL we rebuilt from the video id.
-        // ProjectCreator enforces channel ownership for every project path.
-        $project = $creator->create(Auth::id(), $url, $data);
+        // Only ever store/hand yt-dlp a URL we rebuilt from the video id
+        $project = $creator->create(Auth::id(), YoutubeUrl::canonical($data['youtube_url']), $data);
         $this->ensureQueueWorkerRunning();
 
         Log::channel('clipper_api')->info('Project created, AnalyzeVideoJob dispatched', [
             'project_id' => $project->id,
             'user_id' => Auth::id(),
             'url' => $project->youtube_url,
-            'layout' => $project->layout_type,
-            'clip_count' => $project->clip_count,
-        ]);
-
-        return response()->json([
-            'project_id' => $project->id,
-            'status' => $project->status,
-        ], 201);
-    }
-
-    public function upload(StoreUploadedProjectRequest $request, ProjectCreator $creator): JsonResponse
-    {
-        $data = $request->validated();
-        $file = $request->file('video');
-        $path = $file->storeAs(
-            'uploads/'.Auth::id(),
-            Str::uuid().'.'.strtolower($file->extension()),
-            'local'
-        );
-
-        $project = $creator->create(
-            Auth::id(),
-            'upload://direct',
-            $data,
-            sourceFilePath: $path,
-        );
-        $project->update(['video_title' => $data['title'] ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)]);
-        $this->ensureQueueWorkerRunning();
-
-        Log::channel('clipper_api')->info('Uploaded project created, AnalyzeVideoJob dispatched', [
-            'project_id' => $project->id,
-            'user_id' => Auth::id(),
-            'source_path' => $path,
             'layout' => $project->layout_type,
             'clip_count' => $project->clip_count,
         ]);
@@ -129,10 +91,6 @@ class ProjectController extends Controller
         $project->transcript()->delete();
         $project->generatedClips()->delete();
         $project->delete();
-
-        if ($project->source_file_path) {
-            Storage::disk('local')->delete($project->source_file_path);
-        }
 
         // Rendered MP4s and the per-project source copy (video_cache keeps its own)
         Storage::deleteDirectory("clips/{$project->user_id}/{$project->id}");

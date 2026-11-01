@@ -42,10 +42,10 @@ class YouTubeController extends Controller
     {
         $expected = $request->session()->pull('youtube_oauth_state');
         if (! $expected || ! hash_equals($expected, (string) $request->query('state'))) {
-            return $this->connectFailed('Sesi otorisasi Google tidak cocok atau sudah kedaluwarsa. Coba hubungkan lagi.');
+            return redirect('/?youtube=invalid_state');
         }
         if ($request->query('error') || ! $request->query('code')) {
-            return $this->connectFailed('Izin Google dibatalkan. Channel belum terverifikasi.');
+            return redirect('/?youtube=denied');
         }
 
         try {
@@ -53,17 +53,10 @@ class YouTubeController extends Controller
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('YouTube connect failed', ['error' => $e->getMessage()]);
 
-            return $this->connectFailed($e->getMessage());
+            return redirect('/?youtube=error');
         }
 
-        return redirect()->route('youtube.settings')
-            ->with('status', 'Channel YouTube terverifikasi. Video dari channel ini sekarang bisa diolah di Studio dan Autopilot.');
-    }
-
-    /** Back to the page that explains verification, with Google's actual reason. */
-    private function connectFailed(string $message): RedirectResponse
-    {
-        return redirect()->route('youtube.settings')->with('error', $message);
+        return redirect('/?youtube=connected');
     }
 
     public function accounts(): JsonResponse

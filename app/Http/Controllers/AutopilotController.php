@@ -13,7 +13,6 @@ use App\Services\ClipPerformanceSummary;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
 use App\Services\StorageCleanup;
-use App\Services\YouTubeService;
 use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
@@ -21,8 +20,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
-use Throwable;
 
 class AutopilotController extends Controller
 {
@@ -59,13 +56,16 @@ class AutopilotController extends Controller
         return response()->json(ClipSettings::forAutopilot($creator->settingsFrom($this->latestManualProject())));
     }
 
-    public function storeSource(Request $request, ProjectCreator $creator, YouTubeService $youtube): JsonResponse
+    public function storeSource(Request $request, ProjectCreator $creator): JsonResponse
     {
         $data = $request->validate([
-            'type' => ['required', 'in:channel'],
+            'type' => ['required', 'in:channel,keyword'],
             'value' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) use ($request) {
                 if ($request->input('type') === 'channel' && ! YoutubeUrl::channel($value)) {
                     $fail('Channel tidak valid. Pakai @namachannel atau link youtube.com/@namachannel.');
+                }
+                if ($request->input('type') === 'keyword' && preg_match('/[\r\n]/', $value)) {
+                    $fail('Keyword tidak boleh berisi baris baru.');
                 }
             }],
             'interval_hours' => ['sometimes', 'integer', 'min:1', 'max:168'],
@@ -76,12 +76,11 @@ class AutopilotController extends Controller
 
         // Look chosen in the form, else the user's latest manual project
         $settings = $data['settings'] ?? $creator->settingsFrom($this->latestManualProject());
-        $this->requireOwnedChannel(Auth::id(), $data['value'], $youtube);
 
         $source = VideoSource::create([
             'user_id' => Auth::id(),
             'type' => $data['type'],
-            'value' => YoutubeUrl::channel($data['value']),
+            'value' => $data['type'] === 'channel' ? YoutubeUrl::channel($data['value']) : trim($data['value']),
             'interval_hours' => $data['interval_hours'] ?? 6,
             'max_per_run' => $data['max_per_run'] ?? 1,
             'min_video_seconds' => ($data['min_minutes'] ?? 5) * 60,
@@ -285,21 +284,6 @@ class AutopilotController extends Controller
     private function latestManualProject(): ?ClipProject
     {
         return ClipProject::where('user_id', Auth::id())->whereNull('video_source_id')->latest()->first();
-    }
-
-    private function requireOwnedChannel(int $userId, string $value, YouTubeService $youtube): void
-    {
-        try {
-            $ownedChannelId = $youtube->verifiedChannelIdForSource($userId, $value);
-        } catch (Throwable) {
-            $ownedChannelId = null;
-        }
-
-        if (! $ownedChannelId) {
-            throw ValidationException::withMessages([
-                'value' => 'Autopilot hanya boleh memantau channel YouTube milikmu sendiri, dan hanya channel yang sudah kamu verifikasi. Buka /settings/youtube untuk menghubungkan channel, lalu pakai channel yang sama di sini.',
-            ]);
-        }
     }
 
     private function ownedSource(int $sourceId): VideoSource

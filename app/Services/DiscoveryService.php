@@ -8,7 +8,6 @@ use App\Models\VideoSource;
 use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 /**
  * Autopilot step 1: find new videos for a source and start a project for each
@@ -21,7 +20,6 @@ class DiscoveryService
     public function __construct(
         private YtDlpService $ytdlp,
         private ProjectCreator $creator,
-        private YouTubeService $youtube,
     ) {}
 
     /** @return ClipProject[] projects started in this run */
@@ -29,14 +27,7 @@ class DiscoveryService
     {
         $log = Log::channel('clipper_jobs');
 
-        // Autopilot only monitors channels the user proved by OAuth. A channel
-        // connected then disconnected fails here until it is verified again.
-        $ownedChannelId = $this->youtube->verifiedChannelIdForSource($source->user_id, (string) $source->value);
-        if (! $ownedChannelId) {
-            throw new RuntimeException('Channel sumber ini belum/tidak lagi terverifikasi sebagai milikmu. Hubungkan channel di /settings/youtube, lalu jalankan ulang.');
-        }
-
-        $candidates = $this->ytdlp->listVideos('channel', YoutubeUrl::channel($source->value), self::LIST_LIMIT);
+        $candidates = $this->ytdlp->listVideos($source->type, $source->value, self::LIST_LIMIT);
         $seen = DiscoveredVideo::where('user_id', $source->user_id)
             ->whereIn('video_id', array_column($candidates, 'id'))
             ->pluck('video_id')
@@ -57,15 +48,7 @@ class DiscoveryService
             if (! $url) {
                 continue;
             }
-            // The source channel was verified above; every video listed under it
-            // shares that ownership, so no per-video lookup is needed.
-            $project = $this->creator->create(
-                $source->user_id,
-                $url,
-                ClipSettings::forAutopilot($source->settings),
-                $source->id,
-                verifiedChannelId: $ownedChannelId,
-            );
+            $project = $this->creator->create($source->user_id, $url, ClipSettings::forAutopilot($source->settings), $source->id);
 
             DiscoveredVideo::create([
                 'user_id' => $source->user_id,

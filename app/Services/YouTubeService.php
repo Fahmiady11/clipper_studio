@@ -3,12 +3,10 @@
 namespace App\Services;
 
 use App\Models\YoutubeAccount;
-use App\Support\YoutubeUrl;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
-use Throwable;
 
 /**
  * Google OAuth 2.0 + YouTube Data API v3 uploads. A vertical video of up to
@@ -63,10 +61,6 @@ class YouTubeService
         ]);
         if (empty($token['refresh_token'])) {
             throw new RuntimeException('Google tidak mengirim refresh token. Cabut akses app di myaccount.google.com/permissions lalu hubungkan ulang.');
-        }
-
-        if (! in_array('https://www.googleapis.com/auth/youtube.readonly', preg_split('/\s+/', $token['scope'] ?? ''), true)) {
-            throw new RuntimeException('Izin youtube.readonly belum diberikan. Hubungkan ulang channel YouTube untuk verifikasi kepemilikan.');
         }
 
         $channel = $this->api($token['access_token'], 'get', 'channels', ['part' => 'snippet', 'mine' => 'true'])['items'][0] ?? null;
@@ -154,81 +148,6 @@ class YouTubeService
                 'reason' => 'YouTube menolak video: '.($s['rejectionReason'] ?? $s['failureReason'] ?? $s['uploadStatus'])],
             default => ['status' => 'processing', 'privacy' => $s['privacyStatus'] ?? null, 'reason' => null],
         };
-    }
-
-    /**
-     * The channel id of a YouTube video, but only when that channel is one the
-     * user proved with OAuth (channels?mine=true at connect time). Null means
-     * "not yours" or "cannot tell", which callers treat the same way.
-     */
-    public function verifiedChannelIdForVideo(int $userId, string $url): ?string
-    {
-        $videoId = YoutubeUrl::videoId($url);
-        $owned = YoutubeAccount::where('user_id', $userId)->orderByDesc('updated_at')->get();
-        if (! $videoId || $owned->isEmpty()) {
-            return null;
-        }
-
-        $channelId = null;
-        foreach ($owned as $account) {
-            try {
-                $channelId = $this->api($this->freshToken($account), 'get', 'videos', [
-                    'part' => 'snippet',
-                    'id' => $videoId,
-                    'fields' => 'items(id,snippet(channelId))',
-                ])['items'][0]['snippet']['channelId'] ?? null;
-
-                break; // videos.list is public data: one working token settles it
-            } catch (Throwable) {
-                continue; // stale token; try the next connected channel
-            }
-        }
-
-        return $channelId && $owned->contains(fn ($a) => hash_equals($a->channel_id, $channelId))
-            ? $channelId
-            : null;
-    }
-
-    /**
-     * Resolve an autopilot channel source and accept it only when it is the
-     * channel already proved to belong to the user by OAuth.
-     */
-    public function verifiedChannelIdForSource(int $userId, string $source): ?string
-    {
-        $canonical = YoutubeUrl::channel($source);
-        if (! $canonical || ! preg_match('#/channel/(UC[A-Za-z0-9_-]+)|/@([A-Za-z0-9._-]+)#', $canonical, $m)) {
-            return null;
-        }
-
-        $requestedId = $m[1] ?? null;
-        $handle = isset($m[2]) ? '@'.$m[2] : null;
-        $accounts = YoutubeAccount::where('user_id', $userId)->orderByDesc('updated_at')->get();
-
-        foreach ($accounts as $account) {
-            if ($requestedId) {
-                if (hash_equals($account->channel_id, $requestedId)) {
-                    return $account->channel_id;
-                }
-
-                continue;
-            }
-
-            try {
-                $resolvedId = $this->api($this->freshToken($account), 'get', 'channels', [
-                    'part' => 'id',
-                    'forHandle' => $handle,
-                    'maxResults' => 1,
-                ])['items'][0]['id'] ?? null;
-
-                if ($resolvedId && hash_equals($account->channel_id, $resolvedId)) {
-                    return $account->channel_id;
-                }
-            } catch (Throwable) {
-                // A stale token does not make the requested channel foreign; try another account.
-            }
-        }
-
-        return null;
     }
 
     /**

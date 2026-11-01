@@ -8,25 +8,16 @@ use App\Services\ProjectCreator;
 use App\Support\ClipSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
-use Tests\Concerns\VerifiesYouTubeChannel;
 use Tests\TestCase;
 
 class SmartCutSettingsTest extends TestCase
 {
-    use RefreshDatabase, VerifiesYouTubeChannel;
-
-    private User $user;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        Queue::fake();
-        $this->user = $this->verifiedUser();
-    }
+    use RefreshDatabase;
 
     public function test_edit_options_are_stored_on_the_project_and_read_back(): void
     {
-        $user = $this->user;
+        Queue::fake();
+        $user = User::factory()->create();
         $creator = app(ProjectCreator::class);
 
         $default = $creator->create($user->id, 'https://youtu.be/abcdefghijk', ClipSettings::normalize([]));
@@ -40,7 +31,8 @@ class SmartCutSettingsTest extends TestCase
 
     public function test_studio_request_accepts_edit_options(): void
     {
-        $user = $this->user;
+        Queue::fake();
+        $user = User::factory()->create();
 
         $this->actingAs($user)->postJson('/api/projects', [
             'youtube_url' => 'https://youtu.be/abcdefghijk',

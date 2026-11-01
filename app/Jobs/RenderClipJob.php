@@ -91,16 +91,10 @@ class RenderClipJob implements ShouldQueue
         $srcVideo = $tempDir.'/video.mp4';
 
         if (! file_exists($srcVideo)) {
+            // Source removed by clipper:cleanup — fetch it again (served from video_cache when still there)
+            $log->info('Source video missing, re-downloading', ['project_id' => $project->id]);
             @mkdir($tempDir, 0755, true);
-
-            if ($project->source_file_path && Storage::disk('local')->exists($project->source_file_path)) {
-                $log->info('Source video missing, restoring upload', ['project_id' => $project->id]);
-                copy(Storage::disk('local')->path($project->source_file_path), $srcVideo);
-            } else {
-                // Source removed by clipper:cleanup — fetch it again (served from video_cache when still there)
-                $log->info('Source video missing, re-downloading', ['project_id' => $project->id]);
-                $ytdlp->download($project->youtube_url, $srcVideo);
-            }
+            $ytdlp->download($project->youtube_url, $srcVideo);
         }
 
         $step2 = $tempDir.'/layout_'.$this->clipId.'.mp4';

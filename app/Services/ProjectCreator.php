@@ -7,7 +7,6 @@ use App\Models\BrandKit;
 use App\Models\ClipProject;
 use App\Models\HookSetting;
 use App\Models\SubtitleSetting;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Creates a clip project with its subtitle/hook settings and queues analysis.
@@ -17,26 +16,8 @@ use Illuminate\Validation\ValidationException;
  */
 class ProjectCreator
 {
-    public function __construct(private YouTubeService $youtube) {}
-
-    public function create(
-        int $userId,
-        string $youtubeUrl,
-        array $settings,
-        ?int $videoSourceId = null,
-        ?string $sourceFilePath = null,
-        ?string $verifiedChannelId = null,
-    ): ClipProject {
-        // One choke point for every project path (studio, autopilot, retries):
-        // a YouTube source must belong to a channel the user proved by OAuth.
-        // A directly uploaded file needs no channel check.
-        if ($sourceFilePath === null && $verifiedChannelId === null
-            && ! $this->youtube->verifiedChannelIdForVideo($userId, $youtubeUrl)) {
-            throw ValidationException::withMessages([
-                'youtube_url' => 'Video ini bukan dari channel YouTube yang sudah kamu verifikasi. Clipper hanya mengolah video milikmu sendiri. Hubungkan channel di /settings/youtube, lalu tempel link video dari channel itu — atau unggah file videonya langsung.',
-            ]);
-        }
-
+    public function create(int $userId, string $youtubeUrl, array $settings, ?int $videoSourceId = null): ClipProject
+    {
         $manual = ($settings['duration_mode'] ?? 'auto') === 'manual';
         // Brand kit fills in only what the request leaves out; explicit values win
         $brand = BrandKit::where('user_id', $userId)->first()?->projectDefaults() ?? [];
@@ -45,7 +26,6 @@ class ProjectCreator
             'user_id' => $userId,
             'video_source_id' => $videoSourceId,
             'youtube_url' => $youtubeUrl,
-            'source_file_path' => $sourceFilePath,
             'layout_type' => $settings['layout_type'] ?? 'reframe',
             'jump_cut' => $settings['edit']['jump_cut'] ?? true,
             'auto_zoom' => $settings['edit']['zoom'] ?? true,

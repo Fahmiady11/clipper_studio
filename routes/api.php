@@ -17,7 +17,6 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::post('/projects', [ProjectController::class, 'store'])->middleware('throttle:10,1');
-    Route::post('/projects/upload', [ProjectController::class, 'upload'])->middleware('throttle:10,1');
     Route::get('/projects/{projectId}/status', [ProjectController::class, 'status']);
     Route::get('/projects/{projectId}/download', [DownloadController::class, 'project']);
     Route::delete('/projects', [ProjectController::class, 'destroyAll']);
