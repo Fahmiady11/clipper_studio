@@ -25,6 +25,11 @@
   .tk-meta { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); }
   .tk-err { color: var(--danger); font-size: 13px; margin-top: 8px; }
   .tk-snip { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; overflow-x: auto; white-space: pre; margin: 10px 0 0; }
+  .tk-abil { border: 0; margin: 0; padding: 0; width: 100%; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  .tk-abil legend { padding: 0; margin-bottom: 6px; }
+  .tk-abil label { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.4; flex: 1 1 200px; }
+  .tk-abil input { margin-top: 3px; }
+  .tk-abil small { display: block; color: var(--text-muted); }
   .tk-sec { margin-top: 36px; }
   .tk-sec h2 { font-size: 16px; margin: 0; }
   @media (max-width: 480px) { .tk-wrap { padding: 24px 16px 72px; } .tk-form .btn { width: 100%; } }
@@ -46,7 +51,13 @@
   <form class="tk-form" @submit.prevent="create()">
     <label class="fblock-title" for="tk-name" style="width:100%;margin:0">Nama token</label>
     <input id="tk-name" class="tk-input" type="text" maxlength="100" required x-model="name" placeholder="mis. Claude Code laptop" />
-    <button type="submit" class="btn" :disabled="busy">Buat token</button>
+    <fieldset class="tk-abil">
+      <legend class="fblock-title">Izin</legend>
+      <label><input type="checkbox" value="read" x-model="abilities" /><span>Baca<small>Lihat project, status, dan unduh klip</small></span></label>
+      <label><input type="checkbox" value="render" x-model="abilities" /><span>Render<small>Buat project, render, batalkan (memakai kuota)</small></span></label>
+      <label><input type="checkbox" value="publish" x-model="abilities" /><span>Publish<small>Upload ke YouTube / TikTok yang tersambung</small></span></label>
+    </fieldset>
+    <button type="submit" class="btn" :disabled="busy || !abilities.length">Buat token</button>
   </form>
   <div class="tk-err" x-show="error" x-text="error" role="alert"></div>
 
@@ -58,6 +69,7 @@
         <li class="tk-row">
           <div>
             <div class="tk-name" x-text="t.name"></div>
+            <div class="tk-meta" x-text="'Izin: ' + (t.abilities || []).join(', ')"></div>
             <div class="tk-meta" x-text="t.last_used_at ? 'Terakhir dipakai ' + fmt(t.last_used_at) : 'Belum pernah dipakai'"></div>
           </div>
           <button type="button" class="btn-secondary btn-sm" @click="revoke(t)" :aria-label="'Cabut token ' + t.name">Cabut</button>
@@ -88,7 +100,7 @@ function apiTokens() {
     return data;
   });
   return {
-    tokens: [], loaded: false, name: '', busy: false, error: '', created: null, copied: false,
+    tokens: [], loaded: false, name: '', abilities: ['read', 'render'], busy: false, error: '', created: null, copied: false,
     fmt: (iso) => new Date(iso).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
     async load() {
       try { this.tokens = await call('GET', '/api/tokens'); } catch (e) { this.error = e.message; }
@@ -97,7 +109,7 @@ function apiTokens() {
     async create() {
       this.busy = true; this.error = '';
       try {
-        this.created = await call('POST', '/api/tokens', { name: this.name });
+        this.created = await call('POST', '/api/tokens', { name: this.name, abilities: this.abilities });
         this.copied = false; this.name = '';
         await this.load();
       } catch (e) { this.error = e.message; }

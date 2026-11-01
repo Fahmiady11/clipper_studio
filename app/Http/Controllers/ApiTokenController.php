@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\TokenLimitReached;
 use App\Models\ApiToken;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,7 +11,8 @@ use Illuminate\View\View;
 
 class ApiTokenController extends Controller
 {
-    private const MAX_PER_USER = 10;
+    // Without an explicit choice: drive the pipeline, never publish
+    private const DEFAULT_ABILITIES = ['read', 'render'];
 
     public function page(): View
     {
@@ -21,18 +23,25 @@ class ApiTokenController extends Controller
     {
         return response()->json(ApiToken::where('user_id', Auth::id())
             ->orderByDesc('created_at')
-            ->get(['id', 'name', 'last_used_at', 'created_at']));
+            ->get(['id', 'name', 'abilities', 'last_used_at', 'created_at']));
     }
 
     /** The plain token is in this response only; afterwards just its hash exists. */
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100']]);
-        abort_if(ApiToken::where('user_id', Auth::id())->count() >= self::MAX_PER_USER, 422, 'Maksimal '.self::MAX_PER_USER.' token. Hapus yang tidak dipakai dulu.');
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'abilities' => ['sometimes', 'array', 'min:1'],
+            'abilities.*' => ['string', 'in:'.implode(',', ApiToken::ABILITIES)],
+        ]);
 
-        [$token, $plain] = ApiToken::issue(Auth::user(), $data['name']);
+        try {
+            [$token, $plain] = ApiToken::issueLimited(Auth::user(), $data['name'], $data['abilities'] ?? self::DEFAULT_ABILITIES);
+        } catch (TokenLimitReached $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
-        return response()->json(['id' => $token->id, 'name' => $token->name, 'token' => $plain], 201);
+        return response()->json(['id' => $token->id, 'name' => $token->name, 'abilities' => $token->abilities, 'token' => $plain], 201);
     }
 
     public function destroy(int $tokenId): JsonResponse

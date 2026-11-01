@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\ThrottleAgent;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,9 @@ class McpController extends Controller
 {
     private const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
+    // Inner calls skip the agent throttle (see ThrottleAgent), so cap what one request can fan out to
+    private const MAX_BATCH = 20;
+
     public function handle(Request $request): JsonResponse|Response
     {
         $payload = $request->json()->all();
@@ -25,6 +29,9 @@ class McpController extends Controller
         }
 
         if (array_is_list($payload)) {
+            if (count($payload) > self::MAX_BATCH) {
+                return $this->error(null, -32600, 'Batch terlalu besar (maksimal '.self::MAX_BATCH.' pesan).');
+            }
             $replies = array_values(array_filter(array_map(fn ($m) => $this->message($request, $m), $payload)));
 
             return $replies ? response()->json($replies) : response()->noContent(202);
@@ -56,13 +63,21 @@ class McpController extends Controller
                 'instructions' => 'Clipper turns a YouTube video into short vertical clips. create_project, poll get_status until done, list_clips, render_clip, poll get_render_status, then publish.',
             ]),
             'ping' => $this->result($id, new \stdClass),
-            'tools/list' => $this->result($id, ['tools' => array_values(array_map(
-                fn ($t) => ['name' => $t['name'], 'description' => $t['description'], 'inputSchema' => $t['inputSchema']],
-                self::tools(),
-            ))]),
+            'tools/list' => $this->result($id, ['tools' => $this->visibleTools($request)]),
             'tools/call' => $this->callTool($request, $id, $params),
             default => $this->errorBody($id, -32601, 'Method not found'),
         };
+    }
+
+    /** Only the tools this token may call; calling a hidden one still fails with 403 from the route. */
+    private function visibleTools(Request $request): array
+    {
+        $token = $request->attributes->get('api_token');
+
+        return array_values(array_map(
+            fn ($t) => ['name' => $t['name'], 'description' => $t['description'], 'inputSchema' => $t['inputSchema']],
+            array_filter(self::tools(), fn ($t) => $token?->can($t['ability'])),
+        ));
     }
 
     private function callTool(Request $request, mixed $id, array $params): array
@@ -104,6 +119,8 @@ class McpController extends Controller
             'CONTENT_TYPE' => 'application/json',
         ], $method === 'GET' ? null : json_encode($body));
 
+        $sub->attributes->set(ThrottleAgent::INTERNAL, true);
+
         try {
             return app(Kernel::class)->handle($sub);
         } finally {
@@ -138,6 +155,7 @@ class McpController extends Controller
         return [
             [
                 'name' => 'create_project',
+                'ability' => 'render',
                 'description' => 'Start analysing a YouTube video; the AI picks the best moments as clips. Returns project_id. Poll get_status until status is "done".',
                 'inputSchema' => ['type' => 'object', 'required' => ['youtube_url'], 'properties' => [
                     'youtube_url' => $str('YouTube watch, youtu.be or Shorts link'),
@@ -151,18 +169,21 @@ class McpController extends Controller
             ],
             [
                 'name' => 'get_status',
+                'ability' => 'read',
                 'description' => 'Analysis progress of a project (status draft/processing/done/failed) with its clips and their render status.',
                 'inputSchema' => ['type' => 'object', 'required' => ['project_id'], 'properties' => ['project_id' => $str('Id from create_project')]],
                 'route' => fn ($a) => ['GET', '/api/v1/projects/'.rawurlencode($a['project_id']).'/status', []],
             ],
             [
                 'name' => 'list_clips',
+                'ability' => 'read',
                 'description' => 'Clips found for a project, ranked, with viral score, hook, render status, download_url and publish status.',
                 'inputSchema' => ['type' => 'object', 'required' => ['project_id'], 'properties' => ['project_id' => $str('Id from create_project')]],
                 'route' => fn ($a) => ['GET', '/api/v1/projects/'.rawurlencode($a['project_id']).'/clips', []],
             ],
             [
                 'name' => 'render_clip',
+                'ability' => 'render',
                 'description' => 'Render a clip to MP4 (uses render quota). Returns status "processing"; poll get_render_status. Passing hook_text re-renders with that hook.',
                 'inputSchema' => ['type' => 'object', 'required' => ['clip_id'], 'properties' => [
                     'clip_id' => $str('Clip id from list_clips'),
@@ -172,19 +193,22 @@ class McpController extends Controller
             ],
             [
                 'name' => 'get_render_status',
+                'ability' => 'read',
                 'description' => 'Render status of one clip. When done, download_url serves the MP4 (send the same Bearer token).',
                 'inputSchema' => ['type' => 'object', 'required' => ['clip_id'], 'properties' => ['clip_id' => $str('Clip id')]],
                 'route' => fn ($a) => ['GET', '/api/v1/clips/'.rawurlencode($a['clip_id']).'/render-status', []],
             ],
             [
                 'name' => 'list_publish_accounts',
+                'ability' => 'read',
                 'description' => 'Connected YouTube channels and TikTok accounts (connect them in the web app first). Gives the account_id that publish needs.',
                 'inputSchema' => ['type' => 'object', 'properties' => new \stdClass],
                 'route' => fn ($a) => ['GET', '/api/v1/publish/accounts', []],
             ],
             [
                 'name' => 'publish',
-                'description' => 'Upload a rendered clip to YouTube Shorts or TikTok. YouTube needs title and privacy. TikTok defaults to mode "inbox" (draft in the TikTok app). Returns upload status.',
+                'ability' => 'publish',
+                'description' => 'Upload a rendered clip to YouTube Shorts or TikTok. YouTube needs title and privacy. TikTok defaults to mode "inbox" (draft in the TikTok app). Needs the publish ability. Returns upload status.',
                 'inputSchema' => ['type' => 'object', 'required' => ['clip_id', 'platform', 'account_id'], 'properties' => [
                     'clip_id' => $str('Clip id (status must be done)'),
                     'platform' => ['type' => 'string', 'enum' => ['youtube', 'tiktok']],
@@ -194,7 +218,7 @@ class McpController extends Controller
                     'privacy' => ['type' => 'string', 'enum' => ['public', 'unlisted', 'private'], 'description' => 'YouTube privacy'],
                     'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'YouTube tags'],
                     'mode' => ['type' => 'string', 'enum' => ['inbox', 'direct'], 'description' => 'TikTok mode'],
-                    'privacy_level' => ['type' => 'string', 'description' => 'TikTok privacy level, mode direct only'],
+                    'privacy_level' => ['type' => 'string', 'enum' => ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'], 'description' => 'TikTok privacy level, required with mode direct. Currently forced to SELF_ONLY (TikTok app unaudited).'],
                 ]],
                 'route' => fn ($a) => [
                     'POST',

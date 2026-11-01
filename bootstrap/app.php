@@ -3,7 +3,9 @@
 use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsApproved;
+use App\Http\Middleware\RequireTokenAbility;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ThrottleAgent;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
@@ -43,13 +45,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'approved' => EnsureUserIsApproved::class,
             'admin' => EnsureUserIsAdmin::class,
+            'token.can' => RequireTokenAbility::class,
         ]);
 
         // Token API for agents (routes/agent.php): no session, throttled per user
         $middleware->group('agent', [
             AuthenticateApiToken::class,
-            // Prefixed: unprefixed it shares one counter with every per-route throttle:N,1
-            ThrottleRequests::class.':120,1,agent',
+            ThrottleAgent::class,
             SubstituteBindings::class,
         ]);
 

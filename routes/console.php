@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\TokenLimitReached;
 use App\Jobs\DiscoverVideosJob;
 use App\Models\ApiToken;
 use App\Models\InviteCode;
@@ -62,14 +63,53 @@ Artisan::command('clipper:invite {--uses=1 : How many people can sign up with it
     $this->line(url('/register').'?invite='.$invite->code);
 })->purpose('Create a closed-beta invite code');
 
-Artisan::command('clipper:token {email : Account that owns the token} {name=agent : Label, e.g. the agent using it}', function (string $email, string $name) {
+Artisan::command('clipper:token {email : Account that owns the token} {name=agent : Label, e.g. the agent using it} {--ability=* : read, render and/or publish (default read + render)} {--file= : Write the token to this new file (mode 0600) instead of printing it}', function (string $email, string $name) {
     $user = User::where('email', $email)->first();
     if (! $user) {
         $this->error("Tidak ada akun dengan email {$email}.");
 
         return self::FAILURE;
     }
-    [, $plain] = ApiToken::issue($user, $name);
-    $this->info($plain);
-    $this->line('Simpan sekarang, token tidak bisa ditampilkan lagi.');
+
+    $abilities = $this->option('ability') ?: ['read', 'render'];
+    if ($bad = array_diff($abilities, ApiToken::ABILITIES)) {
+        $this->error('Ability tidak dikenal: '.implode(', ', $bad).'. Pilih dari: '.implode(', ', ApiToken::ABILITIES).'.');
+
+        return self::FAILURE;
+    }
+
+    $file = $this->option('file');
+    if ($file && file_exists($file)) {
+        $this->error("{$file} sudah ada; tidak ditimpa.");
+
+        return self::FAILURE;
+    }
+
+    try {
+        [$token, $plain] = ApiToken::issueLimited($user, $name, $abilities);
+    } catch (TokenLimitReached $e) {
+        $this->error($e->getMessage());
+
+        return self::FAILURE;
+    }
+
+    // Plaintext goes to stdout alone (capture it with $(...)); the notice goes to stderr
+    $notice = fn (string $line) => $this->getOutput()->getErrorStyle()->writeln($line);
+    if ($file) {
+        $old = umask(0077);
+        $written = @file_put_contents($file, $plain."\n", LOCK_EX);
+        umask($old);
+        if ($written === false) {
+            $token->delete();
+            $this->error("Tidak bisa menulis {$file}.");
+
+            return self::FAILURE;
+        }
+        $notice("Token disimpan di {$file} (izin: ".implode(', ', $token->abilities).'). Tidak bisa ditampilkan lagi.');
+
+        return self::SUCCESS;
+    }
+
+    $this->line($plain);
+    $notice('Izin: '.implode(', ', $token->abilities).'. Simpan sekarang, token tidak bisa ditampilkan lagi.');
 })->purpose('Create an API token for the REST API / MCP server');

@@ -31,6 +31,7 @@ class AuthenticateApiToken
         }
 
         Auth::guard('web')->setUser($token->user);
+        $request->attributes->set('api_token', $token);
         $request->setUserResolver(fn () => $token->user);
 
         return $next($request);
