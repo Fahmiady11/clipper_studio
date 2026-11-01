@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
@@ -18,6 +19,13 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    protected static function booted(): void
+    {
+        // The FK cascade drops the gameplay_clips rows without firing GameplayClip's
+        // own deleted event, so the user's whole folder goes here, after the row is gone.
+        static::deleted(fn (self $user) => Storage::disk('local')->deleteDirectory('gameplay/'.$user->id));
+    }
 
     protected function casts(): array
     {
