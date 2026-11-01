@@ -22,9 +22,14 @@ class User extends Authenticatable
 
     protected static function booted(): void
     {
-        // The FK cascade drops the gameplay_clips rows without firing GameplayClip's
-        // own deleted event, so the user's whole folder goes here, after the row is gone.
-        static::deleted(fn (self $user) => Storage::disk('local')->deleteDirectory('gameplay/'.$user->id));
+        // FK cascades drop the child rows without firing their model events, so a
+        // user's files go here, after the row is gone. Renders are written to the
+        // default disk, the logo and footage to 'local'; the public disk is unused.
+        static::deleted(function (self $user) {
+            Storage::disk('local')->deleteDirectory("gameplay/{$user->id}");
+            Storage::disk('local')->deleteDirectory("brand/{$user->id}");
+            Storage::deleteDirectory("clips/{$user->id}");
+        });
     }
 
     protected function casts(): array

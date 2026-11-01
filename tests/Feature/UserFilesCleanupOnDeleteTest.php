@@ -8,7 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
-class GameplayCleanupOnUserDeleteTest extends TestCase
+class UserFilesCleanupOnDeleteTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -53,6 +53,55 @@ class GameplayCleanupOnUserDeleteTest extends TestCase
         $this->assertSame(1, GameplayClip::where('user_id', $kept->id)->count());
     }
 
+    /** @return list<string> a logo and two rendered clips, the way BrandKitController and RenderClipJob store them */
+    private function brandAndRendersFor(User $user): array
+    {
+        $files = [
+            "brand/{$user->id}/logo-abc12345.png",
+            "clips/{$user->id}/project-1/clip-a.mp4",
+            "clips/{$user->id}/project-2/clip-b.mp4",
+        ];
+        foreach ($files as $file) {
+            Storage::disk('local')->put($file, 'x');
+        }
+
+        return $files;
+    }
+
+    public function test_deleting_a_user_also_removes_their_logo_and_rendered_clips_but_nobody_elses(): void
+    {
+        $gone = User::factory()->create();
+        $kept = User::factory()->create();
+        $goneFiles = $this->brandAndRendersFor($gone);
+        $keptFiles = $this->brandAndRendersFor($kept);
+
+        $gone->delete();
+
+        foreach ($goneFiles as $file) {
+            Storage::disk('local')->assertMissing($file);
+        }
+        $this->assertDirectoryDoesNotExist(Storage::disk('local')->path("brand/{$gone->id}"));
+        $this->assertDirectoryDoesNotExist(Storage::disk('local')->path("clips/{$gone->id}"));
+        foreach ($keptFiles as $file) {
+            Storage::disk('local')->assertExists($file);
+        }
+    }
+
+    public function test_a_user_id_that_is_a_prefix_of_another_does_not_take_the_other_s_files(): void
+    {
+        $a = User::factory()->create(['id' => 7]);
+        $b = User::factory()->create(['id' => 70]);
+        $files = $this->brandAndRendersFor($b);
+        $this->clipFor($b, 'mine');
+
+        $a->delete();
+
+        foreach ($files as $file) {
+            Storage::disk('local')->assertExists($file);
+        }
+        $this->assertSame(1, GameplayClip::where('user_id', $b->id)->count());
+    }
+
     public function test_files_without_a_database_row_are_removed_too(): void
     {
         $user = User::factory()->create();
@@ -67,7 +116,7 @@ class GameplayCleanupOnUserDeleteTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $pending = User::factory()->pending()->create();
-        $files = $this->clipFor($pending, 'early');
+        $files = [...$this->clipFor($pending, 'early'), ...$this->brandAndRendersFor($pending)];
 
         $this->actingAs($admin)->delete("/admin/users/{$pending->id}")->assertRedirect();
 
