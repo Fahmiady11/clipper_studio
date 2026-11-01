@@ -446,7 +446,7 @@ class FacebookReelsTest extends TestCase
 
         Storage::delete($clip->output_path);
         $this->get($path)->assertNotFound();
-        $clip->update(['status' => 'rendering']);
+        $clip->update(['status' => 'processing']);
         $this->get($path)->assertNotFound();
     }
 
