@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ClipPublication;
 use App\Models\DataDeletionRequest;
 use App\Models\MetaAccount;
+use App\Models\MetaTarget;
 use App\Support\SignedRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,8 +16,9 @@ use Illuminate\View\View;
 /**
  * Callbacks Meta calls when someone removes Clipper on Facebook or Threads, or asks
  * for their data to be deleted. Only what came from that platform login goes: the
- * meta_accounts row with its tokens and every Page, Instagram account or Threads
- * profile under it. The Clipper account itself signs in with email and password and
+ * meta_accounts row with its tokens, every Page, Instagram account or Threads
+ * profile under it, and the records of posts made through those (their post ids
+ * and links). The Clipper account itself signs in with email and password and
  * holds the user's own projects, so it stays; deleting that is the owner's call in
  * Settings → Akun.
  */
@@ -93,10 +96,17 @@ class MetaDataDeletionController extends Controller
     /** The same Facebook or Threads person may be connected by more than one Clipper user: all of them go. */
     private function removeConnections(string $provider, string $platformUserId): int
     {
-        $accounts = MetaAccount::where('provider', $provider)->where('provider_user_id', $platformUserId)->get();
-        $accounts->each->delete(); // meta_targets cascade
+        return DB::transaction(function () use ($provider, $platformUserId) {
+            $accounts = MetaAccount::where('provider', $provider)->where('provider_user_id', $platformUserId)->get();
 
-        return $accounts->count();
+            // target_id has no foreign key, so the publishing records of those targets go first, by hand
+            ClipPublication::whereIn('platform', MetaTarget::PLATFORMS)
+                ->whereIn('target_id', MetaTarget::select('id')->whereIn('meta_account_id', $accounts->modelKeys()))
+                ->delete();
+            $accounts->each->delete(); // meta_targets cascade
+
+            return $accounts->count();
+        });
     }
 
     /** The app-scoped user id from a valid signed_request. Some deliveries put it in the query string. */

@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\ClipProject;
+use App\Models\ClipPublication;
 use App\Models\DataDeletionRequest;
+use App\Models\GeneratedClip;
 use App\Models\MetaAccount;
 use App\Models\MetaTarget;
 use App\Models\User;
@@ -71,6 +74,69 @@ class MetaDataDeletionTest extends TestCase
         $this->assertSame(['facebook', 'completed', 2], [$deletion->provider, $deletion->status, $deletion->connections_removed]);
 
         $this->get($res->json('url'))->assertOk()->assertSee($code)->assertSee('Completed')->assertSee('Facebook Page');
+    }
+
+    /** A clip of $user posted to each given target: [platform => target]. */
+    private function postedClip(User $user, array $targets): GeneratedClip
+    {
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'youtube_url' => 'https://youtu.be/abcdefg', 'video_title' => 'Podcast',
+            'layout_type' => 'reframe', 'clip_count' => 1, 'duration_mode' => 'auto', 'status' => 'done',
+        ]);
+        $clip = GeneratedClip::create([
+            'clip_project_id' => $project->id, 'ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 30,
+            'topic' => 'Momen', 'reason' => 'r', 'status' => 'done', 'output_path' => 'clips/x.mp4',
+        ]);
+        foreach ($targets as $platform => $targetId) {
+            ClipPublication::create([
+                'generated_clip_id' => $clip->id, 'platform' => $platform, 'target_id' => $targetId, 'status' => 'published',
+                'external_id' => "post-{$platform}-{$targetId}", 'url' => "https://example.com/{$platform}/{$targetId}",
+            ]);
+        }
+
+        return $clip;
+    }
+
+    private function target(MetaAccount $account, string $platform): int
+    {
+        return $account->targets()->where('platform', $platform)->value('id');
+    }
+
+    public function test_deletion_request_also_removes_the_publishing_records_of_those_targets_for_every_user(): void
+    {
+        $first = User::factory()->create();
+        $second = User::factory()->create();
+        $gone1 = $this->login($first, 'facebook', '1001');
+        $gone2 = $this->login($second, 'facebook', '1001');
+        $other = $this->login($first, 'facebook', '2002');
+        $threads = $this->login($first, 'threads', '3003');
+
+        $goneFacebook = $this->target($gone1, 'facebook');
+        $this->postedClip($first, ['facebook' => $goneFacebook, 'instagram' => $this->target($gone1, 'instagram'), 'threads' => $this->target($threads, 'threads')]);
+        $this->postedClip($second, ['facebook' => $this->target($gone2, 'facebook')]);
+        $keptClip = $this->postedClip($first, ['facebook' => $this->target($other, 'facebook'), 'youtube' => $goneFacebook]);
+
+        $this->post('/meta/data-deletion', ['signed_request' => $this->signed('1001')])->assertOk();
+
+        // Left: the other Facebook login's post, the Threads post, and a YouTube record whose target id merely collides
+        $this->assertEqualsCanonicalizing(
+            ['post-facebook-'.$this->target($other, 'facebook'), 'post-threads-'.$this->target($threads, 'threads'), 'post-youtube-'.$goneFacebook],
+            ClipPublication::pluck('external_id')->all(),
+        );
+        $this->assertSame(3, GeneratedClip::count()); // the clips themselves are the user's own and stay
+        $this->assertNotNull($keptClip->fresh());
+    }
+
+    public function test_threads_request_removes_only_threads_publishing_records(): void
+    {
+        $user = User::factory()->create();
+        $facebook = $this->login($user, 'facebook', '5005');
+        $threads = $this->login($user, 'threads', '5005');
+        $this->postedClip($user, ['facebook' => $this->target($facebook, 'facebook'), 'threads' => $this->target($threads, 'threads')]);
+
+        $this->post('/threads/uninstall', ['signed_request' => $this->signed('5005', 'th-test-secret')])->assertOk();
+
+        $this->assertSame(['facebook'], ClipPublication::pluck('platform')->all());
     }
 
     public function test_a_request_for_someone_we_hold_nothing_about_still_gets_a_code(): void

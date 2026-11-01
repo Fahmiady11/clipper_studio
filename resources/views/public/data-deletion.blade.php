@@ -31,7 +31,7 @@
   </div>
 
   @if ($deletion->connections_removed > 0)
-    <p>Clipper Studio deleted the {{ $platform }} connection{{ $deletion->connections_removed > 1 ? 's' : '' }} linked to your {{ $platform }} account: the access token, your {{ $platform }} user ID and name, and {{ $deletion->provider === 'threads' ? 'your Threads profile details' : 'every Facebook Page and Instagram account connected through it, with their tokens and details' }}.</p>
+    <p>Clipper Studio deleted the {{ $platform }} connection{{ $deletion->connections_removed > 1 ? 's' : '' }} linked to your {{ $platform }} account: the access token, your {{ $platform }} user ID and name, and {{ $deletion->provider === 'threads' ? 'your Threads profile details' : 'every Facebook Page and Instagram account connected through it, with their tokens and details' }}, together with the records of posts Clipper Studio published there (their post IDs and links).</p>
   @else
     <p>Clipper Studio held no data from your {{ $platform }} account when the request arrived, so there was nothing to delete.</p>
   @endif
