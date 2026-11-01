@@ -5,19 +5,18 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\DiscoverVideosJob;
 use App\Jobs\UploadToTikTokJob;
+use App\Models\AutopostSetting;
 use App\Models\ClipProject;
+use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\VideoSource;
-use App\Models\YoutubeAccount;
-use App\Models\YoutubeAutopostSetting;
+use App\Services\Autopost;
 use App\Services\ClipPerformanceSummary;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
 use App\Services\StorageCleanup;
-use App\Services\YouTubeAutopost;
-use App\Services\YouTubeService;
 use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
@@ -25,7 +24,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use RuntimeException;
 
 class AutopilotController extends Controller
 {
@@ -131,7 +129,7 @@ class AutopilotController extends Controller
      * Autopilot clips, a page at a time: waiting for review first (oldest first),
      * then the most recent decisions. ?status=pending|approved|rejected narrows it.
      */
-    public function review(Request $request, MusicService $music, ClipPerformanceSummary $performance): JsonResponse
+    public function review(Request $request, MusicService $music, ClipPerformanceSummary $performance, Autopost $autopost): JsonResponse
     {
         $status = $request->validate([
             'status' => ['nullable', 'in:pending,approved,rejected'],
@@ -146,22 +144,23 @@ class AutopilotController extends Controller
 
         $page = (clone $base)
             ->when($status, fn ($q) => $q->where('review_status', $status))
-            ->with('clipProject.videoSource')
+            ->with('clipProject.videoSource', 'publications')
             ->latest() // newest clips on page 1
             ->orderBy('ranking')
             ->orderBy('id') // stable order, so no clip shows on two pages
             ->paginate(self::REVIEW_PER_PAGE);
 
         $clipTotals = $performance->totalsForClips($page->getCollection()->pluck('id'));
-        $youtubePosts = ScheduledPost::whereIn('generated_clip_id', $page->getCollection()->pluck('id'))
-            ->where('platform', 'youtube')
+        // The latest calendar post per clip and autopilot platform
+        $posts = ScheduledPost::whereIn('generated_clip_id', $page->getCollection()->pluck('id'))
+            ->whereIn('platform', array_keys($autopost->platforms()))
             ->latest('id')
             ->get()
-            ->unique('generated_clip_id')
-            ->keyBy('generated_clip_id');
+            ->unique(fn (ScheduledPost $p) => $p->generated_clip_id.'|'.$p->platform)
+            ->keyBy(fn (ScheduledPost $p) => $p->generated_clip_id.'|'.$p->platform);
 
         return response()->json([
-            'data' => $page->getCollection()->map(function (GeneratedClip $c) use ($music, $clipTotals, $youtubePosts) {
+            'data' => $page->getCollection()->map(function (GeneratedClip $c) use ($music, $clipTotals, $posts, $autopost) {
                 $credit = $music->creditFor($c->music_track);
                 $totals = $clipTotals[$c->id] ?? null;
 
@@ -183,7 +182,8 @@ class AutopilotController extends Controller
                     'preview_url' => $c->status === 'done' ? url("/api/clips/{$c->id}/download?inline=1") : null,
                     'tiktok_status' => $c->tiktok_status,
                     'tiktok_error' => $c->tiktok_error,
-                    'youtube' => $this->youtubeState($c, $youtubePosts[$c->id] ?? null),
+                    'youtube' => $this->autopostState($c, 'youtube', $posts["{$c->id}|youtube"] ?? null, $autopost),
+                    'facebook' => $this->autopostState($c, 'facebook', $posts["{$c->id}|facebook"] ?? null, $autopost),
                     'music_credit' => $credit,
                     'views' => $totals['views'] ?? null,
                     'likes' => $totals['likes'] ?? null,
@@ -203,16 +203,16 @@ class AutopilotController extends Controller
     }
 
     /**
-     * Approve a clip: it goes to the chosen TikTok account right away and, with
-     * YouTube autopost on, takes the next free slot on the calendar.
+     * Approve a clip: it goes to the chosen TikTok account right away and takes
+     * the next free calendar slot of every platform with autopost on.
      */
-    public function approve(Request $request, string $clipId, YouTubeAutopost $autopost): JsonResponse
+    public function approve(Request $request, string $clipId, Autopost $autopost): JsonResponse
     {
         $data = $request->validate(['account_id' => ['nullable', 'integer']]);
         $clip = $this->ownedReviewClip($clipId);
         $account = isset($data['account_id']) ? TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']) : null;
 
-        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Pilih akun TikTok atau nyalakan upload YouTube otomatis.');
+        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Pilih akun TikTok atau nyalakan upload otomatis ke YouTube atau Facebook.');
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
         abort_if($clip->review_status === 'rejected', 422, 'Clip sudah ditolak dan filenya dihapus.');
         if ($account) {
@@ -231,71 +231,66 @@ class AutopilotController extends Controller
             $this->ensureQueueWorkerRunning();
         }
 
-        // The approval stands either way; a clip YouTube can't take keeps the reason on its card
-        try {
-            $post = $autopost->schedule($clip);
-            $youtube = $post ? ['scheduled_at' => $post->scheduled_at->toISOString()] : null;
-            $clip->update(['youtube_autopost_error' => null]);
-        } catch (RuntimeException $e) {
-            $youtube = ['error' => $e->getMessage()];
-            $clip->update(['youtube_autopost_error' => mb_substr($e->getMessage(), 0, 1000)]);
-        }
+        // The approval stands either way; a platform that can't take the clip keeps the reason on its card
+        $booked = $autopost->scheduleAll($clip);
 
-        return response()->json(['success' => true, 'youtube' => $youtube]);
+        return response()->json(['success' => true, 'youtube' => $booked['youtube'] ?? null, 'facebook' => $booked['facebook'] ?? null]);
     }
 
-    /** Back to the queue, as long as nothing has gone out yet. Its waiting YouTube slot is freed. */
-    public function unapprove(string $clipId, YouTubeAutopost $autopost): JsonResponse
+    /** Back to the queue, as long as nothing has gone out yet. Its waiting calendar slots are freed. */
+    public function unapprove(string $clipId, Autopost $autopost): JsonResponse
     {
         $clip = $this->ownedReviewClip($clipId);
         abort_unless($clip->review_status === 'approved', 422, 'Clip ini belum disetujui.');
         abort_if($clip->tiktok_status !== null, 422, 'Clip sudah dikirim ke TikTok, approve tidak bisa dibatalkan.');
-        $sent = $clip->youtube_status !== null || $clip->scheduledPosts()
-            ->whereIn('status', [ScheduledPost::STATUS_PUBLISHING, ScheduledPost::STATUS_QUEUED])->exists();
-        abort_if($sent, 422, 'Clip sudah dikirim ke YouTube, approve tidak bisa dibatalkan.');
+        $sent = $clip->scheduledPosts()->whereIn('status', [ScheduledPost::STATUS_PUBLISHING, ScheduledPost::STATUS_QUEUED])->first();
+        abort_if($clip->youtube_status !== null || $sent?->platform === 'youtube', 422, 'Clip sudah dikirim ke YouTube, approve tidak bisa dibatalkan.');
+        abort_if($sent || $clip->publications()->where('status', '!=', ClipPublication::SKIPPED)->exists(), 422, 'Clip sudah dikirim ke Facebook, approve tidak bisa dibatalkan.');
 
         $autopost->cancelWaiting($clip);
-        $clip->update(['review_status' => 'pending', 'youtube_autopost_error' => null]);
+        $clip->update(['review_status' => 'pending']);
 
         return response()->json(['success' => true]);
     }
 
-    public function youtubeSettings(YouTubeService $youtube): JsonResponse
+    /** Autopost settings of one platform: GET /api/autopilot/{youtube|facebook} */
+    public function autopostSettings(string $platform, Autopost $autopost): JsonResponse
     {
-        return response()->json($this->presentYoutubeSettings(YoutubeAutopostSetting::for(Auth::id()), $youtube));
+        return response()->json($this->presentAutopost(AutopostSetting::for(Auth::id(), $platform), $autopost));
     }
 
-    public function updateYoutubeSettings(Request $request, YouTubeService $youtube): JsonResponse
+    public function updateAutopostSettings(Request $request, string $platform, Autopost $autopost): JsonResponse
     {
+        $noun = $platform === 'youtube' ? 'channel YouTube' : 'Page Facebook';
         $data = $request->validate([
             'enabled' => ['required', 'boolean'],
-            'youtube_account_id' => ['nullable', 'integer', 'required_if:enabled,true'],
+            'account_id' => ['nullable', 'integer', 'required_if:enabled,true'],
             'max_per_day' => ['required', 'integer', 'min:1', 'max:10'],
             'slot_times' => ['required', 'array', 'min:1', 'max:10'],
             'slot_times.*' => ['required', 'string', 'distinct', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
             'timezone' => ['required', 'timezone:all'],
         ], [
-            'youtube_account_id.required_if' => 'Pilih channel YouTube dulu.',
+            'account_id.required_if' => "Pilih {$noun} dulu.",
             'slot_times.*.regex' => 'Jam upload harus format JJ:MM, misalnya 09:00.',
             'slot_times.*.distinct' => 'Ada jam upload yang sama.',
         ]);
-        if (isset($data['youtube_account_id'])) {
-            YoutubeAccount::where('user_id', Auth::id())->findOrFail($data['youtube_account_id']);
+        if (isset($data['account_id'])) {
+            abort_unless($autopost->platform($platform)->accounts(Auth::id())->contains('id', $data['account_id']), 404);
         }
 
-        $settings = YoutubeAutopostSetting::for(Auth::id());
+        $settings = AutopostSetting::for(Auth::id(), $platform);
         $settings->fill([
             'enabled' => $data['enabled'],
-            'youtube_account_id' => $data['youtube_account_id'] ?? null,
+            'account_id' => $data['account_id'] ?? null,
             'max_per_day' => $data['max_per_day'],
             'slot_times' => collect($data['slot_times'])->sort()->values()->all(),
             'timezone' => $data['timezone'],
         ])->save();
 
-        return response()->json($this->presentYoutubeSettings($settings, $youtube));
+        return response()->json($this->presentAutopost($settings, $autopost));
     }
 
-    public function reject(string $clipId, StorageCleanup $cleanup, YouTubeAutopost $autopost): JsonResponse
+    public function reject(string $clipId, StorageCleanup $cleanup, Autopost $autopost): JsonResponse
     {
         $clip = $this->ownedReviewClip($clipId);
         $autopost->cancelWaiting($clip); // the file goes, so nothing can be posted from it
@@ -312,7 +307,7 @@ class AutopilotController extends Controller
      * Clear approved clips that are done with TikTok (sent, posted or failed):
      * the file and the row go, and an autopilot project left without clips is
      * deleted along with its source video. Clips still uploading, or waiting
-     * for their YouTube slot, are kept.
+     * for their calendar slot, are kept.
      */
     public function cleanApproved(StorageCleanup $cleanup): JsonResponse
     {
@@ -320,6 +315,7 @@ class AutopilotController extends Controller
             ->where('review_status', 'approved')
             ->where(fn ($q) => $q->whereNull('tiktok_status')->orWhereNotIn('tiktok_status', ['queued', 'uploading', 'processing']))
             ->where(fn ($q) => $q->whereNull('youtube_status')->orWhereNotIn('youtube_status', ['queued', 'uploading']))
+            ->whereDoesntHave('publications', fn ($q) => $q->whereIn('status', ['queued', 'uploading']))
             ->whereDoesntHave('scheduledPosts', fn ($q) => $q->whereIn('status', [ScheduledPost::STATUS_SCHEDULED, ScheduledPost::STATUS_PUBLISHING]))
             ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
             ->get();
@@ -368,42 +364,49 @@ class AutopilotController extends Controller
     }
 
     /**
-     * Where the clip is on its way to YouTube: its calendar post, then what the
-     * upload job reported once the post was handed over. Without a post,
-     * 'skipped' carries why autopilot could not book one.
+     * Where the clip is on its way to an autopost platform: its calendar post,
+     * then what the upload reported once the post was handed over. Without a
+     * post, 'skipped' carries why autopilot could not book one.
      */
-    private function youtubeState(GeneratedClip $clip, ?ScheduledPost $post): ?array
+    private function autopostState(GeneratedClip $clip, string $platform, ?ScheduledPost $post, Autopost $autopost): ?array
     {
         if (! $post) {
-            return $clip->youtube_autopost_error
+            $skipped = $autopost->platform($platform)->skipReason($clip);
+
+            return $skipped
                 ? ['post_id' => null, 'status' => 'skipped', 'scheduled_at' => null, 'delivery' => null,
-                    'error' => $clip->youtube_autopost_error, 'url' => null, 'privacy' => null]
+                    'error' => $skipped, 'reconnect_url' => null, 'url' => null, 'privacy' => null]
                 : null;
         }
         $handedOff = $post->status === ScheduledPost::STATUS_QUEUED;
+        $delivery = $handedOff ? $clip->delivery($platform) : ['status' => null, 'error' => null, 'url' => null, 'privacy' => null];
+        $error = $post->error ?? $delivery['error'];
 
         return [
             'post_id' => $post->id,
             'status' => $post->status,
             'scheduled_at' => $post->scheduled_at->toISOString(),
             // queued, uploading, processing, published, failed
-            'delivery' => $handedOff ? $clip->youtube_status : null,
-            'error' => $post->error ?? ($handedOff ? $clip->youtube_error : null),
-            'url' => $handedOff && $clip->youtube_video_id ? 'https://youtube.com/shorts/'.$clip->youtube_video_id : null,
-            'privacy' => $handedOff ? $clip->youtube_privacy : null,
+            'delivery' => $delivery['status'],
+            'error' => $error,
+            'reconnect_url' => ScheduledPost::reconnectUrl($platform, $error),
+            'url' => $delivery['url'],
+            'privacy' => $delivery['privacy'],
         ];
     }
 
-    private function presentYoutubeSettings(YoutubeAutopostSetting $settings, YouTubeService $youtube): array
+    private function presentAutopost(AutopostSetting $settings, Autopost $autopost): array
     {
-        $accounts = YoutubeAccount::where('user_id', Auth::id())->orderBy('title')->get(['id', 'title']);
+        $platform = $autopost->platform($settings->platform);
+        $accounts = $platform->accounts(Auth::id());
 
         return [
-            'configured' => $youtube->isConfigured(),
-            'accounts' => $accounts,
+            'platform' => $settings->platform,
+            'configured' => $platform->isConfigured(),
+            'accounts' => $accounts->values(),
             'enabled' => $settings->enabled,
-            // null once the chosen channel was disconnected
-            'youtube_account_id' => $accounts->contains('id', $settings->youtube_account_id) ? $settings->youtube_account_id : null,
+            // null once the chosen account was disconnected
+            'account_id' => $accounts->contains('id', $settings->account_id) ? $settings->account_id : null,
             'max_per_day' => $settings->max_per_day,
             'slot_times' => $settings->slot_times,
             'timezone' => $settings->timezone,

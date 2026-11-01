@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\UploadToTikTokJob;
 use App\Jobs\UploadToYouTubeJob;
+use App\Models\AutopostSetting;
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Models\ScheduledPost;
@@ -11,7 +12,6 @@ use App\Models\TiktokAccount;
 use App\Models\User;
 use App\Models\VideoSource;
 use App\Models\YoutubeAccount;
-use App\Models\YoutubeAutopostSetting;
 use App\Services\ScheduledPublisher;
 use App\Services\YouTubeService;
 use Carbon\CarbonImmutable;
@@ -44,10 +44,10 @@ class YouTubeAutopostTest extends TestCase
         ]);
     }
 
-    private function autopost(User $user, YoutubeAccount $account, array $attrs = []): YoutubeAutopostSetting
+    private function autopost(User $user, YoutubeAccount $account, array $attrs = []): AutopostSetting
     {
-        return YoutubeAutopostSetting::create($attrs + [
-            'user_id' => $user->id, 'youtube_account_id' => $account->id, 'enabled' => true,
+        return AutopostSetting::create($attrs + [
+            'user_id' => $user->id, 'platform' => 'youtube', 'account_id' => $account->id, 'enabled' => true,
             'max_per_day' => 3, 'slot_times' => ['09:00', '15:00', '20:00'], 'timezone' => 'Asia/Jakarta',
         ]);
     }
@@ -84,21 +84,21 @@ class YouTubeAutopostTest extends TestCase
 
         $this->actingAs($user)->getJson('/api/autopilot/youtube')->assertOk()
             ->assertJson(['enabled' => false, 'max_per_day' => 3, 'slot_times' => ['09:00', '15:00', '20:00'], 'saved' => false])
-            ->assertJsonPath('accounts.0.title', 'Channel Saya');
+            ->assertJsonPath('accounts.0.name', 'Channel Saya');
 
         $this->actingAs($user)->putJson('/api/autopilot/youtube', [
-            'enabled' => true, 'youtube_account_id' => $account->id, 'max_per_day' => 2,
+            'enabled' => true, 'account_id' => $account->id, 'max_per_day' => 2,
             'slot_times' => ['20:00', '08:30'], 'timezone' => 'Asia/Makassar',
         ])->assertOk()->assertJson(['enabled' => true, 'slot_times' => ['08:30', '20:00'], 'timezone' => 'Asia/Makassar', 'saved' => true]);
 
         $this->actingAs($user)->putJson('/api/autopilot/youtube', [
-            'enabled' => true, 'youtube_account_id' => null, 'max_per_day' => 2, 'slot_times' => ['25:00', '08:30', '08:30'], 'timezone' => 'Mars/Base',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['youtube_account_id', 'slot_times.0', 'slot_times.1', 'timezone']);
+            'enabled' => true, 'account_id' => null, 'max_per_day' => 2, 'slot_times' => ['25:00', '08:30', '08:30'], 'timezone' => 'Mars/Base',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['account_id', 'slot_times.0', 'slot_times.1', 'timezone']);
 
         // Someone else's channel
         $other = $this->channel(User::factory()->create());
         $this->actingAs($user)->putJson('/api/autopilot/youtube', [
-            'enabled' => true, 'youtube_account_id' => $other->id, 'max_per_day' => 2, 'slot_times' => ['08:30'], 'timezone' => 'Asia/Jakarta',
+            'enabled' => true, 'account_id' => $other->id, 'max_per_day' => 2, 'slot_times' => ['08:30'], 'timezone' => 'Asia/Jakarta',
         ])->assertNotFound();
     }
 
@@ -214,7 +214,7 @@ class YouTubeAutopostTest extends TestCase
         $this->assertNull($long->fresh()->youtube_autopost_error);
 
         // Channel disconnected after the settings were saved
-        $settings->account->delete();
+        YoutubeAccount::find($settings->account_id)->delete();
         $this->approve($user, $this->reviewClip($user))->assertOk()->assertJsonPath('youtube.error', fn ($msg) => str_contains($msg, 'Channel YouTube untuk autopilot'));
         $this->assertSame(0, ScheduledPost::count());
     }
@@ -287,7 +287,7 @@ class YouTubeAutopostTest extends TestCase
         $this->approve($user, $clip)->assertOk();
         $post = ScheduledPost::sole();
         $post->update(['status' => ScheduledPost::STATUS_QUEUED, 'handed_off_at' => now()]);
-        $clip->update(['youtube_account_id' => $account->id, 'youtube_status' => 'queued']);
+        $clip->update(['account_id' => $account->id, 'youtube_status' => 'queued']);
 
         Http::fake(['oauth2.googleapis.com/*' => Http::response(['error' => 'invalid_grant'], 400)]);
         $job = new UploadToYouTubeJob($clip->id, $account->id, $post->options);

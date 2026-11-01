@@ -5,8 +5,11 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BrandKitController;
+use App\Http\Controllers\FacebookController;
 use App\Http\Controllers\GameplayClipController;
+use App\Http\Controllers\MetaAccountController;
 use App\Http\Controllers\PricingController;
+use App\Http\Controllers\PublicMediaController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\StatusController;
 use App\Http\Controllers\TikTokController;
@@ -19,6 +22,11 @@ Route::get('/welcome', [PublicPageController::class, 'welcome'])->name('welcome'
 Route::get('/terms', [PublicPageController::class, 'terms'])->name('terms');
 Route::get('/privacy', [PublicPageController::class, 'privacy'])->name('privacy');
 Route::get('/status', [StatusController::class, 'show'])->name('status');
+
+// A rendered clip for platforms that fetch video by URL (Instagram, Threads). No login:
+// the expiring signature is the access check. Relative, so a proxy's host/scheme can't break it.
+Route::get('/media/clips/{clipId}', [PublicMediaController::class, 'clip'])
+    ->middleware(['signed:relative', 'throttle:60,1'])->name('media.clip');
 
 // Auth routes (public). Signed-in users hitting /login or /register go to the studio.
 Route::middleware('guest')->group(function () {
@@ -71,4 +79,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Google OAuth for YouTube Shorts (authorized redirect URI → /youtube/callback)
     Route::get('/youtube/connect', [YouTubeController::class, 'connect'])->name('youtube.connect');
     Route::get('/youtube/callback', [YouTubeController::class, 'callback'])->name('youtube.callback');
+
+    // Facebook Login for Business (Valid OAuth Redirect URI → /facebook/callback); Pages are picked on /settings/meta
+    Route::get('/settings/meta', [MetaAccountController::class, 'page'])->middleware('cache.headers:no_store;private')->name('meta.page');
+    Route::get('/facebook/connect', [FacebookController::class, 'connect'])->name('facebook.connect');
+    Route::get('/facebook/callback', [FacebookController::class, 'callback'])->name('facebook.callback');
 });

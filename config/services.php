@@ -90,9 +90,25 @@ return [
         'redirect_uri' => env('YOUTUBE_REDIRECT_URI'),
     ],
 
+    // One Meta app for Facebook Pages now, Instagram and Threads later
+    'facebook' => [
+        // developers.facebook.com → My Apps → the app → App settings → Basic
+        'app_id' => env('FACEBOOK_APP_ID'),
+        'app_secret' => env('FACEBOOK_APP_SECRET'),
+        // Must match a Valid OAuth Redirect URI of Facebook Login for Business: <APP_URL>/facebook/callback
+        'redirect_uri' => env('FACEBOOK_REDIRECT_URI'),
+        // A Facebook Login for Business configuration (user access token) holds the permissions.
+        // Without one the dialog asks for `scopes` the classic way.
+        'config_id' => env('FACEBOOK_CONFIG_ID'),
+        'scopes' => env('FACEBOOK_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,publish_video'),
+        'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v26.0'),
+    ],
+
     'clipper' => [
         // Downloaded source videos (temp/, video_cache/) older than this are deleted daily
         'temp_retention_hours' => (int) env('CLIPPER_TEMP_RETENTION_HOURS', 72),
+        // Signed links to a rendered clip that Instagram / Threads fetch by URL stay valid this long
+        'public_media_minutes' => (int) env('PUBLIC_MEDIA_URL_MINUTES', 120),
         // Shown on /terms and /privacy for questions and data requests
         'contact_email' => env('CONTACT_EMAIL'),
         // Render box sizing for the load monitor / status page: load per core and queue length

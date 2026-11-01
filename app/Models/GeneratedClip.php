@@ -109,6 +109,48 @@ class GeneratedClip extends Model
         return $this->hasMany(ScheduledPost::class);
     }
 
+    public function publications(): HasMany
+    {
+        return $this->hasMany(ClipPublication::class);
+    }
+
+    public function publication(string $platform): ?ClipPublication
+    {
+        return $this->relationLoaded('publications')
+            ? $this->publications->firstWhere('platform', $platform)
+            : $this->publications()->where('platform', $platform)->first();
+    }
+
+    /**
+     * What the upload job and the platform reported for this clip.
+     * status: queued, uploading, processing, inbox (TikTok), published, failed; null when nothing was sent.
+     *
+     * @return array{status: ?string, error: ?string, url: ?string, privacy: ?string}
+     */
+    public function delivery(string $platform): array
+    {
+        if ($platform === 'tiktok') {
+            return ['status' => $this->tiktok_status, 'error' => $this->tiktok_error, 'url' => null, 'privacy' => null];
+        }
+        if ($platform === 'youtube') {
+            return [
+                'status' => $this->youtube_status,
+                'error' => $this->youtube_error,
+                'url' => $this->youtube_video_id ? 'https://youtube.com/shorts/'.$this->youtube_video_id : null,
+                'privacy' => $this->youtube_privacy, // private while the API project is unaudited
+            ];
+        }
+        $publication = $this->publication($platform);
+        $sent = $publication && $publication->status !== ClipPublication::SKIPPED;
+
+        return [
+            'status' => $sent ? $publication->status : null,
+            'error' => $sent ? $publication->error : null,
+            'url' => $sent ? $publication->url : null,
+            'privacy' => null,
+        ];
+    }
+
     public function durationSeconds(): float
     {
         return $this->end_seconds - $this->start_seconds;

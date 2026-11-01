@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\GeneratedClip;
+use App\Models\MetaTarget;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\YoutubeAccount;
+use App\Services\FacebookReels;
 use App\Services\FFmpegService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -32,18 +34,17 @@ class ScheduleController extends Controller
         $to = CarbonImmutable::parse($data['to'])->utc();
         abort_if($from->diffInDays($to) > 62, 422, 'Rentang maksimal 62 hari.');
 
-        $posts = ScheduledPost::with('clip.clipProject')
+        $posts = ScheduledPost::with('clip.clipProject', 'clip.publications')
             ->where('user_id', Auth::id())
             ->where('scheduled_at', '>=', $from)
             ->where('scheduled_at', '<', $to)
             ->orderBy('scheduled_at')
             ->get();
 
-        $tiktok = TiktokAccount::where('user_id', Auth::id())->pluck('display_name', 'id');
-        $youtube = YoutubeAccount::where('user_id', Auth::id())->pluck('title', 'id');
+        $labels = collect(ScheduledPost::PLATFORMS)->mapWithKeys(fn ($platform) => [$platform => $this->accountLabels($platform)]);
 
         return response()->json([
-            'posts' => $posts->map(fn (ScheduledPost $p) => $this->present($p, $p->platform === 'tiktok' ? $tiktok : $youtube))->values(),
+            'posts' => $posts->map(fn (ScheduledPost $p) => $this->present($p, $labels[$p->platform]))->values(),
         ]);
     }
 
@@ -96,9 +97,11 @@ class ScheduleController extends Controller
         abort_if($clip->clipProject->user_id !== Auth::id(), 403);
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
 
-        $options = $data['platform'] === 'youtube'
-            ? $this->youtubeOptions($data, $clip)
-            : $this->tiktokOptions($data);
+        $options = match ($data['platform']) {
+            'youtube' => $this->youtubeOptions($data, $clip),
+            'facebook' => $this->facebookOptions($data, $clip),
+            default => $this->tiktokOptions($data),
+        };
         $accountId = $this->ownedAccountId($data['platform'], (int) $data['account_id'], $options['mode'] ?? null);
 
         $taken = ScheduledPost::where('generated_clip_id', $clip->id)
@@ -119,7 +122,7 @@ class ScheduleController extends Controller
             'options' => $options,
         ]);
 
-        return response()->json(['post' => $this->present($post->load('clip.clipProject'), $this->accountLabels($post))], 201);
+        return response()->json(['post' => $this->present($post->load('clip.clipProject', 'clip.publications'), $this->accountLabels($post->platform))], 201);
     }
 
     /** Move a waiting post, or put a failed one back in line. */
@@ -131,7 +134,7 @@ class ScheduleController extends Controller
 
         $post->update(['scheduled_at' => $this->validTime($data['scheduled_at']), 'status' => ScheduledPost::STATUS_SCHEDULED, 'error' => null]);
 
-        return response()->json(['post' => $this->present($post->load('clip.clipProject'), $this->accountLabels($post))]);
+        return response()->json(['post' => $this->present($post->load('clip.clipProject', 'clip.publications'), $this->accountLabels($post->platform))]);
     }
 
     public function destroy(int $postId): JsonResponse
@@ -184,6 +187,14 @@ class ScheduleController extends Controller
         ];
     }
 
+    private function facebookOptions(array $data, GeneratedClip $clip): array
+    {
+        $reason = app(FacebookReels::class)->refusal($clip);
+        abort_if($reason !== null, 422, (string) $reason);
+
+        return ['description' => (string) ($data['description'] ?? '')];
+    }
+
     private function tiktokOptions(array $data): array
     {
         return [
@@ -200,6 +211,9 @@ class ScheduleController extends Controller
         if ($platform === 'youtube') {
             return YoutubeAccount::where('user_id', Auth::id())->findOrFail($accountId)->id;
         }
+        if ($platform === 'facebook') {
+            return MetaTarget::ownedBy(Auth::id(), 'facebook')->findOrFail($accountId)->id;
+        }
 
         $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($accountId);
         $scope = $mode === 'direct' ? 'video.publish' : 'video.upload';
@@ -208,22 +222,23 @@ class ScheduleController extends Controller
         return $account->id;
     }
 
-    private function accountLabels(ScheduledPost $post)
+    private function accountLabels(string $platform)
     {
-        return $post->platform === 'tiktok'
-            ? TiktokAccount::where('user_id', Auth::id())->pluck('display_name', 'id')
-            : YoutubeAccount::where('user_id', Auth::id())->pluck('title', 'id');
+        return match ($platform) {
+            'tiktok' => TiktokAccount::where('user_id', Auth::id())->pluck('display_name', 'id'),
+            'youtube' => YoutubeAccount::where('user_id', Auth::id())->pluck('title', 'id'),
+            default => MetaTarget::ownedBy(Auth::id(), $platform)->pluck('name', 'id'),
+        };
     }
 
     private function present(ScheduledPost $p, $accountLabels): array
     {
         $clip = $p->clip;
-        $delivery = $p->status === ScheduledPost::STATUS_QUEUED
-            ? ($p->platform === 'tiktok' ? $clip?->tiktok_status : $clip?->youtube_status)
-            : null;
-        $deliveryError = $p->status === ScheduledPost::STATUS_QUEUED
-            ? ($p->platform === 'tiktok' ? $clip?->tiktok_error : $clip?->youtube_error)
-            : null;
+        // Before hand-off the clip's status may belong to an earlier upload
+        $delivery = $p->status === ScheduledPost::STATUS_QUEUED && $clip
+            ? $clip->delivery($p->platform)
+            : ['status' => null, 'error' => null, 'url' => null, 'privacy' => null];
+        $error = $p->error ?? $delivery['error'];
 
         return [
             'id' => $p->id,
@@ -235,14 +250,13 @@ class ScheduleController extends Controller
             'account_label' => $accountLabels[$p->account_id] ?? null,
             'scheduled_at' => $p->scheduled_at->toISOString(),
             'status' => $p->status,
-            'error' => $p->error ?? $deliveryError,
+            'error' => $error,
+            'reconnect_url' => ScheduledPost::reconnectUrl($p->platform, $error),
             // What the platform reported after hand-off: queued, uploading, processing, inbox, published, failed
-            'delivery' => $delivery,
+            'delivery' => $delivery['status'],
             // YouTube only: private while the API project is unaudited
-            'privacy' => $p->platform === 'youtube' && $p->status === ScheduledPost::STATUS_QUEUED ? $clip?->youtube_privacy : null,
-            'url' => $p->platform === 'youtube' && $clip?->youtube_video_id && $p->status === ScheduledPost::STATUS_QUEUED
-                ? 'https://youtube.com/shorts/'.$clip->youtube_video_id
-                : null,
+            'privacy' => $delivery['privacy'],
+            'url' => $delivery['url'],
             'options' => $p->options,
         ];
     }

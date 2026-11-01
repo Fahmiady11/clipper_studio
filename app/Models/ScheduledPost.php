@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ScheduledPost extends Model
 {
-    public const PLATFORMS = ['tiktok', 'youtube'];
+    public const PLATFORMS = ['tiktok', 'youtube', 'facebook'];
+
+    // Where a user whose token expired or was revoked connects again
+    private const CONNECT_URLS = ['tiktok' => '/tiktok/connect', 'youtube' => '/youtube/connect', 'facebook' => '/facebook/connect'];
 
     // scheduled: waiting for its time. publishing: claimed by the scheduler. queued: handed to the
     // upload job, whose result lives on the clip. failed: could not be handed over (see error).
@@ -44,5 +47,11 @@ class ScheduledPost extends Model
     public function isPending(): bool
     {
         return $this->status === self::STATUS_SCHEDULED;
+    }
+
+    /** The connect link when the error is a lost session ("Hubungkan ulang …"), else null. */
+    public static function reconnectUrl(string $platform, ?string $error): ?string
+    {
+        return $error && stripos($error, 'hubungkan ulang') !== false ? (self::CONNECT_URLS[$platform] ?? null) : null;
     }
 }

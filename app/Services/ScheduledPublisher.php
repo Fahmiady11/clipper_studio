@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Jobs\PublishFacebookReelJob;
 use App\Jobs\UploadToTikTokJob;
 use App\Jobs\UploadToYouTubeJob;
+use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
+use App\Models\MetaTarget;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\YoutubeAccount;
@@ -86,6 +89,7 @@ class ScheduledPublisher
         match ($post->platform) {
             'tiktok' => $this->dispatchTikTok($post, $clip),
             'youtube' => $this->dispatchYouTube($post, $clip),
+            'facebook' => $this->dispatchFacebook($post, $clip),
             default => throw new \RuntimeException("Platform tidak dikenal: {$post->platform}."),
         };
     }
@@ -135,5 +139,25 @@ class ScheduledPublisher
             'privacy' => (string) ($options['privacy'] ?? 'private'),
             'tags' => $options['tags'] ?? [],
         ]);
+    }
+
+    private function dispatchFacebook(ScheduledPost $post, GeneratedClip $clip): void
+    {
+        $page = MetaTarget::ownedBy($post->user_id, 'facebook')->find($post->account_id)
+            ?? throw new \RuntimeException('Page Facebook sudah diputus. Hubungkan lagi lalu jadwalkan ulang.');
+        if (in_array($clip->publication('facebook')?->status, ['queued', 'uploading'], true)) {
+            throw new \RuntimeException('Clip ini sedang diupload ke Facebook.');
+        }
+
+        ClipPublication::updateOrCreate(['generated_clip_id' => $clip->id, 'platform' => 'facebook'], [
+            'target_id' => $page->id,
+            'status' => 'queued',
+            'external_id' => null,
+            'url' => null,
+            'error' => null,
+            'uploaded_at' => null,
+            'checked_at' => null,
+        ]);
+        PublishFacebookReelJob::dispatch($clip->id, $page->id, (string) (($post->options ?? [])['description'] ?? ''));
     }
 }

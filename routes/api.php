@@ -5,6 +5,7 @@ use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\GameplayClipController;
 use App\Http\Controllers\HookTestController;
+use App\Http\Controllers\MetaAccountController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
 use App\Http\Controllers\ProjectController;
@@ -57,6 +58,14 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/clips/{clipId}/youtube', [YouTubeController::class, 'upload'])->middleware('throttle:10,1');
     Route::get('/clips/{clipId}/youtube-status', [YouTubeController::class, 'status']);
 
+    // Meta (Facebook Pages now; Instagram and Threads later)
+    Route::get('/meta/accounts', [MetaAccountController::class, 'index']);
+    Route::delete('/meta/accounts/{accountId}', [MetaAccountController::class, 'destroyAccount'])->whereNumber('accountId');
+    Route::get('/meta/accounts/{accountId}/pages', [MetaAccountController::class, 'pages'])->whereNumber('accountId')->middleware('throttle:20,1');
+    Route::put('/meta/accounts/{accountId}/pages', [MetaAccountController::class, 'savePages'])->whereNumber('accountId')->middleware('throttle:20,1');
+    Route::delete('/meta/targets/{targetId}', [MetaAccountController::class, 'destroyTarget'])->whereNumber('targetId');
+    Route::get('/facebook/pages', [MetaAccountController::class, 'facebookPages']);
+
     Route::get('/schedule', [ScheduleController::class, 'index']);
     Route::get('/schedule/clips', [ScheduleController::class, 'clips']);
     Route::post('/schedule', [ScheduleController::class, 'store'])->middleware('throttle:30,1');
@@ -85,6 +94,6 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/autopilot/review/{clipId}/approve', [AutopilotController::class, 'approve']);
     Route::post('/autopilot/review/{clipId}/reject', [AutopilotController::class, 'reject']);
     Route::post('/autopilot/review/{clipId}/unapprove', [AutopilotController::class, 'unapprove']);
-    Route::get('/autopilot/youtube', [AutopilotController::class, 'youtubeSettings']);
-    Route::put('/autopilot/youtube', [AutopilotController::class, 'updateYoutubeSettings']);
+    Route::get('/autopilot/{platform}', [AutopilotController::class, 'autopostSettings'])->whereIn('platform', ['youtube', 'facebook']);
+    Route::put('/autopilot/{platform}', [AutopilotController::class, 'updateAutopostSettings'])->whereIn('platform', ['youtube', 'facebook']);
 });

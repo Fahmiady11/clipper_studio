@@ -74,8 +74,8 @@
   .cal-contents { display: contents; }
   .cal-form h3 { margin: 0; font-size: 15px; font-weight: 600; }
   .cal-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
-  .cal-form .seg { display: flex; }
-  .cal-form .seg button { min-height: 44px; }
+  .cal-form .seg { display: flex; flex-wrap: wrap; }
+  .cal-form .seg button { min-height: 44px; flex: 1 1 auto; }
   .cal-form .seg button[disabled] { opacity: .5; cursor: not-allowed; }
   .cal-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 13.5px; color: var(--text); }
   .cal-check input { width: 18px; height: 18px; accent-color: var(--accent-ink); }
@@ -113,7 +113,7 @@
   <div class="cal-wrap">
     <div class="cal-head">
       <h1>Jadwal publish</h1>
-      <p>Tentukan tanggal, jam, dan platform untuk clip yang sudah dirender. Worker mengirimnya ke TikTok atau YouTube Shorts saat waktunya tiba, jadi browser tidak perlu terbuka.
+      <p>Tentukan tanggal, jam, dan platform untuk clip yang sudah dirender. Worker mengirimnya ke TikTok, YouTube Shorts, atau Reels Facebook saat waktunya tiba, jadi browser tidak perlu terbuka.
         Jam mengikuti zona waktu browser kamu: <span class="cal-tz" x-text="tz"></span>.</p>
     </div>
 
@@ -197,19 +197,23 @@
               <div class="seg" role="group" aria-labelledby="cal-platform-label">
                 <button type="button" :class="{ on: form.platform === 'tiktok' }" :disabled="!tiktok.accounts.length" @click="pickPlatform('tiktok')">TikTok</button>
                 <button type="button" :class="{ on: form.platform === 'youtube' }" :disabled="!youtube.accounts.length" @click="pickPlatform('youtube')">YouTube Shorts</button>
+                <button type="button" :class="{ on: form.platform === 'facebook' }" :disabled="!facebook.accounts.length" @click="pickPlatform('facebook')">Reels Facebook</button>
               </div>
-              <div class="cal-hint" style="margin-top:8px" x-show="!tiktok.accounts.length || !youtube.accounts.length">
+              <div class="cal-hint" style="margin-top:8px" x-show="!tiktok.accounts.length || !youtube.accounts.length || !facebook.accounts.length">
                 <template x-if="!tiktok.accounts.length">
                   <span><template x-if="tiktok.configured"><a href="/tiktok/connect" style="color:var(--accent-ink)">Hubungkan akun TikTok</a></template><template x-if="!tiktok.configured"><span>TikTok belum dikonfigurasi di server.</span></template>. </span>
                 </template>
                 <template x-if="!youtube.accounts.length">
-                  <span><template x-if="youtube.configured"><a href="/youtube/connect" style="color:var(--accent-ink)">Hubungkan channel YouTube</a></template><template x-if="!youtube.configured"><span>YouTube belum dikonfigurasi di server.</span></template>.</span>
+                  <span><template x-if="youtube.configured"><a href="/youtube/connect" style="color:var(--accent-ink)">Hubungkan channel YouTube</a></template><template x-if="!youtube.configured"><span>YouTube belum dikonfigurasi di server.</span></template>. </span>
+                </template>
+                <template x-if="!facebook.accounts.length">
+                  <span><template x-if="facebook.configured"><a href="/settings/meta" style="color:var(--accent-ink)">Hubungkan Page Facebook</a></template><template x-if="!facebook.configured"><span>Facebook belum dikonfigurasi di server.</span></template>.</span>
                 </template>
               </div>
             </div>
 
             <div x-show="form.platform && currentAccounts.length > 1">
-              <label class="cal-label" for="cal-account" x-text="form.platform === 'youtube' ? 'Channel' : 'Akun'"></label>
+              <label class="cal-label" for="cal-account" x-text="({ youtube: 'Channel', facebook: 'Page' })[form.platform] || 'Akun'"></label>
               <select id="cal-account" class="select" x-model.number="form.accountId" style="min-height:44px">
                 <template x-for="a in currentAccounts" :key="a.id">
                   <option :value="a.id" x-text="accountName(a)" :selected="a.id === form.accountId"></option>
@@ -242,6 +246,17 @@
                   </select>
                   <div class="cal-hint warn" style="margin-top:8px">Selama app belum lolos audit YouTube API, video tetap tersimpan sebagai Pribadi. Ubah ke Publik di YouTube Studio.</div>
                 </div>
+              </div>
+            </template>
+
+            <template x-if="form.platform === 'facebook'">
+              <div class="cal-form">
+                <div>
+                  <label class="cal-label" for="cal-fb-desc">Deskripsi</label>
+                  <textarea id="cal-fb-desc" class="field" maxlength="5000" x-model="form.fbDescription"></textarea>
+                </div>
+                <div class="cal-hint">Reels di Page selalu publik. Syarat Facebook: video vertikal 9:16, 3 sampai 90 detik.</div>
+                <div class="cal-hint warn" x-show="selectedClip && selectedClip.seconds > 90" x-text="'Clip ini ' + selectedClip.seconds + ' detik, lebih dari batas 90 detik Reels Facebook.'"></div>
               </div>
             </template>
 
@@ -319,7 +334,8 @@
                     <button type="button" class="btn btn-ghost" @click="confirmingId = null">Tidak</button>
                   </span>
                 </template>
-                <a class="cal-link" x-show="p.url" :href="p.url" target="_blank" rel="noopener">Buka di YouTube</a>
+                <a class="cal-link" x-show="p.url" :href="p.url" target="_blank" rel="noopener" x-text="'Buka di ' + PLATFORM[p.platform].site"></a>
+                <a class="cal-link" x-show="p.reconnect_url" :href="p.reconnect_url">Hubungkan ulang</a>
               </div>
             </li>
           </template>
@@ -349,7 +365,11 @@ function scheduleCalendar() {
 
   return {
     DOW: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
-    PLATFORM: { tiktok: { name: 'TikTok', short: 'TT' }, youtube: { name: 'YouTube Shorts', short: 'YT' } },
+    PLATFORM: {
+      tiktok: { name: 'TikTok', short: 'TT', site: 'TikTok' },
+      youtube: { name: 'YouTube Shorts', short: 'YT', site: 'YouTube' },
+      facebook: { name: 'Reels Facebook', short: 'FB', site: 'Facebook' },
+    },
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'lokal',
 
     month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -359,8 +379,9 @@ function scheduleCalendar() {
     clips: [], clipsLoaded: false,
     tiktok: { configured: false, accounts: [] },
     youtube: { configured: false, accounts: [] },
+    facebook: { configured: false, accounts: [] },
 
-    form: { open: false, clipId: '', platform: '', accountId: null, when: '', ytTitle: '', ytDescription: '', ytTags: [], ytPrivacy: 'private', ttMode: 'inbox', ttTitle: '', ttComment: false, ttDuet: false, ttStitch: false },
+    form: { open: false, clipId: '', platform: '', accountId: null, when: '', ytTitle: '', ytDescription: '', ytTags: [], ytPrivacy: 'private', fbDescription: '', ttMode: 'inbox', ttTitle: '', ttComment: false, ttDuet: false, ttStitch: false },
     formError: '', saving: false,
     editing: null, editError: '', confirmingId: null,
 
@@ -445,9 +466,10 @@ function scheduleCalendar() {
     },
     async loadAccounts() {
       const get = async url => { try { const r = await fetch(url, { headers: { 'Accept': 'application/json' } }); return r.ok ? await r.json() : null; } catch { return null; } };
-      const [tt, yt] = await Promise.all([get('/api/tiktok/accounts'), get('/api/youtube/accounts')]);
+      const [tt, yt, fb] = await Promise.all([get('/api/tiktok/accounts'), get('/api/youtube/accounts'), get('/api/facebook/pages')]);
       if (tt) this.tiktok = { configured: tt.configured, accounts: tt.accounts || [] };
       if (yt) this.youtube = { configured: yt.configured, accounts: yt.accounts || [] };
+      if (fb) this.facebook = { configured: fb.configured, accounts: fb.accounts || [] };
     },
 
     // ── status text (always words, never color alone) ──────────────────────
@@ -459,7 +481,8 @@ function scheduleCalendar() {
       const name = this.PLATFORM[p.platform].name;
       return ({
         queued: 'Antre upload', uploading: 'Mengupload', processing: 'Diproses ' + name,
-        inbox: 'Masuk draft TikTok', published: p.platform === 'youtube' ? (p.privacy === 'private' ? 'Di YouTube, privat' : 'Sudah di YouTube') : 'Tayang di TikTok', failed: 'Upload gagal',
+        inbox: 'Masuk draft TikTok', failed: 'Upload gagal',
+        published: ({ youtube: p.privacy === 'private' ? 'Di YouTube, privat' : 'Sudah di YouTube', facebook: 'Tayang di Facebook' })[p.platform] || 'Tayang di TikTok',
       })[p.delivery] || 'Dikirim ke ' + name;
     },
     stateClass(p) {
@@ -468,8 +491,9 @@ function scheduleCalendar() {
     },
 
     // ── create ─────────────────────────────────────────────────────────────
-    get currentAccounts() { return this.form.platform === 'youtube' ? this.youtube.accounts : this.form.platform === 'tiktok' ? this.tiktok.accounts : []; },
-    accountName(a) { return a.display_name || a.title || ('Akun #' + a.id); },
+    get currentAccounts() { return (this[this.form.platform] || { accounts: [] }).accounts; },
+    get selectedClip() { return this.clips.find(c => c.id === this.form.clipId) || null; },
+    accountName(a) { return a.display_name || a.title || a.name || ('Akun #' + a.id); },
     clipOption(c) { return `${c.topic} · ${c.project_title || 'tanpa judul'} · ${c.seconds} dtk`; },
     get canSubmit() {
       const f = this.form;
@@ -492,7 +516,7 @@ function scheduleCalendar() {
       const f = this.form;
       f.open = true;
       f.clipId = clipId || f.clipId || this.clips[0]?.id || '';
-      f.platform = f.platform || (this.tiktok.accounts.length ? 'tiktok' : this.youtube.accounts.length ? 'youtube' : '');
+      f.platform = f.platform || ['tiktok', 'youtube', 'facebook'].find(p => this[p].accounts.length) || '';
       this.pickPlatform(f.platform);
       f.when = this.defaultWhen();
       this.fillFromClip();
@@ -513,6 +537,7 @@ function scheduleCalendar() {
       f.ytTitle = String(c.topic || '').replace(/[<>]/g, '').slice(0, 100);
       f.ytDescription = body.slice(0, 5000);
       f.ytTags = tags.slice(0, 30);
+      f.fbDescription = body.slice(0, 5000);
       f.ttTitle = body.slice(0, 2200);
     },
     async submit() {
@@ -523,6 +548,7 @@ function scheduleCalendar() {
 
       const body = { clip_id: f.clipId, platform: f.platform, account_id: f.accountId, scheduled_at: when.toISOString() };
       if (f.platform === 'youtube') Object.assign(body, { title: f.ytTitle.trim(), description: f.ytDescription, privacy: f.ytPrivacy, tags: f.ytTags });
+      else if (f.platform === 'facebook') Object.assign(body, { description: f.fbDescription });
       else Object.assign(body, { mode: f.ttMode, title: f.ttMode === 'direct' ? f.ttTitle : '', allow_comment: f.ttComment, allow_duet: f.ttDuet, allow_stitch: f.ttStitch });
 
       this.saving = true;

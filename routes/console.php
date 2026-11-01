@@ -9,6 +9,7 @@ use App\Models\VideoSource;
 use App\Services\HookTestService;
 use App\Services\JobWatchdog;
 use App\Services\LoadMonitor;
+use App\Services\MetaStatusPoller;
 use App\Services\ScheduledPublisher;
 use App\Services\StorageCleanup;
 use App\Services\TikTokStatsService;
@@ -42,7 +43,7 @@ Schedule::command('clipper:judge-hook-tests')->hourlyAt(20)->name('judge-hook-te
 // Calendar: hand posts whose time has come to the upload jobs
 Artisan::command('clipper:publish-scheduled', function (ScheduledPublisher $publisher) {
     $this->info('Picked up '.$publisher->publishDue().' scheduled posts');
-})->purpose('Send due scheduled posts to TikTok / YouTube');
+})->purpose('Send due scheduled posts to TikTok / YouTube / Facebook');
 
 Schedule::command('clipper:publish-scheduled')->everyMinute()->name('publish-scheduled')->withoutOverlapping();
 
@@ -53,6 +54,14 @@ Artisan::command('clipper:youtube-status', function (YouTubeStatusPoller $poller
 })->purpose('Refresh the status of YouTube uploads still processing');
 
 Schedule::command('clipper:youtube-status')->everyFiveMinutes()->name('youtube-status')->withoutOverlapping();
+
+// Published Facebook Reels: follow Meta's processing until published or failed
+Artisan::command('clipper:meta-status', function (MetaStatusPoller $poller) {
+    $r = $poller->run();
+    $this->info("Checked {$r['checked']} Meta uploads, {$r['settled']} settled");
+})->purpose('Refresh the status of Facebook Reels still processing');
+
+Schedule::command('clipper:meta-status')->everyFiveMinutes()->name('meta-status')->withoutOverlapping();
 
 // Free disk from downloaded source videos; rendered clips are kept
 Artisan::command('clipper:cleanup {--hours= : Keep files touched within this many hours}', function (StorageCleanup $cleanup) {
