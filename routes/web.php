@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BrandKitController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicPageController;
+use App\Http\Controllers\StatusController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
 use App\Http\Controllers\YouTubeController;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/welcome', [PublicPageController::class, 'welcome'])->name('welcome');
 Route::get('/terms', [PublicPageController::class, 'terms'])->name('terms');
 Route::get('/privacy', [PublicPageController::class, 'privacy'])->name('privacy');
+Route::get('/status', [StatusController::class, 'show'])->name('status');
 
 // Auth routes (public). Signed-in users hitting /login or /register go to the studio.
 Route::middleware('guest')->group(function () {

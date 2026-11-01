@@ -95,6 +95,12 @@ return [
         'temp_retention_hours' => (int) env('CLIPPER_TEMP_RETENTION_HOURS', 72),
         // Shown on /terms and /privacy for questions and data requests
         'contact_email' => env('CONTACT_EMAIL'),
+        // Render box sizing for the load monitor / status page: load per core and queue length
+        'cpu_cores' => (int) env('CLIPPER_CPU_CORES', 2),
+        'load_busy' => (float) env('CLIPPER_LOAD_BUSY', 0.8),
+        'load_overloaded' => (float) env('CLIPPER_LOAD_OVERLOADED', 1.5),
+        'queue_busy' => (int) env('CLIPPER_QUEUE_BUSY', 5),
+        'queue_overloaded' => (int) env('CLIPPER_QUEUE_OVERLOADED', 15),
     ],
 
     'music' => [

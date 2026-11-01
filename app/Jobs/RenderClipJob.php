@@ -8,6 +8,7 @@ use App\Services\FaceTracker;
 use App\Services\FFmpegService;
 use App\Services\GeminiService;
 use App\Services\HookRenderer;
+use App\Services\JobWatchdog;
 use App\Services\MusicService;
 use App\Services\RenderQuota;
 use App\Services\SmartCut;
@@ -303,10 +304,13 @@ class RenderClipJob implements ShouldQueue
 
         app(RenderQuota::class)->release($this->clipId);
 
-        GeneratedClip::where('id', $this->clipId)->whereNull('cancelled_at')->update([
+        $failed = GeneratedClip::where('id', $this->clipId)->whereNull('cancelled_at')->update([
             'status' => 'failed',
             'error_msg' => $e->getMessage(),
         ]);
+        if ($failed) {
+            app(JobWatchdog::class)->notifyClip(GeneratedClip::with('clipProject.user')->find($this->clipId), $e->getMessage());
+        }
     }
 
     private function cleanupTemp(string $dir, string $clipId): void
