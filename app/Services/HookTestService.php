@@ -20,15 +20,19 @@ use RuntimeException;
 
 /**
  * Hook A/B tests. Every variant is a clip row with the same cut and another hook, so it goes
- * through the normal render quota, upload, schedule and stats code. The variants are posted
- * to ONE TikTok account at the same time of day on consecutive days (shuffled order, so the
- * first slot is not always the same angle) and each is judged by its views at the same age.
+ * through the normal render quota, upload, schedule and stats code. The original clip, with
+ * the hook it already has, is the control arm: it is posted as it is (rendered first only when
+ * it has no render yet). All arms are posted to ONE TikTok account at the same time of day on
+ * consecutive days (shuffled order, so the first slot is not always the same arm) and each
+ * is judged by its views at the same age.
  */
 class HookTestService
 {
     public const MIN_VARIANTS = 2;
 
     public const MAX_VARIANTS = 3;
+
+    public const CONTROL = 'original'; // angle name of the control arm in results and winners
 
     public function __construct(
         private GeminiService $gemini,
@@ -38,6 +42,7 @@ class HookTestService
 
     /**
      * Write $count hooks and queue a render for each, charging the render quota per variant.
+     * The original clip joins as the control: it only renders (and is charged) when it has no render yet.
      *
      * @throws RuntimeException nothing was created (no hook enabled, or the AI could not write distinct hooks)
      * @throws QuotaExceeded nothing was created
@@ -55,7 +60,7 @@ class HookTestService
             array_slice($this->performance->rankedHookAngles($user->id), 0, $count),
             $project->transcript?->language ?? 'id',
             $this->performance->hookInsight($user->id),
-            HookText::plain((string) ($clip->hook_text_override ?? $clip->hook_text ?? '')) ?: null,
+            HookText::plain((string) $this->currentHook($clip)) ?: null,
         );
         if (count($hooks) < self::MIN_VARIANTS) {
             throw new RuntimeException('AI belum berhasil membuat hook yang cukup berbeda. Coba lagi.');
@@ -65,7 +70,7 @@ class HookTestService
             $test = HookTest::create([
                 'user_id' => $user->id,
                 'generated_clip_id' => $clip->id,
-                'variant_count' => count($hooks),
+                'variant_count' => count($hooks) + 1, // + the control
                 'status' => HookTest::STATUS_DRAFT,
             ]);
             $variants = array_map(fn (array $hook) => $this->makeVariant($clip, $hook), $hooks);
@@ -73,13 +78,21 @@ class HookTestService
             return [$test, $variants];
         });
 
+        // A control that is already rendered (or rendering) costs nothing more
+        $renderable = $variants;
+        if ($clip->status !== 'processing' && ! $this->isRendered($clip)) {
+            $renderable[] = $clip;
+        }
+
+        $reserved = [];
         try {
-            foreach ($variants as $variant) {
-                $this->quota->reserve($user, $variant); // each variant is a render of its own
+            foreach ($renderable as $arm) {
+                $this->quota->reserve($user, $arm); // each arm is a render of its own
+                $reserved[] = $arm;
             }
         } catch (QuotaExceeded $e) {
-            foreach ($variants as $variant) {
-                $this->quota->release($variant->id);
+            foreach ($reserved as $arm) {
+                $this->quota->release($arm->id);
             }
             $test->delete();
             GeneratedClip::whereIn('id', array_map(fn ($v) => $v->id, $variants))->delete();
@@ -87,9 +100,9 @@ class HookTestService
             throw $e;
         }
 
-        foreach ($variants as $variant) {
-            $variant->update(['status' => 'processing']);
-            RenderClipJob::dispatch($variant->id);
+        foreach ($renderable as $arm) {
+            $arm->fill(['status' => 'processing', 'error_msg' => null, 'cancelled_at' => null])->save();
+            RenderClipJob::dispatch($arm->id);
         }
 
         return $test;
@@ -103,12 +116,16 @@ class HookTestService
      */
     public function schedule(HookTest $test, TiktokAccount $account, CarbonInterface $start, int $gapHours): Collection
     {
-        $variants = $test->clip->variants;
+        $variants = $this->arms($test);
         if ($test->status !== HookTest::STATUS_DRAFT) {
             throw new RuntimeException('Tes ini sudah dijadwalkan.');
         }
-        if ($variants->contains(fn (GeneratedClip $v) => $v->status !== 'done' || ! $v->output_path || ! Storage::exists($v->output_path))) {
-            throw new RuntimeException('Semua varian harus selesai dirender dulu.');
+        if ($variants->contains(fn (GeneratedClip $v) => $v->status !== 'done' || ! $this->isRendered($v))) {
+            throw new RuntimeException('Semua varian dan clip aslinya harus selesai dirender dulu.');
+        }
+        if (ScheduledPost::where('generated_clip_id', $test->generated_clip_id)->where('platform', 'tiktok')
+            ->whereIn('status', [ScheduledPost::STATUS_SCHEDULED, ScheduledPost::STATUS_PUBLISHING])->exists()) {
+            throw new RuntimeException('Clip aslinya masih punya jadwal TikTok di kalender. Batalkan jadwal itu dulu supaya tidak tayang dua kali.');
         }
         foreach (['video.publish', 'video.list'] as $scope) { // posting, and reading the views back
             if (! $account->hasScope($scope)) {
@@ -148,7 +165,13 @@ class HookTestService
         return $posts;
     }
 
-    /** Remove a test that is not running, with its variant clips and files. */
+    /** Control first, then the variants. @return Collection<int, GeneratedClip> */
+    public function arms(HookTest $test): Collection
+    {
+        return collect([$test->clip, ...$test->clip->variants()->get()]);
+    }
+
+    /** Remove a test that is not running, with its variant clips and files; the original clip stays. */
     public function discard(HookTest $test): void
     {
         foreach ($test->clip->variants as $variant) {
@@ -185,8 +208,8 @@ class HookTestService
     {
         $cfg = config('services.clipper.hook_test');
         $window = (int) $cfg['window_hours'];
-        $variants = $test->clip->variants;
-        $posts = ScheduledPost::whereIn('generated_clip_id', $variants->pluck('id'))->where('platform', 'tiktok')->get()->keyBy('generated_clip_id');
+        $variants = $this->arms($test);
+        $posts = $this->postsFor($variants);
 
         $cutoffs = $variants->mapWithKeys(function (GeneratedClip $v) use ($posts, $window) {
             $post = $posts->get($v->id);
@@ -208,8 +231,8 @@ class HookTestService
 
             return [
                 'clip_id' => $v->id,
-                'angle' => $v->hook_angle,
-                'hook_text' => $v->hook_text_override,
+                'angle' => $v->hook_angle ?? self::CONTROL,
+                'hook_text' => $this->currentHook($v),
                 'views' => $snap?->views,
                 'interactions' => $snap ? $interactions : null,
                 'rate' => $snap && $snap->views > 0 ? round($interactions / $snap->views, 4) : null,
@@ -262,9 +285,9 @@ class HookTestService
     /** @return array<string, mixed> */
     public function present(HookTest $test): array
     {
-        $variants = $test->clip->variants()->get();
+        $variants = $this->arms($test);
         $totals = $this->performance->totalsForClips($variants->pluck('id'));
-        $posts = ScheduledPost::whereIn('generated_clip_id', $variants->pluck('id'))->where('platform', 'tiktok')->get()->keyBy('generated_clip_id');
+        $posts = $this->postsFor($variants);
 
         return [
             'id' => $test->id,
@@ -281,9 +304,10 @@ class HookTestService
             'note' => $test->note,
             'variants' => $variants->map(fn (GeneratedClip $v) => [
                 'id' => $v->id,
-                'hook_text' => $v->hook_text_override,
-                'angle' => $v->hook_angle,
-                'angle_label' => $v->hook_angle ? HookTest::angleLabel($v->hook_angle) : null,
+                'hook_text' => $this->currentHook($v),
+                'is_control' => $v->id === $test->generated_clip_id,
+                'angle' => $v->hook_angle ?? self::CONTROL,
+                'angle_label' => HookTest::angleLabel($v->hook_angle ?? self::CONTROL),
                 'status' => $v->status,
                 'error_msg' => $v->status === 'failed' ? $v->error_msg : null,
                 'scheduled_at' => $posts->get($v->id)?->scheduled_at->toIso8601String(),
@@ -295,6 +319,32 @@ class HookTestService
                 'download_url' => $v->status === 'done' ? url("/api/clips/{$v->id}/download") : null,
             ])->values()->all(),
         ];
+    }
+
+    /** The hook text an arm renders with: a per-clip edit beats the AI text, like RenderClipJob decides. */
+    private function currentHook(GeneratedClip $clip): ?string
+    {
+        $hook = $clip->clipProject->hookSetting;
+
+        return $clip->hook_text_override
+            ?: ($hook?->is_ai_generated ? ($clip->hook_text ?? $hook->hook_text) : $hook?->hook_text);
+    }
+
+    private function isRendered(GeneratedClip $clip): bool
+    {
+        return $clip->status === 'done' && $clip->output_path && Storage::exists($clip->output_path);
+    }
+
+    /**
+     * Latest TikTok post per arm (the original may have older ones from before the test).
+     *
+     * @param  Collection<int, GeneratedClip>  $arms
+     * @return Collection<string, ScheduledPost>
+     */
+    private function postsFor(Collection $arms): Collection
+    {
+        return ScheduledPost::whereIn('generated_clip_id', $arms->pluck('id'))->where('platform', 'tiktok')
+            ->orderBy('id')->get()->keyBy('generated_clip_id');
     }
 
     /** @param  array{angle: string, text: string}  $hook */

@@ -80,12 +80,14 @@ class HookTestTest extends TestCase
         $clip = $this->clip($user);
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/hook-test", ['count' => $count])->assertCreated();
         Storage::put('clips/variant.mp4', 'v');
+        Storage::put('clips/original.mp4', 'o');
         GeneratedClip::where('variant_of_id', $clip->id)->update(['status' => 'done', 'output_path' => 'clips/variant.mp4']);
+        $clip->update(['status' => 'done', 'output_path' => 'clips/original.mp4']); // the control renders too when it had no render
 
         return $clip->hookTest;
     }
 
-    public function test_creates_distinct_variants_that_share_everything_but_the_hook(): void
+    public function test_creates_distinct_variants_and_the_original_joins_as_control(): void
     {
         Queue::fake();
         $this->fakeHooks();
@@ -93,7 +95,9 @@ class HookTestTest extends TestCase
         $clip = $this->clip($user);
 
         $res = $this->actingAs($user)->postJson("/api/clips/{$clip->id}/hook-test", ['count' => 3])
-            ->assertCreated()->assertJsonPath('test.status', 'draft')->assertJsonCount(3, 'test.variants');
+            ->assertCreated()->assertJsonPath('test.status', 'draft')->assertJsonCount(4, 'test.variants')
+            ->assertJsonPath('test.variants.0.is_control', true)->assertJsonPath('test.variants.0.angle', 'original')
+            ->assertJsonPath('test.variants.0.hook_text', 'Hook asli');
 
         $variants = $clip->variants;
         $this->assertCount(3, $variants);
@@ -108,14 +112,37 @@ class HookTestTest extends TestCase
             $this->assertSame('chill', $v->music_mood);
             $this->assertNull($v->viral_score); // keeps the viral-score buckets clean
         }
-        Queue::assertPushed(RenderClipJob::class, 3);
-        // Every variant is its own reservation: 3 renders x 60 s
-        $this->assertSame(3, RenderUsage::where('status', 'reserved')->count());
-        $this->assertSame(180, (int) RenderUsage::where('user_id', $user->id)->sum('seconds'));
+        $this->assertSame(4, HookTest::sole()->variant_count);
+        // No render yet, so the control renders too: 3 variants + the original, each its own reservation of 60 s
+        Queue::assertPushed(RenderClipJob::class, 4);
+        Queue::assertPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
+        $this->assertSame(4, RenderUsage::where('status', 'reserved')->count());
+        $this->assertSame(240, (int) RenderUsage::where('user_id', $user->id)->sum('seconds'));
+        $this->assertSame('processing', $clip->fresh()->status);
         // The studio never sees variants as clips to pick
         $this->assertCount(1, ClipProject::with('generatedClips')->first()->generatedClips);
         $this->assertSame('Hook asli', $clip->fresh()->hook_text);
+        $this->assertNull($clip->fresh()->hook_angle);
         $this->assertNotNull($res->json('test.id'));
+    }
+
+    public function test_a_rendered_original_is_the_control_as_it_is_without_a_new_render_or_charge(): void
+    {
+        Queue::fake();
+        $this->fakeHooks();
+        $user = User::factory()->create();
+        Storage::put('clips/original.mp4', 'o');
+        $clip = $this->clip($user, true, ['status' => 'done', 'output_path' => 'clips/original.mp4']);
+
+        $this->actingAs($user)->postJson("/api/clips/{$clip->id}/hook-test", ['count' => 2])
+            ->assertCreated()->assertJsonCount(3, 'test.variants')
+            ->assertJsonPath('test.variants.0.status', 'done')->assertJsonPath('test.variants.0.is_control', true);
+
+        Queue::assertPushed(RenderClipJob::class, 2); // the two variants only
+        Queue::assertNotPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
+        $this->assertSame(2, RenderUsage::where('status', 'reserved')->count());
+        $this->assertSame('done', $clip->fresh()->status);
+        $this->assertSame('clips/original.mp4', $clip->fresh()->output_path);
     }
 
     public function test_two_variants_use_the_two_best_angles_so_far(): void
@@ -179,8 +206,8 @@ class HookTestTest extends TestCase
         Queue::fake();
         $this->fakeHooks();
         $user = User::factory()->create();
-        // Free plan = 30 min; leave room for two 60 s renders but not three
-        RenderUsage::create(['user_id' => $user->id, 'generated_clip_id' => 'old', 'period' => now()->format('Y-m'), 'status' => 'charged', 'seconds' => 30 * 60 - 150]);
+        // Free plan = 30 min; leave 200 s: room for 3 renders of 60 s (2 variants + the unrendered original), not for 4
+        RenderUsage::create(['user_id' => $user->id, 'generated_clip_id' => 'old', 'period' => now()->format('Y-m'), 'status' => 'charged', 'seconds' => 30 * 60 - 200]);
         $clip = $this->clip($user);
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/hook-test", ['count' => 3])
@@ -188,11 +215,12 @@ class HookTestTest extends TestCase
 
         $this->assertSame(0, HookTest::count());
         $this->assertSame(1, GeneratedClip::count());
-        $this->assertSame(1, RenderUsage::count()); // reservations rolled back
+        $this->assertSame(1, RenderUsage::count()); // reservations rolled back, the original's too
+        $this->assertSame('pending', $clip->fresh()->status);
         Queue::assertNothingPushed();
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/hook-test", ['count' => 2])->assertCreated();
-        $this->assertSame(2, RenderUsage::where('status', 'reserved')->count());
+        $this->assertSame(3, RenderUsage::where('status', 'reserved')->count());
     }
 
     public function test_publish_staggers_variants_on_one_account_in_shuffled_order(): void
@@ -207,8 +235,9 @@ class HookTestTest extends TestCase
         ])->assertOk()->assertJsonPath('test.status', 'testing');
 
         $posts = ScheduledPost::orderBy('scheduled_at')->get();
-        $this->assertCount(3, $posts);
-        $this->assertSame($posts->pluck('generated_clip_id')->unique()->count(), 3);
+        $this->assertCount(4, $posts); // 3 variants + the original as control
+        $this->assertSame(4, $posts->pluck('generated_clip_id')->unique()->count());
+        $this->assertTrue($posts->pluck('generated_clip_id')->contains($test->generated_clip_id));
         foreach ($posts as $i => $post) {
             $this->assertSame('tiktok', $post->platform);
             $this->assertSame($account->id, $post->account_id);
@@ -216,6 +245,7 @@ class HookTestTest extends TestCase
             $this->assertTrue($start->copy()->addDays($i)->equalTo($post->scheduled_at)); // same time of day, a day apart
             $this->assertSame('Caption asli #a', $post->options['title']);
         }
+        $this->assertSame('direct', ScheduledPost::where('generated_clip_id', $test->generated_clip_id)->value('options')['mode']);
         $test->refresh();
         $this->assertSame('testing', $test->status);
         $this->assertTrue($posts->last()->scheduled_at->copy()->addHours(48 + 24)->equalTo($test->ends_by));
@@ -243,21 +273,33 @@ class HookTestTest extends TestCase
         $test->clip->variants()->first()->update(['status' => 'processing']);
         $this->actingAs($user)->postJson($url, ['account_id' => $ok->id])->assertStatus(422)
             ->assertJsonPath('message', fn ($m) => str_contains($m, 'dirender'));
-        $this->assertSame(0, ScheduledPost::count());
+        $test->clip->variants()->first()->update(['status' => 'done']);
+
+        $test->clip->update(['status' => 'processing']); // the control is not rendered yet either
+        $this->actingAs($user)->postJson($url, ['account_id' => $ok->id])->assertStatus(422);
+        $test->clip->update(['status' => 'done']);
+
+        ScheduledPost::create(['user_id' => $user->id, 'generated_clip_id' => $test->generated_clip_id, 'platform' => 'tiktok', 'account_id' => $ok->id,
+            'scheduled_at' => now()->addDay(), 'status' => 'scheduled', 'options' => []]);
+        $this->actingAs($user)->postJson($url, ['account_id' => $ok->id])->assertStatus(422)
+            ->assertJsonPath('message', fn ($m) => str_contains($m, 'kalender'));
+        $this->assertSame(1, ScheduledPost::count());
     }
 
+    /** @param  array<string, array{0: int, 1: int}>  $statsByAngle  views and likes at the comparison age; the control ('original') defaults to a weak arm */
     private function publishedTest(User $user, array $statsByAngle): HookTest
     {
+        $statsByAngle += ['original' => [200, 5]];
         $test = $this->readyTest($user);
         $this->actingAs($user)->postJson("/api/clips/{$test->generated_clip_id}/hook-test/publish", [
             'account_id' => $this->account($user)->id, 'gap_hours' => 24,
         ])->assertOk();
         // Posts went out on schedule; then the 48 h window passed for all of them
         ScheduledPost::query()->update(['status' => 'queued']);
-        foreach ($test->clip->variants as $v) {
+        foreach (app(HookTestService::class)->arms($test) as $v) {
             $post = ScheduledPost::where('generated_clip_id', $v->id)->first();
             $post->update(['handed_off_at' => $post->scheduled_at]);
-            [$views, $likes] = $statsByAngle[$v->hook_angle];
+            [$views, $likes] = $statsByAngle[$v->hook_angle ?? 'original'];
             ClipStat::create(['generated_clip_id' => $v->id, 'platform' => 'tiktok', 'views' => $views, 'likes' => $likes, 'comments' => 0, 'shares' => 0,
                 'collected_at' => $post->scheduled_at->copy()->addHours(47)]);
             // A later snapshot is a different age and must not count
@@ -280,12 +322,31 @@ class HookTestTest extends TestCase
         $this->assertSame('decided', $test->status);
         $this->assertSame('question', $test->winner_angle);
         $this->assertSame('question', GeneratedClip::find($test->winner_clip_id)->hook_angle);
-        $this->assertSame([1500, 900, 400], collect($test->results)->pluck('views')->sortDesc()->values()->all());
+        $this->assertSame([1500, 900, 400, 200], collect($test->results)->pluck('views')->sortDesc()->values()->all());
+        $this->assertContains('original', collect($test->results)->pluck('angle')->all());
 
         $this->travelBack();
         $this->actingAs($user)->getJson("/api/clips/{$test->generated_clip_id}/hook-test")
             ->assertOk()->assertJsonPath('test.winner_angle', 'question')
             ->assertJsonPath('test.variants.0.views', fn ($v) => $v !== null);
+    }
+
+    public function test_the_original_hook_can_win_and_that_is_recorded_as_such(): void
+    {
+        $user = User::factory()->create();
+        $test = $this->publishedTest($user, ['curiosity_gap' => [400, 20], 'question' => [500, 30], 'bold_claim' => [900, 10], 'original' => [2000, 50]]);
+
+        app(HookTestService::class)->judge($test);
+
+        $test->refresh();
+        $this->assertSame('decided', $test->status);
+        $this->assertSame($test->generated_clip_id, $test->winner_clip_id);
+        $this->assertSame('original', $test->winner_angle);
+        $this->travelBack();
+        $this->actingAs($user)->getJson("/api/clips/{$test->generated_clip_id}/hook-test")
+            ->assertJsonPath('test.winner_angle', 'original')->assertJsonPath('test.variants.0.is_winner', true);
+        // The angle ranking is unaffected: only the three new angles can be asked for
+        $this->assertSame(['curiosity_gap', 'question', 'bold_claim'], app(ClipPerformanceSummary::class)->rankedHookAngles($user->id));
     }
 
     public function test_close_views_fall_back_to_engagement_then_to_no_winner(): void
@@ -325,7 +386,7 @@ class HookTestTest extends TestCase
     public function test_too_few_views_is_inconclusive(): void
     {
         $user = User::factory()->create();
-        $test = $this->publishedTest($user, ['curiosity_gap' => [3, 0], 'question' => [5, 1], 'bold_claim' => [0, 0]]); // private posts barely show views
+        $test = $this->publishedTest($user, ['curiosity_gap' => [3, 0], 'question' => [5, 1], 'bold_claim' => [0, 0], 'original' => [2, 0]]); // private posts barely show views
         app(HookTestService::class)->judge($test);
         $this->assertSame('inconclusive', $test->refresh()->status);
         $this->assertStringContainsString('terlalu sedikit', $test->note);
@@ -338,14 +399,15 @@ class HookTestTest extends TestCase
         $this->assertNull($summary->hookInsight($user->id));
         $this->assertSame(['curiosity_gap', 'question', 'bold_claim'], $summary->rankedHookAngles($user->id));
 
-        foreach (['question', 'question', 'bold_claim'] as $angle) {
-            HookTest::create(['user_id' => $user->id, 'generated_clip_id' => $this->clip($user)->id, 'variant_count' => 2, 'status' => 'decided', 'winner_angle' => $angle]);
+        foreach (['question', 'question', 'bold_claim', 'original'] as $angle) {
+            HookTest::create(['user_id' => $user->id, 'generated_clip_id' => $this->clip($user)->id, 'variant_count' => 3, 'status' => 'decided', 'winner_angle' => $angle]);
         }
-        HookTest::create(['user_id' => $user->id, 'generated_clip_id' => $this->clip($user)->id, 'variant_count' => 2, 'status' => 'inconclusive']);
+        HookTest::create(['user_id' => $user->id, 'generated_clip_id' => $this->clip($user)->id, 'variant_count' => 3, 'status' => 'inconclusive']);
 
         $insight = $summary->hookInsight($user->id);
-        $this->assertStringContainsString('3 tes', $insight);
-        $this->assertStringContainsString('pertanyaan tajam (2x), klaim berani (1x)', $insight);
+        $this->assertStringContainsString('4 tes', $insight);
+        $this->assertStringContainsString('pertanyaan tajam (2x)', $insight);
+        $this->assertStringContainsString('hook asli (1x)', $insight); // the unchanged hook beat the new ones once
         $this->assertSame(['question', 'bold_claim', 'curiosity_gap'], $summary->rankedHookAngles($user->id));
         $this->assertNull($summary->hookInsight(User::factory()->create()->id)); // per user
 
@@ -361,14 +423,25 @@ class HookTestTest extends TestCase
         $test = $this->readyTest($user, 2);
         $clip = $test->clip;
 
-        $this->actingAs($user)->getJson('/api/schedule/clips')->assertOk()->assertJsonCount(0, 'clips'); // original is not rendered, variants hidden
+        $this->actingAs($user)->getJson('/api/schedule/clips')->assertOk()->assertJsonCount(1, 'clips') // only the original, variants hidden
+            ->assertJsonPath('clips.0.id', $clip->id);
 
         $this->actingAs($user)->patchJson("/api/clips/{$clip->id}/bounds", ['start_seconds' => 1, 'end_seconds' => 30])->assertStatus(409);
+        // The control's hook is part of the comparison, so it can't be edited either
+        $this->actingAs($user)->postJson("/api/clips/{$clip->id}/render", ['hook_text' => 'Hook baru'])->assertStatus(409);
 
         $this->actingAs($user)->deleteJson("/api/clips/{$clip->id}/hook-test")->assertOk();
         $this->assertSame(0, HookTest::count());
         $this->assertSame(1, GeneratedClip::count());
         Storage::assertMissing('clips/variant.mp4');
+        Storage::assertExists('clips/original.mp4'); // the original is a normal clip, discarding a test never touches it
+        $this->assertSame('done', $clip->fresh()->status);
         $this->actingAs($user)->getJson("/api/clips/{$clip->id}/hook-test")->assertOk()->assertJsonPath('test', null);
+    }
+
+    public function test_studio_result_screen_has_the_hook_test_section(): void
+    {
+        $this->actingAs(User::factory()->create())->get('/')->assertOk()
+            ->assertSee('Tes hook A/B')->assertSee('createHookTest()', false)->assertSee('publishHookTest()', false);
     }
 }

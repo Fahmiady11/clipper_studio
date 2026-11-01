@@ -33,7 +33,7 @@
       <button class="btn btn-secondary" @click="done = false; step = 7">Pilih clip lain</button>
       <a class="btn btn-secondary" :href="'/calendar?clip=' + selectedClipObj?.id" x-show="selectedClipObj">Jadwalkan publish</a>
     </div>
-    <div style="text-align:center;margin-top:10px" x-show="hookEnabled">
+    <div style="text-align:center;margin-top:10px" x-show="hookEnabled && !hookTest">
       <button class="res-edit" type="button" @click="openEditHook()">✎ Edit teks hook &amp; render ulang</button>
     </div>
     <div style="margin-top:14px;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:.05em"
@@ -240,6 +240,91 @@
         </div>
         <div x-show="ytStatus === 'failed' && ytError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="ytError"></div>
       </div>
+    </div>
+
+    {{-- Tes hook A/B: hook asli lawan 2-3 hook baru, pemenang dari views TikTok --}}
+    <div class="res-sec" x-show="selectedClipObj" aria-labelledby="ht-title">
+      <div class="res-sec-head">
+        <span class="res-sec-title" id="ht-title">Tes hook A/B</span>
+        <button class="res-edit" type="button" x-show="hookTest && hookTest.status !== 'testing'" :disabled="hookTestBusy" @click="deleteHookTest()">Hapus tes</button>
+      </div>
+
+      {{-- Belum ada tes --}}
+      <div x-show="!hookTest && !hookTestLoading">
+        <p class="ht-lead">Hook baru diadu dengan hook yang sekarang. Semua versi diposting ke satu akun TikTok di jam yang sama, satu per hari. Pemenangnya dipilih dari views di umur posting yang sama.</p>
+        <div class="seg" role="group" aria-label="Jumlah hook baru" style="margin:14px 0 10px">
+          <button type="button" :class="{ on: hookTestCount === 2 }" :aria-pressed="hookTestCount === 2" @click="hookTestCount = 2">2 hook baru</button>
+          <button type="button" :class="{ on: hookTestCount === 3 }" :aria-pressed="hookTestCount === 3" @click="hookTestCount = 3">3 hook baru</button>
+        </div>
+        <p class="ht-note" x-text="hookTestCostText"></p>
+        <button class="btn" type="button" @click="createHookTest()" :disabled="hookTestBusy" :style="hookTestBusy ? 'opacity:.5;pointer-events:none' : ''"
+                x-text="hookTestBusy ? 'Menulis hook…' : 'Buat varian'"></button>
+      </div>
+      <div x-show="hookTestLoading && !hookTest" class="ht-note">Memuat tes hook…</div>
+      <div x-show="hookTestError" class="ht-error" role="alert" x-text="hookTestError"></div>
+
+      {{-- Tes berjalan atau selesai --}}
+      <template x-if="hookTest">
+        <div>
+          <div class="ht-verdict" x-show="hookTest.status === 'decided'" role="status">
+            <div class="ht-verdict-title" x-text="hookTestWinner && hookTestWinner.is_control ? 'Hook yang sekarang menang' : 'Pemenang: gaya ' + (hookTestWinner ? hookTestWinner.angle_label : '')"></div>
+            <div class="ht-verdict-hook" x-text="hookTestWinner ? plainHook(hookTestWinner.hook_text) : ''"></div>
+            <div class="ht-note" x-text="hookTestWinner && hookTestWinner.is_control ? 'Hook baru kalah dari hook aslinya, jadi tidak perlu diganti.' : 'Hook ini dicatat sebagai gaya yang berhasil dan dipakai untuk menulis hook berikutnya.'"></div>
+          </div>
+          <div class="ht-verdict" x-show="hookTest.status === 'inconclusive'" role="status">
+            <div class="ht-verdict-title">Belum ada pemenang</div>
+            <div class="ht-note" x-text="hookTest.note"></div>
+            <div class="ht-note">Hapus tes ini untuk mencoba lagi dengan hook lain.</div>
+          </div>
+
+          <ul class="ht-list" aria-live="polite">
+            <template x-for="arm in hookTest.variants" :key="arm.id">
+              <li class="ht-arm" :class="{ 'is-winner': arm.is_winner }">
+                <div class="ht-arm-main">
+                  <div class="ht-arm-tag">
+                    <span x-text="arm.is_control ? 'Hook asli' : 'Gaya ' + arm.angle_label"></span>
+                    <span x-show="arm.is_winner" class="ht-win">Pemenang</span>
+                  </div>
+                  <div class="ht-arm-hook" x-text="plainHook(arm.hook_text) || '(tanpa teks)'"></div>
+                  <div class="ht-arm-state" :class="{ 'is-fail': arm.status === 'failed' || arm.post_status === 'failed' || arm.delivery === 'failed' }" x-text="hookArmState(arm)"></div>
+                </div>
+                <div class="ht-arm-side">
+                  <div class="ht-arm-num" x-text="hookArmStats(arm)"></div>
+                  <a class="res-edit" x-show="arm.download_url && arm.status === 'done'" :href="arm.download_url + '?inline=1'" target="_blank" rel="noopener" :aria-label="'Lihat video: ' + plainHook(arm.hook_text)">Lihat video</a>
+                  <button class="res-edit" type="button" x-show="arm.status === 'failed' || (arm.status === 'pending' && !arm.is_control)" @click="renderHookArm(arm)">Render ulang</button>
+                </div>
+              </li>
+            </template>
+          </ul>
+
+          {{-- Semua versi sudah jadi: pilih akun lalu jadwalkan --}}
+          <div x-show="hookTest.status === 'draft' && hookTestAllDone" style="margin-top:16px">
+            <div x-show="!tiktokAccounts.length">
+              <p class="ht-note">Hubungkan akun TikTok dulu untuk memposting dan membaca views-nya.</p>
+              <a class="btn btn-secondary" href="/tiktok/connect">Hubungkan akun TikTok</a>
+            </div>
+            <div x-show="tiktokAccounts.length">
+              <div class="fblock-title" style="margin-bottom:6px">Akun TikTok untuk semua versi</div>
+              <div class="seg" role="group" aria-label="Akun TikTok" style="flex-wrap:wrap;margin-bottom:12px">
+                <template x-for="a in tiktokAccounts" :key="a.id">
+                  <button type="button" :class="{ on: tiktokAccountId === a.id }" :aria-pressed="tiktokAccountId === a.id" @click="tiktokAccountId = a.id" x-text="a.display_name || ('Akun #' + a.id)"></button>
+                </template>
+              </div>
+              <div class="fblock-title" style="margin-bottom:6px">Jarak antar posting</div>
+              <div class="seg" role="group" aria-label="Jarak antar posting" style="margin-bottom:10px">
+                <template x-for="h in [12, 24, 48]" :key="h">
+                  <button type="button" :class="{ on: hookTestGap === h }" :aria-pressed="hookTestGap === h" @click="hookTestGap = h" x-text="h + ' jam'"></button>
+                </template>
+              </div>
+              <p class="ht-note">Butuh izin <code>video.publish</code> dan <code>video.list</code> di akun TikTok. Selama app TikTok belum lolos audit, posting bersifat privat dan views bisa terlalu sedikit untuk dibandingkan.</p>
+              <button class="btn" type="button" @click="publishHookTest()" :disabled="hookTestBusy || !tiktokAccountId" :style="hookTestBusy || !tiktokAccountId ? 'opacity:.5;pointer-events:none' : ''"
+                      x-text="hookTestBusy ? 'Menjadwalkan…' : 'Jadwalkan tes ke TikTok'"></button>
+            </div>
+          </div>
+          <p class="ht-note" x-show="hookTest.status === 'draft' && !hookTestAllDone" style="margin-top:14px">Menunggu semua versi selesai dirender.</p>
+          <p class="ht-note" x-show="hookTest.status === 'testing'" style="margin-top:14px" x-text="hookTestTestingText"></p>
+        </div>
+      </template>
     </div>
 
     <div class="dl-row">

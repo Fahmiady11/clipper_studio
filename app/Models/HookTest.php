@@ -41,6 +41,7 @@ class HookTest extends Model
             'question' => 'pertanyaan tajam',
             'bold_claim' => 'klaim berani',
             'curiosity_gap' => 'celah rasa penasaran',
+            'original' => 'hook asli',
             default => $angle,
         };
     }

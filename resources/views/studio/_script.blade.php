@@ -74,6 +74,8 @@ function studio() {
     PRIVACY_LABELS: {
       PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya',
     },
+    hookTest: null, hookTestLoading: false, hookTestBusy: false, hookTestError: null, hookTestTimer: null,
+    hookTestCount: 2, hookTestGap: 24,
     previewT: 0, previewTick: null,
 
     // ── constants ──────────────────────────────────────────────────────────
@@ -1043,6 +1045,110 @@ function studio() {
       clearTimeout(this.tiktokTimer);
       if (this.tiktokBusy) this.tiktokTimer = setTimeout(() => this.fetchTiktokStatus(), 4000);
     },
+    // ── tes hook A/B ───────────────────────────────────────────────────────
+    plainHook(t) { return (t || '').replace(/\*/g, ''); },
+    get hookTestWinner() { return this.hookTest?.variants.find(v => v.is_winner) || null; },
+    get hookTestAllDone() { return !!this.hookTest && this.hookTest.variants.every(v => v.status === 'done'); },
+    get hookTestCostText() {
+      const secs = this.tiktokClipSeconds;
+      if (!secs) return '';
+      const n = this.hookTestCount;
+      return `Tiap hook baru dirender sendiri dan memakai kuota render: ${n} x ${Math.round(secs)} detik = ${n * Math.round(secs)} detik. Hook yang sekarang dipakai apa adanya.`;
+    },
+    get hookTestTestingText() {
+      const t = this.hookTest;
+      if (!t) return '';
+      const when = t.ends_by ? new Date(t.ends_by).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      return `Tes berjalan. Tiap versi dinilai dari views ${t.window_hours} jam setelah posting-nya; paling lambat dinilai ${when}.`;
+    },
+    hookArmState(arm) {
+      const when = arm.scheduled_at ? new Date(arm.scheduled_at).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      if (arm.status === 'processing') return 'Sedang dirender';
+      if (arm.status === 'failed') return 'Render gagal: ' + (arm.error_msg || 'coba render ulang');
+      if (arm.status !== 'done') return 'Belum dirender';
+      if (arm.post_status === 'failed') return 'Gagal dijadwalkan';
+      if (arm.post_status === 'scheduled') return 'Tayang ' + when;
+      if (arm.post_status === 'publishing') return 'Diserahkan ke upload';
+      if (arm.post_status === 'queued') {
+        const label = { queued: 'Mengantre', uploading: 'Mengupload', processing: 'Diproses TikTok', published: 'Sudah tayang ' + when, failed: 'Upload gagal', inbox: 'Ada di draft TikTok' }[arm.delivery];
+        return label || 'Diserahkan ke upload';
+      }
+      return 'Siap diposting';
+    },
+    hookArmStats(arm) {
+      if (arm.views === null || arm.views === undefined) return this.hookTest?.status === 'draft' ? '' : 'Belum ada data views';
+      return `${arm.views.toLocaleString('id-ID')} views · ${(arm.likes || 0).toLocaleString('id-ID')} suka`;
+    },
+    async hookTestRequest(method, path = '', body = null) {
+      const clipId = this.selectedClipObj?.id;
+      const res = await fetch(`/api/clips/${clipId}/hook-test${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+        body: body ? JSON.stringify(body) : null,
+      });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data, clipId };
+    },
+    async loadHookTest() {
+      clearTimeout(this.hookTestTimer);
+      if (!this.selectedClipObj) return;
+      this.hookTestLoading = true;
+      try {
+        const r = await this.hookTestRequest('GET');
+        if (r.clipId !== this.selectedClipObj?.id) return;
+        if (r.ok) { this.hookTest = r.data.test; this.watchHookTest(); }
+      } catch (e) { console.error('loadHookTest', e); }
+      finally { this.hookTestLoading = false; }
+    },
+    // Variants render in the background: keep refreshing while any still does
+    watchHookTest() {
+      clearTimeout(this.hookTestTimer);
+      if (!this.hookTest?.variants.some(v => v.status === 'processing')) return;
+      this.hookTestTimer = setTimeout(() => this.loadHookTest(), 4000);
+    },
+    async createHookTest() {
+      if (this.hookTestBusy) return;
+      this.hookTestBusy = true; this.hookTestError = null;
+      try {
+        const r = await this.hookTestRequest('POST', '', { count: this.hookTestCount });
+        if (!r.ok) { this.hookTestError = r.data.message || 'Gagal membuat varian.'; return; }
+        this.hookTest = r.data.test; this.watchHookTest();
+      } catch (e) { this.hookTestError = 'Koneksi gagal.'; }
+      finally { this.hookTestBusy = false; }
+    },
+    async publishHookTest() {
+      if (this.hookTestBusy || !this.tiktokAccountId) return;
+      this.hookTestBusy = true; this.hookTestError = null;
+      try {
+        const r = await this.hookTestRequest('POST', '/publish', { account_id: this.tiktokAccountId, gap_hours: this.hookTestGap });
+        if (!r.ok) { this.hookTestError = r.data.message || Object.values(r.data.errors || {})[0]?.[0] || 'Gagal menjadwalkan tes.'; return; }
+        this.hookTest = r.data.test;
+      } catch (e) { this.hookTestError = 'Koneksi gagal.'; }
+      finally { this.hookTestBusy = false; }
+    },
+    async deleteHookTest() {
+      if (this.hookTestBusy) return;
+      if (!confirm('Hapus tes ini beserta video varian-nya? Clip aslinya tidak ikut terhapus.')) return;
+      this.hookTestBusy = true; this.hookTestError = null;
+      try {
+        const r = await this.hookTestRequest('DELETE');
+        if (!r.ok) { this.hookTestError = r.data.message || 'Gagal menghapus tes.'; return; }
+        this.hookTest = null; clearTimeout(this.hookTestTimer);
+      } catch (e) { this.hookTestError = 'Koneksi gagal.'; }
+      finally { this.hookTestBusy = false; }
+    },
+    async renderHookArm(arm) {
+      this.hookTestError = null;
+      try {
+        const res = await fetch(`/api/clips/${arm.id}/render`, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { this.hookTestError = data.message || 'Gagal memulai render.'; return; }
+        await this.loadHookTest();
+      } catch (e) { this.hookTestError = 'Koneksi gagal.'; }
+    },
     async fetchCaption() {
       const clipId = this.selectedClipObj?.id;
       if (!clipId) return;
@@ -1080,8 +1186,9 @@ function studio() {
         projectId:null,
         clips:[], selectedClip:null,
         renderingClipId:null, renderError:null, downloadUrl:null,
-        clipCaption:'', clipHashtags:[],
+        clipCaption:'', clipHashtags:[], hookTest:null, hookTestError:null,
       });
+      clearTimeout(this.hookTestTimer);
       this.previewT = 0;
     },
 
@@ -1134,10 +1241,11 @@ function studio() {
       this.$watch('selectedClip', () => {
         this.clipCaption = ''; this.clipHashtags = [];
         this.tiktokStatus = null; this.tiktokError = null;
+        this.hookTest = null; this.hookTestError = null; clearTimeout(this.hookTestTimer);
         this.ytStatus = null; this.ytError = null; this.ytUrl = null; this.ytPrivacyNow = null; clearTimeout(this.ytTimer);
-        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); }
+        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); }
       });
-      this.$watch('done', val => { if (val && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); } });
+      this.$watch('done', val => { if (val && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); } });
       this.$watch('tiktokMode', () => this.loadTiktokCreator());
       this.$watch('tiktokAccountId', () => this.loadTiktokCreator());
 
@@ -1154,7 +1262,7 @@ function studio() {
         if (youtubeResult !== 'connected') alert('Gagal menghubungkan YouTube (' + youtubeResult + ').');
       }
       await Promise.all([this.loadTiktokAccounts(), this.loadYoutubeAccounts(), this.loadMusicLibrary()]);
-      if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); }
+      if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); }
       // If restored from session and already done
       if (this.done && this.selectedClipObj && !this.clipCaption) this.fetchCaption();
     },

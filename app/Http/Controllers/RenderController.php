@@ -32,6 +32,7 @@ class RenderController extends Controller
         $rerender = array_key_exists('hook_text', $data);
         if ($rerender) {
             abort_if($clip->status === 'processing', 409, 'Clip masih dirender. Tunggu selesai atau batalkan dulu.');
+            abort_if($clip->hookTest()->exists(), 409, 'Clip ini jadi pembanding di tes hook A/B, hook-nya tidak bisa diubah. Hapus tesnya dulu.');
             $clip->hook_text_override = HookText::clean($data['hook_text']);
         }
 
