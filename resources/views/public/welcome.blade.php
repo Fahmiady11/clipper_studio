@@ -1,11 +1,13 @@
 @extends('public._layout')
-@section('title', 'Turn long videos into TikTok and YouTube Shorts clips')
+@section('title', 'Ubah video panjang jadi klip untuk TikTok, Shorts, dan Reels')
+@section('lang', 'id')
+@section('description', 'Clipper Studio memilih momen terbaik dari video YouTube panjang, mengeditnya jadi klip vertikal 9:16 dengan subtitle dan hook, lalu mengirim klip yang kamu setujui ke akun TikTok, YouTube, Facebook, Instagram, dan Threads milikmu sendiri.')
 @section('main_class', 'wide')
 
 @section('style')
 /* ── Hero ─────────────────────────────────────────────────────────────── */
 .wl-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 48px; align-items: center; padding: 16px 0 56px; }
-.wl-hero h1 { font-size: 64px; font-weight: 800; line-height: 1.02; letter-spacing: -.045em; margin: 0 0 22px; text-wrap: balance; }
+.wl-hero h1 { font-size: 54px; font-weight: 800; line-height: 1.02; letter-spacing: -.045em; margin: 0 0 22px; text-wrap: balance; }
 /* The highlighted word, as a karaoke subtitle would show it */
 .wl-hero h1 mark { color: var(--on-accent); background: var(--accent); border-radius: 10px; padding: 0 .14em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .wl-lead { font-size: 17px; line-height: 1.65; color: var(--text-muted); margin: 0 0 28px; max-width: 520px; }
@@ -71,6 +73,8 @@
 .wl-sec-head p { color: var(--text-muted); margin: 0; font-size: 16px; }
 .wl-lead-feats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 40px; }
 .wl-lead-feat { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px; }
+.wl-lead-feats.one { grid-template-columns: minmax(0, 1fr); }
+.wl-lead-feat.wide p { max-width: 78ch; }
 .wl-lead-feat h3 { font-size: 24px; font-weight: 700; letter-spacing: -.025em; margin: 18px 0 8px; }
 .wl-lead-feat p { font-size: 15px; line-height: 1.6; color: var(--text-muted); margin: 0; max-width: 46ch; }
 .wl-feats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 48px; margin: 0; padding: 0; list-style: none; }
@@ -87,13 +91,19 @@
 .wl-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 26px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; }
 .wl-box-ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; color: var(--accent-ink); background: var(--surface-2); border: 1px solid var(--border-strong); }
 .wl-box h2 { font-size: 19px; margin: 0 0 10px; }
+.wl-box > div > p { font-size: 14.5px; line-height: 1.7; color: var(--text-muted); margin: 0 0 4px; }
+.wl-box h3 { font-size: 15px; margin: 20px 0 6px; }
+.wl-box ul + p { margin-top: 20px; }
+.wl-box code { font-family: var(--font-mono); font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
 .wl-box ul { margin: 0; padding-left: 18px; }
 .wl-box li { font-size: 14.5px; line-height: 1.7; color: var(--text-muted); }
 .wl-box li strong { color: var(--text); }
 .wl-band { margin-top: 72px; text-align: center; padding: 44px 24px; border-radius: 24px; background: var(--accent); color: var(--on-accent); }
 .wl-band h2 { font-size: 40px; font-weight: 800; letter-spacing: -.04em; margin: 0 0 8px; }
 .wl-band p { margin: 0 0 22px; opacity: .8; }
+.wl-band-cta { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .wl-band .pb-btn { min-height: 48px; padding: 12px 22px; font-size: 15px; color: var(--accent); background: var(--on-accent); }
+.wl-band .pb-btn.ghost { color: var(--on-accent); background: transparent; border: 1px solid var(--on-accent); }
 
 /* Reveal on scroll (class added by the script below; without JS everything simply shows) */
 .js .wl-reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
@@ -138,14 +148,14 @@
 @section('content')
   <section class="wl-hero">
     <div>
-      <h1>Turn long videos into <mark>short clips</mark> for TikTok and Shorts</h1>
-      <p class="wl-lead">Clipper Studio finds the strongest moments in a long video or podcast and edits them into 9:16 clips: pauses cut out, faces followed, karaoke subtitles, an opening hook and B-roll. Then it sends the clip you choose to TikTok or YouTube Shorts.</p>
+      <h1>Ubah video panjang jadi <mark>klip pendek</mark> untuk TikTok, Shorts, dan Reels</h1>
+      <p class="wl-lead">Clipper Studio memilih momen terbaik dari video YouTube panjang, lalu mengeditnya jadi klip vertikal 9:16: jeda dibuang, wajah diikuti, subtitle karaoke, hook pembuka, dan B-roll. Klip yang kamu setujui dikirim atau dijadwalkan ke akun TikTok, YouTube, Facebook, Instagram, dan Threads milikmu sendiri.</p>
       <div class="wl-cta">
         @auth
-          <a class="pb-btn" href="{{ route('home') }}">Open app</a>
+          <a class="pb-btn" href="{{ route('home') }}">Buka aplikasi</a>
         @else
-          <a class="pb-btn" href="{{ route('login') }}">Sign in</a>
-          <small>Access by invitation</small>
+          <a class="pb-btn" href="{{ route('login') }}">Masuk ke Studio</a>
+          <small>Beta tertutup, daftar dengan kode undangan</small>
         @endauth
       </div>
     </div>
@@ -163,7 +173,7 @@
           <span class="wl-pick k1"></span><span class="wl-pick k2"></span><span class="wl-pick k3"></span>
           <span class="wl-head"></span>
         </div>
-        <div class="wl-src-label"><span>AI is finding the best moments…</span><b>3 clips</b></div>
+        <div class="wl-src-label"><span>AI mencari momen terbaik…</span><b>3 klip</b></div>
       </div>
 
       <div class="wl-phone">
@@ -171,101 +181,160 @@
           <div class="wl-notch"></div>
           <div class="wl-person p1"></div>
           <div class="wl-face"><i></i><i></i><i></i><i></i><span>FACE</span></div>
-          <div class="wl-hook"><span>The habit that</span><span>changed everything</span></div>
+          <div class="wl-hook"><span>Kebiasaan kecil</span><span>ubah hidupmu</span></div>
           <div class="wl-rail"><i></i><i></i><i></i></div>
-          <div class="wl-sub"><span class="wl-sub-box" id="wl-sub">Start small every single day</span></div>
+          <div class="wl-sub"><span class="wl-sub-box" id="wl-sub">Mulai kecil setiap hari</span></div>
           <div class="wl-bar"></div>
         </div>
       </div>
 
       <div class="wl-toast" id="wl-toast">
         <span class="wl-toast-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <div><b>Draft sent to TikTok</b><span>Ready to edit in your inbox</span></div>
+        <div><b>Draf terkirim ke TikTok</b><span>Siap diedit di inbox-mu</span></div>
       </div>
     </div>
   </section>
 
   <section class="wl-sec">
     <div class="wl-sec-head wl-reveal">
-      <h2>Everything a clip needs</h2>
-      <p>From one long video to ready-to-post vertical clips in a few minutes.</p>
+      <h2>Dari satu video panjang ke klip siap tayang</h2>
+      <p>Tempel link YouTube, pilih klip yang kamu suka, lalu render.</p>
     </div>
     <div class="wl-lead-feats">
       <div class="wl-lead-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v0M6 9v6M9 6v12M15 8v8M18 10v4M21 12v0"/><rect x="11" y="3" width="2" height="18" rx="1"/></svg></div>
-        <h3>AI picks the moments</h3><p>The transcript is read to find the parts most likely to keep viewers watching, and each clip starts and ends on a full sentence.</p>
+        <h3>AI memilih momen</h3><p>Transkrip dibaca untuk menemukan bagian yang paling mungkin ditonton sampai habis. Tiap klip mendapat skor viral beserta alasannya, dan dimulai serta diakhiri di batas kalimat.</p>
       </div>
       <div class="wl-lead-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><circle cx="12" cy="10" r="3"/><path d="M7.5 17a5 5 0 019 0"/></svg></div>
-        <h3>Face tracking</h3><p>The 9:16 frame follows faces and cuts to whoever is talking, so the speaker never drifts out of shot. Or keep the full shot over a blurred background.</p>
+        <h3>Face tracking</h3><p>Bingkai 9:16 mengikuti wajah dan pindah ke orang yang sedang bicara, jadi pembicara tidak keluar dari frame. Atau pakai video utuh di atas latar blur.</p>
       </div>
     </div>
     <ul class="wl-feats">
       <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M6 12h12"/></svg></div>
+        <h3>Layout split-screen gameplay</h3><p>Pembicara di atas, footage gameplay yang kamu unggah sendiri berputar di bawah, subtitle tepat di batasnya. Aktif setelah kamu mengunggah footage di Pengaturan.</p>
+      </li>
+      <li class="wl-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16"/><path d="M10 9l4 3-4 3"/></svg></div>
-        <h3>Jump cuts and zoom</h3><p>Long pauses and filler words like "um" are cut out, and the picture punches in at cuts and sentence ends, as an editor would.</p>
+        <h3>Jump cut dan zoom</h3><p>Jeda panjang dan kata isian seperti "eh" dan "um" dipotong, lalu gambar zoom masuk di titik potong dan akhir kalimat, seperti yang dikerjakan editor.</p>
       </li>
       <li class="wl-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg></div>
-        <h3>Karaoke subtitles</h3><p>Word-by-word highlighting in ready-made styles or your own font, colour and position, with emoji on key words.</p>
+        <h3>Subtitle karaoke</h3><p>Kata yang sedang diucapkan menyala. Pilih gaya siap pakai atau atur font, warna, dan posisi sendiri, dengan emoji di kata kunci.</p>
       </li>
       <li class="wl-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
-        <h3>Hook, title and progress bar</h3><p>A headline pops in for the first seconds, the topic can stay on top, and a thin bar shows how much is left.</p>
+        <h3>Hook, judul, dan progress bar</h3><p>Teks pembuka muncul di beberapa detik pertama, topik bisa tetap tampil di atas, dan bar tipis menunjukkan sisa durasi.</p>
       </li>
       <li class="wl-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></div>
-        <h3>Automatic B-roll</h3><p>Short stock clips that match what is being said are cut in over the speaker, under the subtitles.</p>
+        <h3>B-roll otomatis</h3><p>Potongan footage stok dari Pexels atau Pixabay yang cocok dengan ucapan disisipkan di atas pembicara, di bawah subtitle.</p>
       </li>
       <li class="wl-feat wl-reveal">
         <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-        <h3>Music and clean sound</h3><p>Licensed tracks by mood, mixed well under the voice; without music the voice is levelled to platform loudness.</p>
+        <h3>Musik, efek suara, dan loudness</h3><p>Musik latar dari library yang kamu isi sendiri, dipilih menurut mood. Efek suara (whoosh, pop, ding) bisa dinyalakan per project. Tanpa musik, suara disamakan ke loudness platform.</p>
       </li>
       <li class="wl-feat wl-reveal">
-        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6-6 6 6"/><path d="M12 3v13"/><path d="M4 21h16"/></svg></div>
-        <h3>Post to TikTok and YouTube</h3><p>Send a clip to your TikTok inbox as a draft, post it directly, or upload it to your YouTube channel as a Short.</p>
-      </li>
-      <li class="wl-feat wl-reveal">
-        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
-        <h3>Autopilot with review</h3><p>New videos from your sources become clips automatically; nothing goes out until you approve it.</p>
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M14 7h3v3"/></svg></div>
+        <h3>Brand kit</h3><p>Logo tampil sebagai watermark di pojok kanan atas, dan pengaturan favoritmu jadi bawaan setiap project baru.</p>
       </li>
     </ul>
   </section>
 
   <section class="wl-sec">
-    <div class="wl-sec-head wl-reveal"><h2>How it works</h2></div>
-    <div class="wl-steps">
-      <div class="wl-step wl-reveal"><h3>Paste a video link</h3><p>Add a long-form video you own or have permission to use.</p></div>
-      <div class="wl-step wl-reveal"><h3>Pick and render clips</h3><p>Choose the suggested moments, adjust where each one starts and ends, set the style, then render one clip or all of them.</p></div>
-      <div class="wl-step wl-reveal"><h3>Post or download</h3><p>Send a clip to TikTok or YouTube Shorts, or download every clip with its caption in one ZIP.</p></div>
+    <div class="wl-sec-head wl-reveal">
+      <h2>Dari klip ke postingan</h2>
+      <p>Kirim sekarang, jadwalkan, atau biarkan Autopilot menaruh klip yang kamu setujui di jam harian. Semuanya lewat akun yang kamu hubungkan sendiri.</p>
     </div>
+    <div class="wl-lead-feats one">
+      <div class="wl-lead-feat wide wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6-6 6 6"/><path d="M12 3v13"/><path d="M4 21h16"/></svg></div>
+        <h3>Satu panel untuk lima platform</h3><p>Centang TikTok, YouTube Shorts, Facebook Reels, Instagram Reels, dan Threads, tulis caption sekali, lalu kirim sekarang atau pilih tanggal dan jam. Tiap klip masuk ke akun utama yang kamu tetapkan di halaman Akun terhubung. TikTok bisa dikirim sebagai draf ke inbox atau diposting langsung.</p>
+      </div>
+    </div>
+    <ul class="wl-feats">
+      <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg></div>
+        <h3>Akun terhubung</h3><p>Satu halaman untuk semua akun publikasi, dengan satu akun utama per platform. Kalau akun utama diputus, tidak ada klip yang pindah ke akun lain sebelum kamu memilihnya.</p>
+      </li>
+      <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+        <h3>Kalender</h3><p>Atur posting ke kelima platform di satu kalender. Worker di server mengirimnya saat waktunya tiba.</p>
+      </li>
+      <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
+        <h3>Autopilot dengan review</h3><p>Pantau channel atau kata kunci YouTube. Video baru jadi klip dan menunggu di antrian review. Klip yang kamu setujui masuk ke slot jam harian di YouTube, Facebook, Instagram, dan Threads (maksimal per hari kamu yang atur), atau langsung ke akun utama TikTok, hanya di platform yang kamu aktifkan.</p>
+      </li>
+      <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div>
+        <h3>Tes hook A/B</h3><p>Adu hook yang sekarang dengan dua atau tiga hook baru. Semua versi diposting ke satu akun TikTok di jam yang sama, satu per hari, dan pemenangnya dipilih dari views pada umur posting yang sama.</p>
+      </li>
+      <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></div>
+        <h3>REST API dan MCP</h3><p>Buat token dengan izin read, render, atau publish. Agent AI atau skrip bisa membuat project, merender klip, dan mengunggah ke TikTok atau YouTube.</p>
+      </li>
+      <li class="wl-feat wl-reveal">
+        <div class="wl-feat-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3>Kuota render per bulan</h3><p>Akun Free punya kuota menit render tiap bulan, dan admin bisa memindahkan akun ke paket Pro. Pemakaianmu terlihat di halaman Paket.</p>
+      </li>
+    </ul>
   </section>
 
   <section class="wl-sec">
+    <div class="wl-sec-head wl-reveal"><h2>Cara kerjanya</h2></div>
+    <div class="wl-steps">
+      <div class="wl-step wl-reveal"><h3>Tempel link YouTube</h3><p>Pakai video yang kamu miliki atau yang kamu punya izin memakainya. Atau pasang Autopilot untuk memantau channel.</p></div>
+      <div class="wl-step wl-reveal"><h3>Pilih, atur, render</h3><p>Pilih momen yang disarankan, geser awal dan akhirnya lewat transkrip, atur gayanya, lalu render satu klip atau semuanya.</p></div>
+      <div class="wl-step wl-reveal"><h3>Kirim, jadwalkan, atau unduh</h3><p>Kirim ke platform yang kamu centang, jadwalkan di kalender, atau unduh semua klip beserta captionnya dalam satu ZIP.</p></div>
+    </div>
+  </section>
+
+  <section class="wl-sec" id="data">
     <div class="wl-box wl-reveal">
       <div class="wl-box-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg></div>
       <div>
-        <h2>How Clipper Studio works with TikTok and YouTube</h2>
+        <h2>Cara Clipper Studio memakai data TikTok, YouTube, dan Meta</h2>
+        <p>Kamu menghubungkan akunmu sendiri lewat layar otorisasi tiap platform. Klip hanya diunggah ke akun yang kamu hubungkan, dan hanya setelah kamu memintanya: klik kirim, jadwal di kalender, persetujuan di antrian Autopilot (untuk platform yang kamu aktifkan), atau token API yang kamu buat dengan izin publish. Tanpa salah satunya, tidak ada yang diposting.</p>
+
+        <h3>TikTok</h3>
         <ul>
-          <li><strong>Login Kit</strong>: you connect your own TikTok account through TikTok's authorization screen. We use your display name and avatar only to show which account is connected.</li>
-          <li><strong>Content Posting API</strong>: a clip is uploaded only when you click upload for that clip. Send it to your TikTok inbox as a draft to finish in TikTok, or post it directly with the caption, privacy and interaction settings you choose on that screen.</li>
-          <li><strong>YouTube Data API</strong>: you connect your own channel through Google's authorization screen. A clip is uploaded only when you click upload for that clip, with the title, description and visibility you set. Clipper Studio uses YouTube API Services; see the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a>.</li>
-          <li>Nothing is posted without your action for that clip, and you can disconnect your accounts at any time. See our <a href="{{ route('privacy') }}">Privacy Policy</a>.</li>
+          <li><strong>Login Kit</strong>: nama tampilan dan avatar TikTok-mu, hanya untuk menunjukkan akun mana yang terhubung.</li>
+          <li><strong>Content Posting API</strong>: klip dikirim ke inbox TikTok sebagai draf untuk kamu selesaikan di TikTok, atau diposting langsung dengan caption, privasi, dan pengaturan interaksi yang kamu pilih di layar kirim.</li>
+          <li><strong>video.list</strong>: setelah klip diposting lewat Clipper Studio, jumlah views klip itu dibaca untuk menentukan pemenang tes hook A/B dan menilai klip Autopilot berikutnya.</li>
         </ul>
+
+        <h3>YouTube</h3>
+        <ul>
+          <li><strong>YouTube Data API</strong>: kamu menghubungkan channel lewat layar otorisasi Google. Klip diunggah sebagai Short dengan judul, deskripsi, dan visibilitas yang kamu atur. Nama channel dibaca untuk ditampilkan, dan status video yang baru diunggah (diproses, tayang, gagal) dicek sampai selesai. Clipper Studio memakai YouTube API Services; lihat <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a> dan <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>.</li>
+        </ul>
+
+        <h3>Facebook, Instagram, dan Threads (Meta)</h3>
+        <ul>
+          <li><strong>Facebook Login for Business</strong>: nama akun Facebook-mu dan daftar Page yang bisa kamu kelola (<code>pages_show_list</code>, <code>pages_read_engagement</code>). Kamu memilih sendiri Page dan akun Instagram profesional yang tertaut ke Page itu; hanya yang kamu pilih yang disimpan.</li>
+          <li><strong>Reels</strong>: klip diunggah sebagai Reel ke Page yang kamu pilih (<code>pages_manage_posts</code>) dan ke akun Instagram yang kamu pilih (<code>instagram_basic</code>, <code>instagram_content_publish</code>). Instagram dan Threads mengambil file video dari server kami lewat link bertanda tangan yang berlaku sementara.</li>
+          <li><strong>Threads</strong>: lewat login Threads (<code>threads_basic</code>, <code>threads_content_publish</code>), nama pengguna Threads-mu ditampilkan dan klip diposting sebagai video ke akun itu.</li>
+        </ul>
+
+        <p>Kamu bisa memutus akun kapan saja dari halaman Akun terhubung. Aturan lengkapnya ada di <a href="{{ route('privacy') }}">Kebijakan Privasi (Privacy Policy, dalam bahasa Inggris)</a> dan <a href="{{ route('terms') }}">Syarat Layanan (Terms of Service)</a>.</p>
       </div>
     </div>
   </section>
 
   <section class="wl-band wl-reveal">
-    <h2>Ready to make your first clip?</h2>
-    <p>Access is by invitation: accounts are created by the administrator.</p>
-    @auth
-      <a class="pb-btn" href="{{ route('home') }}">Open app</a>
-    @else
-      <a class="pb-btn" href="{{ route('login') }}">Sign in</a>
-    @endauth
+    <h2>Mau bikin klip pertamamu?</h2>
+    <p>Beta tertutup: pendaftaran butuh kode undangan dari admin.</p>
+    <div class="wl-band-cta">
+      @auth
+        <a class="pb-btn" href="{{ route('home') }}">Buka aplikasi</a>
+      @else
+        <a class="pb-btn" href="{{ route('login') }}">Masuk ke Studio</a>
+        @if (\App\Http\Controllers\Auth\RegisterController::open())
+          <a class="pb-btn ghost" href="{{ route('register') }}">Daftar dengan kode undangan</a>
+        @endif
+      @endauth
+    </div>
   </section>
-
   <script>
   (function () {
     document.documentElement.classList.add('js');
@@ -280,7 +349,7 @@
     }
 
     // Karaoke subtitle: highlight one word at a time, then move to the next line
-    const lines = ['Start small every single day', 'Consistency beats motivation', 'That is the whole secret'];
+    const lines = ['Mulai kecil setiap hari', 'Konsisten lebih kuat dari motivasi', 'Itu rahasianya'];
     const sub = document.getElementById('wl-sub');
     let line = 0, word = 0;
     const draw = () => {
@@ -298,7 +367,7 @@
 
     // The toast alternates between the two places a clip can go
     const toast = document.getElementById('wl-toast');
-    const toasts = [['Draft sent to TikTok', 'Ready to edit in your inbox'], ['Uploaded to YouTube Shorts', 'Live on your channel']];
+    const toasts = [['Draf terkirim ke TikTok', 'Siap diedit di inbox-mu'], ['Terunggah ke YouTube Shorts', 'Ada di channel-mu'], ['Dijadwalkan ke Instagram Reels', 'Tayang sesuai jam yang kamu pilih']];
     let t = 0;
     toast.addEventListener('animationiteration', () => {
       t = (t + 1) % toasts.length;

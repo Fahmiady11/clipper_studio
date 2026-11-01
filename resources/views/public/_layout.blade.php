@@ -1,12 +1,13 @@
-{{-- Public pages (landing, terms, privacy): readable without signing in. --}}
+{{-- Public pages (landing, terms, privacy): readable without signing in. A page sets @section('lang', 'id') to get the Indonesian chrome. --}}
+@php $id = trim($__env->yieldContent('lang', 'en')) === 'id'; @endphp
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ $id ? 'id' : 'en' }}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>@yield('title') — Clipper Studio</title>
+<title>@yield('title') | Clipper Studio</title>
 @include('partials.favicon')
-<meta name="description" content="Clipper Studio turns long videos into short vertical clips with subtitles and sends them to your TikTok inbox as drafts." />
+<meta name="description" content="@hasSection('description')@yield('description')@else Clipper Studio turns long videos into short vertical clips with subtitles and publishes the ones you approve to your own TikTok, YouTube, Facebook, Instagram and Threads accounts.@endif" />
 @include('partials.head')
 @vite('resources/css/theme.css')
 <style>
@@ -26,7 +27,7 @@ a { color: var(--accent-ink); }
 .pb-doc ul { padding-left: 20px; }
 .pb-doc strong { color: var(--text); font-weight: 600; }
 .pb-foot { border-top: 1px solid var(--border); padding: 24px 32px; display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; font-size: 13px; color: var(--text-dim); }
-.pb-foot nav { display: flex; gap: 18px; }
+.pb-foot nav { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .pb-foot a { color: var(--text-muted); text-decoration: none; }
 .pb-foot a:hover { color: var(--text); }
 @media (max-width: 640px) {
@@ -43,9 +44,9 @@ a { color: var(--accent-ink); }
     <div class="pb-actions">
       @include('partials.theme-toggle')
       @auth
-        <a class="pb-btn" href="{{ route('home') }}">Open app</a>
+        <a class="pb-btn" href="{{ route('home') }}">{{ $id ? 'Buka aplikasi' : 'Open app' }}</a>
       @else
-        <a class="pb-btn" href="{{ route('login') }}">Sign in</a>
+        <a class="pb-btn" href="{{ route('login') }}">{{ $id ? 'Masuk' : 'Sign in' }}</a>
       @endauth
     </div>
   </header>
@@ -57,9 +58,9 @@ a { color: var(--accent-ink); }
   <footer class="pb-foot">
     <span>© {{ date('Y') }} Clipper Studio</span>
     <nav>
-      <a href="{{ route('welcome') }}">Home</a>
-      <a href="{{ route('terms') }}">Terms of Service</a>
-      <a href="{{ route('privacy') }}">Privacy Policy</a>
+      <a href="{{ route('welcome') }}">{{ $id ? 'Beranda' : 'Home' }}</a>
+      <a href="{{ route('terms') }}">{{ $id ? 'Syarat Layanan (Terms of Service)' : 'Terms of Service' }}</a>
+      <a href="{{ route('privacy') }}">{{ $id ? 'Kebijakan Privasi (Privacy Policy)' : 'Privacy Policy' }}</a>
       <a href="{{ route('status') }}">Status</a>
     </nav>
   </footer>

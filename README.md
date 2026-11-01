@@ -1,409 +1,297 @@
-# 🎬 Clipper Studio
+# Clipper Studio
 
-**Ubah video YouTube panjang jadi klip pendek vertikal (9:16) siap TikTok, Reels, dan Shorts — otomatis.**
+Aplikasi Laravel yang mengubah video YouTube panjang jadi klip vertikal 9:16 dan mempublikasikannya ke TikTok, YouTube Shorts, Facebook Reels, Instagram Reels, dan Threads. AI memilih momen, FFmpeg memotong dan merender, lalu klip yang disetujui pengguna dikirim ke akun miliknya sendiri.
 
-Kamu cukup tempel link YouTube. AI akan mencari momen paling menarik, lalu aplikasi memotong video,
-menyesuaikan ke format vertikal, menambah subtitle, teks pembuka (hook), dan musik latar —
-sampai mengirimnya langsung ke TikTok.
+README ini untuk developer. Panduan deploy produksi ada di [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), panduan REST API dan MCP di [`docs/agent-api.md`](docs/agent-api.md).
 
-```
- Link YouTube  ──►  AI pilih momen terbaik  ──►  Potong + subtitle + hook + musik  ──►  Unduh MP4 / kirim ke TikTok
-```
+## Daftar isi
 
----
-
-## 📑 Daftar isi
-
-1. [Fitur](#-fitur)
-2. [Mulai cepat (di laptop sendiri)](#-mulai-cepat-di-laptop-sendiri)
-3. [Mengisi file `.env`](#️-mengisi-file-env)
-4. [Cara pakai](#-cara-pakai)
-5. [Membuka dari HP / menghubungkan TikTok (ngrok)](#-membuka-dari-hp--menghubungkan-tiktok-ngrok)
-6. [Pasang di server (supaya bisa dipakai banyak orang)](#-pasang-di-server-supaya-bisa-dipakai-banyak-orang)
-7. [Masalah yang sering muncul](#-masalah-yang-sering-muncul)
-8. [Pertanyaan umum (FAQ)](#-pertanyaan-umum-faq)
-9. [Untuk developer](#-untuk-developer)
+1. [Fitur](#fitur)
+2. [Stack](#stack)
+3. [Setup lokal](#setup-lokal)
+4. [Queue worker dan scheduler](#queue-worker-dan-scheduler)
+5. [Variabel `.env`](#variabel-env)
+6. [Redirect URI OAuth](#redirect-uri-oauth)
+7. [Menjalankan test](#menjalankan-test)
+8. [Deploy](#deploy)
+9. [Halaman publik dan review platform](#halaman-publik-dan-review-platform)
+10. [Struktur kode](#struktur-kode)
+11. [Masalah yang sering muncul](#masalah-yang-sering-muncul)
 
 ---
 
-## ✨ Fitur
+## Fitur
 
-| Fitur | Penjelasan singkat |
-|---|---|
-| **Studio** | Tempel link YouTube, atur tampilan dalam 7 langkah, pilih klip, render, lalu unduh atau kirim ke TikTok. |
-| **Autopilot** | Pantau channel atau kata kunci YouTube. Video baru otomatis dijadikan klip dan masuk antrian untuk kamu cek. |
-| **Hook AI** | Teks pembuka 3–5 kata yang bikin penasaran. Kata penting diberi warna, muncul dengan animasi. |
-| **Subtitle karaoke** | Kata yang sedang diucapkan menyala. Posisi subtitle bisa digeser langsung di preview. |
-| **Library musik** | Musik latar sesuai mood. Kredit lagu (lisensi CC BY) otomatis ditulis di caption. |
-| **TikTok** | Kirim ke inbox TikTok sebagai draft, atau langsung posting. |
-| **Riwayat** | Semua project tersimpan. Proses tetap jalan di server walaupun kamu pindah halaman. |
+**Membuat klip**
 
----
+- Input: link video YouTube. Transkrip diambil dari subtitle YouTube lewat yt-dlp; kalau tidak ada, audio ditranskrip dengan Groq Whisper (`whisper-large-v3-turbo`).
+- Deteksi klip dengan AI (gateway OpenAI-compatible lebih dulu, Gemini sebagai cadangan): momen terbaik, skor viral beserta alasannya, awal dan akhir di batas kalimat. Awal dan akhir klip bisa digeser lewat transkrip.
+- Layout: reframe yang mengikuti wajah (OpenCV YuNet, ganti pembicara pada two-shot), video utuh dengan latar blur, dan split-screen gameplay (pembicara di atas, footage gameplay milik pengguna berputar di bawah).
+- Footage gameplay diunggah per pengguna di Pengaturan (maksimal 10 file, 200 MB per file, divalidasi dengan ffprobe). Tanpa footage, layout ini tidak bisa dipilih.
+- Jump cut (jeda dan kata isian dipotong) dan zoom punch-in.
+- Subtitle karaoke per kata, gaya bawaan atau font, warna, dan posisi sendiri, emoji di kata kunci.
+- Hook pembuka, judul yang tetap tampil, progress bar.
+- B-roll otomatis dari Pexels atau Pixabay.
+- Musik latar dari library yang diunggah pengguna (per mood, kredit CC BY masuk ke caption), SFX otomatis (whoosh, pop, ding; opsional per project), loudness suara disamakan saat tanpa musik.
+- Brand kit per pengguna: logo watermark dan bawaan untuk project baru.
+- Render satu klip atau semua klip, unduh MP4 atau satu ZIP berisi semua klip dan `captions.txt`.
 
-## 🚀 Mulai cepat (di laptop sendiri)
+**Publikasi dan otomasi**
 
-> ⏱️ Kira-kira 15–30 menit untuk pertama kali.
+- Satu panel Publikasikan di Studio untuk TikTok (draf inbox atau posting langsung), YouTube Shorts, Facebook Reels (Page), Instagram Reels (akun profesional yang tertaut ke Page), dan Threads. Kirim sekarang atau jadwalkan.
+- Satu halaman Pengaturan > Akun terhubung untuk semua akun publikasi, dengan akun utama per platform.
+- Kalender: jadwal posting ke kelima platform, dikirim oleh scheduler.
+- Autopilot: pantau channel atau kata kunci YouTube, klip masuk antrian review. Approve mengirim klip ke akun utama TikTok (bila aktif) dan menaruhnya di slot jam harian YouTube, Facebook, Instagram, dan Threads (bila autopost platform itu aktif). Autopost berhenti kalau akun utama diputus.
+- Tes hook A/B: hook asli melawan 2 atau 3 hook baru, diposting ke satu akun TikTok di jam yang sama pada hari berurutan, pemenang dipilih dari views di umur posting yang sama.
+- REST API dan server MCP untuk agent AI, dengan token berizin `read`, `render`, dan `publish` (publish API/MCP baru mencakup TikTok dan YouTube).
 
-### Langkah 1 — Install program yang dibutuhkan
+**Akses dan batas**
 
-| Program | Versi minimal | Untuk apa |
+- Beta tertutup: akun pertama jadi admin, berikutnya lewat kode undangan (`clipper:invite`) atau dibuat admin. `REGISTRATION_ENABLED=true` membuka pendaftaran bebas, dengan persetujuan admin.
+- Paket freemium dengan kuota menit render per bulan (seed: Free 30 menit, Pro 300 menit), admin yang memindahkan akun ke Pro. Biaya CPU, Gemini, dan Groq per render dicatat di `render_usages`.
+- Halaman `/status` menampilkan beban server dan antrian, `JobWatchdog` menggagalkan pekerjaan yang macet.
+
+## Stack
+
+- Laravel 13 (`laravel/framework ^13.8`), PHP 8.3+ (CI dan image Docker memakai PHP 8.4)
+- PostgreSQL untuk data, session, queue, dan cache (SQLite in-memory untuk test)
+- Blade, Alpine.js, CSS biasa lewat Vite
+- FFmpeg dan ffprobe untuk render, yt-dlp untuk unduhan, Python dengan `opencv-python-headless` untuk face tracking
+- Gemini API atau gateway OpenAI-compatible untuk AI, Groq untuk Whisper
+
+## Setup lokal
+
+Butuh:
+
+| Program | Versi | Untuk apa |
 |---|---|---|
-| PHP | 8.3 | Menjalankan aplikasi. Butuh ekstensi `pdo_pgsql` dan `gd` (dengan FreeType). |
-| Composer | 2.x | Install library PHP. |
-| Node.js | 20.19 / 22.12 | Build tampilan (CSS). |
-| PostgreSQL | 14 | Database. |
-| FFmpeg | 6 | Memotong dan merender video (`ffmpeg` + `ffprobe`). |
-| yt-dlp | versi terbaru | Mengunduh video YouTube. **Perbarui rutin**, karena YouTube sering berubah. |
+| PHP | 8.3+ dengan `pdo_pgsql`, `gd` (FreeType), `intl`, `zip`, `pcntl` | Aplikasi |
+| Composer | 2.x | Library PHP |
+| Node.js | 20.19+ atau 22.12+ | Build CSS dan JS |
+| PostgreSQL | 14+ | Database |
+| FFmpeg | 6+ (`ffmpeg` dan `ffprobe`) | Render, SFX, validasi footage |
+| yt-dlp | terbaru | Unduh video. Perbarui rutin. Image Docker juga memasang deno sebagai JS runtime-nya |
+| Python 3 + OpenCV | opsional | Face tracking. Tanpa ini reframe memakai crop tengah |
 
-**macOS** (pakai [Homebrew](https://brew.sh)):
-
-```bash
-brew install php composer node postgresql@16 ffmpeg yt-dlp
-brew services start postgresql@16
-```
-
-**Ubuntu / Debian:** paling mudah pakai script server, lihat [Pasang di server](#-pasang-di-server-supaya-bisa-dipakai-banyak-orang).
-
-**Windows:** disarankan pakai [WSL2](https://learn.microsoft.com/windows/wsl/install) (Ubuntu), lalu ikuti cara Ubuntu.
-
-### Langkah 2 — Siapkan API key (gratis)
-
-| Key | Wajib? | Ambil di |
-|---|---|---|
-| **Gemini API key** | ✅ Wajib (atau pakai gateway, lihat [`.env`](#️-mengisi-file-env)) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| **Groq API key** | 👍 Sangat disarankan | [console.groq.com/keys](https://console.groq.com/keys) — untuk video yang tidak punya subtitle |
-| **TikTok app** | Hanya kalau mau upload ke TikTok | [developers.tiktok.com](https://developers.tiktok.com) |
-
-### Langkah 3 — Download dan install aplikasi
+Tidak perlu Whisper lokal: tanpa subtitle YouTube, transkrip dibuat oleh Groq Whisper lewat `GROQ_API_KEY`. Image Docker memang membawa `whisper-cli` (whisper.cpp), tetapi kode aplikasi tidak memanggilnya.
 
 ```bash
-git clone git@github.com:Fahmiady11/clipper-sosmed.git clipper
-cd clipper
+brew install php composer node postgresql@16 ffmpeg yt-dlp   # macOS
+createdb clipper
 
-createdb clipper           # buat database kosong
-cp .env.example .env       # buat file pengaturan
+git clone git@github.com:Fahmiady11/clipper-sosmed.git clipper && cd clipper
+cp .env.example .env            # isi minimal APP_URL, DB_*, dan GEMINI_API_KEY atau LLM_GATEWAY_*
+composer setup                  # install, key:generate, migrate, npm build
 ```
 
-Buka file `.env`, lalu isi minimal 3 hal berikut:
-
-```dotenv
-APP_URL=http://localhost:8000
-DB_USERNAME=postgres        # user PostgreSQL kamu
-DB_PASSWORD=                # password-nya (kosongkan kalau tidak ada)
-GEMINI_API_KEY=isi_key_kamu
-GROQ_API_KEY=isi_key_kamu   # disarankan
-```
-
-Lalu install semuanya dengan satu perintah:
+Face tracking (opsional):
 
 ```bash
-composer setup
+python3 -m venv ~/.local/share/clipper-facetrack
+~/.local/share/clipper-facetrack/bin/pip install opencv-python-headless==4.10.0.84 numpy==1.26.4
+# di .env: FACE_TRACK_PYTHON=/Users/<kamu>/.local/share/clipper-facetrack/bin/python
 ```
 
-### Langkah 4 — Jalankan
+Jalankan semuanya:
 
 ```bash
 composer dev
 ```
 
-Buka **http://localhost:8000**, klik **Daftar**, lalu buat akun. Selesai! 🎉
+`composer dev` menjalankan `php artisan serve`, `queue:work --timeout=3600 --memory=512`, `schedule:work`, `pail`, dan `npm run dev` sekaligus. Buka `http://localhost:8000` dan daftarkan akun pertama (otomatis jadi admin). Tanpa queue worker, project berhenti di "Menunggu antrian"; tanpa scheduler, Autopilot, kalender, dan polling status tidak jalan.
 
-> ⚠️ **Biarkan `composer dev` tetap jalan.** Perintah ini sekaligus menjalankan *worker* yang mengunduh,
-> menganalisis, dan merender video. Kalau ditutup, project akan berhenti di "Menunggu antrian…".
+Perintah lain: `composer lint` (Pint), `composer test`.
 
----
+Instagram dan Threads mengambil video dari server lewat link bertanda tangan, jadi untuk mencobanya `APP_URL` harus alamat HTTPS publik (ngrok atau domain). TikTok juga mewajibkan redirect HTTPS.
 
-## ⚙️ Mengisi file `.env`
+## Queue worker dan scheduler
 
-File `.env` berisi semua pengaturan. **Setiap kali `.env` diubah, restart `composer dev`** supaya pengaturan baru terbaca.
+Worker: `php artisan queue:work --timeout=3600 --memory=512` (di produksi 2 proses, lihat `deploy/supervisor.conf` atau service `queue` di `docker-compose.prod.yml`). Scheduler: `php artisan schedule:work` (atau cron `schedule:run` tiap menit).
 
-### Wajib
+Jadwal di `routes/console.php`:
 
-| Variabel | Isi dengan |
-|---|---|
-| `APP_URL` | Alamat aplikasi dibuka. Lokal: `http://localhost:8000`. Kalau lewat ngrok/domain: URL itu. |
-| `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Data koneksi PostgreSQL. |
-| `GEMINI_API_KEY` **atau** `LLM_GATEWAY_*` | Minimal salah satu, untuk AI. Lihat bagian AI di bawah. |
+| Nama | Jadwal | Fungsi |
+|---|---|---|
+| `autopilot-discover` | tiap 10 menit | Cari video baru untuk sumber Autopilot yang jatuh tempo (hanya akun yang disetujui) |
+| `clip-stats-tiktok` | tiap jam | Ambil snapshot views klip TikTok yang sudah diposting (butuh scope `video.list`) |
+| `judge-hook-tests` (`clipper:judge-hook-tests`) | tiap jam menit ke-20 | Pilih pemenang tes hook A/B yang semua variannya sudah cukup umur |
+| `publish-scheduled` (`clipper:publish-scheduled`) | tiap menit | Serahkan posting terjadwal yang waktunya tiba ke job upload |
+| `youtube-status` (`clipper:youtube-status`) | tiap 5 menit | Ikuti status video YouTube yang masih diproses |
+| `meta-status` (`clipper:meta-status`) | tiap menit | Ikuti Reel Facebook dan publikasikan container Instagram dan Threads yang sudah siap |
+| `threads-refresh` (`clipper:threads-refresh`) | harian 04:23 | Perpanjang token Threads yang kedaluwarsa dalam 30 hari |
+| `clipper-cleanup` (`clipper:cleanup`) | harian 03:17 | Hapus video sumber lama dan cache (klip hasil render tidak dihapus) |
+| `clipper-monitor` (`clipper:monitor`) | tiap menit | Catat beban CPU dan antrian untuk `/status` |
+| `clipper-watchdog` (`clipper:watchdog`) | tiap 5 menit | Gagalkan analisis dan render yang macet di `processing` melewati timeout |
 
-### AI
-
-| Variabel | Penjelasan |
-|---|---|
-| `GEMINI_API_KEY` | Key gratis dari Google. Kuota gratis ±20 request/hari per model. Kalau satu model habis, aplikasi otomatis pindah ke model lain. |
-| `GEMINI_MODELS` | (Opsional) Urutan model Gemini, dipisah koma. Kosongkan untuk pakai urutan bawaan. |
-| `LLM_GATEWAY_URL`, `LLM_GATEWAY_KEY`, `LLM_GATEWAY_MODEL` | (Opsional) Gateway yang kompatibel dengan OpenAI. Kalau diisi, gateway dicoba **lebih dulu**, lalu Gemini jadi cadangan. URL diakhiri `/v1`. Model boleh lebih dari satu, dipisah koma. |
-| `GROQ_API_KEY` | Membuat transkrip dari suara video (Whisper) kalau video tidak punya subtitle YouTube. |
-
-### Download YouTube
-
-| Variabel | Penjelasan |
-|---|---|
-| `YTDLP_COOKIES_BROWSER` | Nama browser tempat kamu login YouTube (`chrome`, `firefox`, `safari`, …). Mengatasi error *"Sign in to confirm you're not a bot"*. |
-| `YTDLP_COOKIES` | Alternatif: path ke file `cookies.txt` (format Netscape). Dipakai hanya kalau `YTDLP_COOKIES_BROWSER` kosong. Cocok untuk server. |
-| `YTDLP_PATH`, `FFMPEG_PATH` | (Opsional) Isi kalau `yt-dlp` / `ffmpeg` tidak dikenali di terminal. |
-
-### TikTok
-
-| Variabel | Penjelasan |
-|---|---|
-| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | Dari app kamu di developers.tiktok.com (aktifkan *Content Posting API* + *Login Kit*). |
-| `TIKTOK_REDIRECT_URI` | `<APP_URL>/tiktok/callback`. Harus **persis sama** dengan yang didaftarkan di app TikTok, dan wajib HTTPS. |
-| `TIKTOK_SCOPES` | Bawaan `user.info.basic,video.upload` (kirim sebagai draft). Tambahkan `video.publish` untuk posting langsung. |
-
-### Akun & lain-lain
-
-| Variabel | Penjelasan |
-|---|---|
-| `REGISTRATION_ENABLED` | `false` = hanya akun pertama (admin utama) yang bisa daftar. `true` = siapa pun boleh daftar, tapi baru bisa masuk setelah disetujui admin di menu **Pengguna**. |
-| `SESSION_SECURE_COOKIE` | `true` kalau aplikasi dibuka lewat HTTPS (ngrok/domain). |
-| `MUSIC_LIBRARY_PATH` | Lokasi file musik. Bawaan `storage/app/music`. |
-| `CLIPPER_TEMP_RETENTION_HOURS` | Video sumber yang sudah diunduh dihapus otomatis setelah sekian jam (bawaan 72). |
-
----
-
-## 📖 Cara pakai
-
-### 🎨 Studio — membuat klip
-
-| Langkah | Yang dilakukan |
-|---|---|
-| **1. Link** | Tempel URL YouTube, klik **Proses**. |
-| **2. Layout** | **Reframe wajah**: video dipotong vertikal mengikuti wajah. **Gaussian**: video utuh dengan latar blur. |
-| **3. Clip** | Pilih jumlah klip (1 / 3 / 5) dan durasi (otomatis atau atur sendiri). |
-| **4. Subtitle** | Atur font, warna, sorotan, dan latar. **Geser subtitle di preview** untuk memindahkan posisinya. |
-| **5. Hook** | Tulis sendiri atau biarkan AI. Apit kata dengan bintang untuk memberi warna, misalnya `Gaji 50 juta, tetap *bokek*`. Pilih gaya Label / Kotak / Outline, lalu atur musik latar. |
-| **6. Generate** | AI menganalisis video. Bisa **Batalkan**. Kalau gagal, klik **Coba lagi**. |
-| **7. Pilih** | Pilih klip, klik **Render**. Setelah selesai: unduh MP4, salin caption + hashtag, atau kirim ke TikTok. |
-
-💡 Semua project tersimpan di **Riwayat** (pojok kanan atas). Kamu boleh pindah project saat proses masih berjalan.
-
-### 🤖 Autopilot — membuat klip otomatis
-
-1. Buka menu **Autopilot**, lalu tambahkan sumber: nama channel (`@namachannel`) atau kata kunci.
-2. Klik **Atur tampilan** untuk memilih layout, gaya hook, subtitle, dan musik untuk sumber itu.
-3. Secara berkala aplikasi mencari video baru, membuat klip, lalu menaruhnya di **Antrian review**.
-4. Tonton klipnya, lalu pilih **Approve → TikTok** atau **Reject**.
-
-> Autopilot butuh *scheduler* yang menyala. Di laptop, `composer dev` sudah menjalankannya.
-
-### 🎵 Library musik
-
-Klik nama kamu (kanan atas) → **Library musik**.
-
-1. Buka YouTube Studio → **Audio Library**, lalu filter **Attribution required** (Creative Commons) dan mood.
-   ⚠️ Lagu berlisensi standar YouTube **tidak boleh** dipakai di TikTok.
-2. Unduh lagunya dan salin teks atribusinya (klik ikon CC).
-3. Upload beberapa file sekaligus, pilih mood, lalu tempel kredit untuk tiap lagu.
-
-Kredit lagu otomatis ditambahkan ke caption (`🎵 …`).
-Panduan volume: **15%** = terdengar di belakang suara, **30%** = sejajar dengan suara.
-
----
-
-## 📱 Membuka dari HP / menghubungkan TikTok (ngrok)
-
-TikTok mewajibkan alamat HTTPS publik. Cara paling mudah untuk mencoba di laptop:
+Perintah manual:
 
 ```bash
-ngrok http 8000
+php artisan clipper:invite --uses=1 --days=7 --note="untuk Budi"   # kode undangan beta
+php artisan clipper:token email@kamu.com claude --ability=read --ability=render   # token API/MCP
 ```
 
-Salin URL yang muncul (misalnya `https://xxxx.ngrok-free.app`), lalu isi di `.env`:
+## Variabel `.env`
 
-```dotenv
-APP_URL=https://xxxx.ngrok-free.app
-TIKTOK_REDIRECT_URI=https://xxxx.ngrok-free.app/tiktok/callback
-SESSION_SECURE_COOKIE=true
-```
+Hanya nama dan fungsi; nilai rahasia jangan di-commit. Sumber: `.env.example` dan `config/services.php`.
 
-Daftarkan Redirect URI yang sama di app TikTok, lalu restart `composer dev`.
+**Aplikasi, database, akses**
 
-> URL ngrok gratis **berubah setiap kali ngrok di-restart**, jadi nilai di atas (dan setelan app TikTok) perlu diperbarui.
-> Untuk pemakaian rutin, lebih baik pasang di server dengan domain sendiri.
-
----
-
-## 🌐 Pasang di server (supaya bisa dipakai banyak orang)
-
-Folder `deploy/` sudah berisi semua yang dibutuhkan:
-
-| File | Fungsi |
+| Variabel | Fungsi |
 |---|---|
-| `setup-ubuntu.sh` | Install semua program di server. **Cukup sekali.** |
-| `deploy.sh` | Install/update aplikasi. Jalankan **setiap ada update kode**. |
-| `nginx.conf`, `supervisor.conf`, `php-clipper.ini` | Konfigurasi web server, worker, dan PHP (dipasang otomatis). |
+| `APP_URL` | Alamat publik aplikasi. Dipakai untuk redirect OAuth dan link media bertanda tangan |
+| `APP_KEY`, `APP_ENV`, `APP_DEBUG` | Standar Laravel. Produksi: `APP_DEBUG=false` |
+| `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL |
+| `SESSION_DRIVER`, `QUEUE_CONNECTION`, `CACHE_STORE` | Semuanya `database` |
+| `SESSION_SECURE_COOKIE` | `true` bila lewat HTTPS |
+| `REGISTRATION_ENABLED` | `false` (bawaan): hanya akun pertama dan kode undangan. `true`: pendaftaran bebas dengan persetujuan admin |
+| `CONTACT_EMAIL` | Ditampilkan di `/terms` dan `/privacy` |
 
-### Sebelum mulai
+**AI dan transkrip**
 
-- [ ] Server **Ubuntu 22.04 atau 24.04**. Disarankan minimal **2 vCPU, 4 GB RAM**, karena render video cukup berat.
-- [ ] Domain dengan record **A** yang sudah mengarah ke IP server.
-- [ ] Login ke server sebagai user biasa yang punya akses `sudo`.
-
-### Langkah-langkah
-
-**1. Ambil kode**
-
-```bash
-sudo mkdir -p /var/www && sudo chown $USER /var/www
-git clone git@github.com:Fahmiady11/clipper-sosmed.git /var/www/clipper
-cd /var/www/clipper
-sudo usermod -aG www-data $USER
-```
-
-**2. Install semua program** (PHP, nginx, PostgreSQL, ffmpeg, yt-dlp, supervisor, sertifikat HTTPS)
-
-```bash
-sudo DOMAIN=clipper.domainkamu.com EMAIL=kamu@email.com bash deploy/setup-ubuntu.sh
-```
-
-📝 **Catat password database** yang muncul di akhir proses.
-
-**3. Isi `.env`**
-
-```bash
-cp .env.example .env && nano .env
-```
-
-```dotenv
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://clipper.domainkamu.com
-SESSION_SECURE_COOKIE=true
-REGISTRATION_ENABLED=false     # ubah ke true kalau orang lain boleh daftar sendiri
-
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=clipper
-DB_USERNAME=clipper
-DB_PASSWORD=<password dari langkah 2>
-
-# Server tidak punya browser, jadi pakai file cookies YouTube.
-# Export dari browser (misalnya ekstensi "Get cookies.txt LOCALLY"), lalu upload ke server.
-YTDLP_COOKIES_BROWSER=
-YTDLP_COOKIES=/var/www/clipper/storage/app/youtube-cookies.txt
-
-TIKTOK_REDIRECT_URI=https://clipper.domainkamu.com/tiktok/callback
-
-# Jangan lupa: GEMINI_API_KEY (atau LLM_GATEWAY_*), GROQ_API_KEY, TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
-```
-
-**4. Install aplikasi dan jalankan worker**
-
-```bash
-bash deploy/deploy.sh
-```
-
-**5. Buat akun admin**
-
-Buka `https://clipper.domainkamu.com/register`, lalu buat akun pertama.
-Jangan lupa ubah Redirect URI di app TikTok ke `https://clipper.domainkamu.com/tiktok/callback`.
-
-### 👥 Menambah pengguna lain
-
-Secara bawaan hanya akun pertama yang bisa mendaftar. Untuk membuka pendaftaran:
-
-1. Ubah `REGISTRATION_ENABLED=true` di `.env`.
-2. Jalankan `bash deploy/deploy.sh`.
-3. Minta teman membuka `/register`. Akunnya baru bisa masuk setelah kamu setujui di menu akun → **Pengguna** (`/admin/users`). Kalau sudah tidak menerima pendaftaran, kembalikan ke `false` dan jalankan `deploy.sh` lagi.
-
-Setiap pengguna hanya bisa melihat project, klip, dan akun TikTok miliknya sendiri.
-
-### 🔄 Update aplikasi
-
-```bash
-cd /var/www/clipper && bash deploy/deploy.sh
-```
-
-Worker yang sedang merender akan menyelesaikan pekerjaannya dulu sebelum memakai kode baru.
-
-### 🛠️ Perintah berguna di server
-
-| Perintah | Fungsi |
+| Variabel | Fungsi |
 |---|---|
-| `sudo supervisorctl status` | Lihat status worker dan scheduler. |
-| `sudo supervisorctl restart all` | Restart worker dan scheduler. |
-| `tail -f storage/logs/clipper/jobs-*.log` | Lihat log download, analisis, dan render. |
-| `sudo /usr/local/bin/yt-dlp -U` | Update yt-dlp. **Lakukan rutin.** |
-| `sudo certbot renew --dry-run` | Cek perpanjangan HTTPS otomatis. |
+| `LLM_GATEWAY_URL`, `LLM_GATEWAY_KEY`, `LLM_GATEWAY_MODEL` | Gateway OpenAI-compatible, dicoba lebih dulu. Model boleh beberapa, dipisah koma |
+| `GEMINI_API_KEY`, `GEMINI_MODELS` | Gemini, cadangan bila gateway gagal. `GEMINI_MODELS` opsional (urutan model) |
+| `GROQ_API_KEY` | Whisper untuk video tanpa subtitle YouTube |
 
-Jumlah worker (render paralel) diatur di `/etc/supervisor/conf.d/clipper.conf` (`numprocs`), lalu jalankan `sudo supervisorctl update`.
+**Unduh dan render**
 
-### 🔒 Keamanan yang sudah aktif
-
-- Pendaftaran bisa ditutup (`REGISTRATION_ENABLED=false`), dan akun baru harus disetujui admin utama (akun pertama) sebelum bisa masuk. Login dibatasi 5 percobaan per menit.
-- Semua halaman dan API wajib login, kepemilikan datanya dicek, dan semua form dilindungi CSRF.
-- Link YouTube divalidasi ketat sebelum diproses, sehingga tidak bisa disisipi perintah berbahaya.
-- Header keamanan (anti-clickjacking, nosniff, HSTS), cookie `Secure`/`HttpOnly`, dan API key tidak pernah ditulis ke URL atau log.
-- Hanya proxy lokal yang dipercaya. Kalau server ada di belakang **Cloudflare (proxy oranye)** atau load balancer,
-  tambahkan IP-nya di `trustProxies` pada `bootstrap/app.php`.
-
----
-
-## 🧯 Masalah yang sering muncul
-
-| Gejala | Penyebab & solusi |
+| Variabel | Fungsi |
 |---|---|
-| Project berhenti di **"Menunggu antrian…"** | Worker tidak jalan. Di laptop: jalankan `composer dev`. Di server: `sudo supervisorctl restart all`. |
-| **"Kuota harian Gemini habis"** | Kuota gratis habis di semua model. Tunggu besok, pakai API key berbayar, atau isi `LLM_GATEWAY_*`. Lalu klik **Coba lagi**. |
-| **"Server Gemini sedang sibuk (503)"** | Gangguan sementara dari Google. Klik **Coba lagi** beberapa menit kemudian. |
-| **"Sign in to confirm you're not a bot"** / download gagal | Isi `YTDLP_COOKIES_BROWSER` (pastikan sudah login YouTube di browser itu) atau `YTDLP_COOKIES`, lalu update yt-dlp. |
-| **"Transcript kosong"** | Video tidak punya subtitle dan `GROQ_API_KEY` belum diisi. |
-| Musik tidak terdengar | Library musik masih kosong. Upload lagu di **Library musik**, lalu render ulang. |
-| Upload TikTok gagal `scope_not_authorized` | Aktifkan scope di app TikTok, sesuaikan `TIKTOK_SCOPES`, lalu hubungkan ulang akun TikTok. |
-| Tombol "Daftar" tidak ada / pendaftaran ditutup | Sudah ada akun. Ubah `REGISTRATION_ENABLED=true` kalau mau menambah pengguna. |
-| Tampilan berantakan setelah update | Jalankan `npm run build`. |
-| Pengaturan `.env` tidak berubah | Restart `composer dev` (lokal) atau jalankan `bash deploy/deploy.sh` (server). |
+| `YTDLP_PATH`, `FFMPEG_PATH` | Path biner bila tidak ada di `PATH` |
+| `YTDLP_COOKIES_BROWSER`, `YTDLP_COOKIES` | Cookies YouTube (nama browser, atau path `cookies.txt`; browser dipakai bila keduanya diisi) |
+| `FACE_TRACK_PYTHON` | Python dengan OpenCV. Kosong: crop tengah |
+| `PEXELS_API_KEY`, `PIXABAY_API_KEY` | B-roll. Keduanya kosong: B-roll mati |
+| `MUSIC_LIBRARY_PATH` | Library musik, `<path>/<mood>/*.mp3` (bawaan `storage/app/music`) |
+| `CLIPPER_TEMP_RETENTION_HOURS` | Umur video sumber sebelum dihapus harian (bawaan 72) |
+| `PUBLIC_MEDIA_URL_MINUTES` | Masa berlaku link bertanda tangan untuk Instagram dan Threads (bawaan 120) |
 
----
+**TikTok** (developers.tiktok.com: Login Kit dan Content Posting API)
 
-## ❓ Pertanyaan umum (FAQ)
+| Variabel | Fungsi |
+|---|---|
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | Kredensial app |
+| `TIKTOK_REDIRECT_URI` | Harus persis sama dengan yang didaftarkan |
+| `TIKTOK_SCOPES` | Bawaan di config `user.info.basic,video.upload`. Tambah `video.publish` untuk posting langsung dan `video.list` untuk statistik (tes hook A/B, learning loop Autopilot) |
 
-**Apakah gratis?**
-Aplikasinya gratis. Gemini dan Groq punya kuota gratis yang cukup untuk pemakaian ringan. Biaya utamanya hanya server (kalau dipasang online).
+**YouTube** (Google Cloud: OAuth client Web application, YouTube Data API v3 aktif)
 
-**Berapa lama satu video diproses?**
-Tergantung panjang video dan kekuatan server. Analisis biasanya beberapa menit, dan render tiap klip sekitar 1–3 menit.
+| Variabel | Fungsi |
+|---|---|
+| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | Kredensial OAuth client. Scope: `youtube.upload` dan `youtube.readonly` |
+| `YOUTUBE_REDIRECT_URI` | Harus persis sama dengan Authorized redirect URI |
 
-**Apakah video yang diunduh memenuhi disk?**
-Tidak. Video sumber dihapus otomatis setiap hari (bawaan setelah 72 jam, atur lewat `CLIPPER_TEMP_RETENTION_HOURS`).
+**Facebook dan Instagram** (satu app Meta, tipe Business)
 
-**Bolehkah saya memakai video orang lain?**
-Pastikan kamu punya izin dari pemilik video, dan patuhi aturan hak cipta YouTube dan TikTok.
+| Variabel | Fungsi |
+|---|---|
+| `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` | App settings > Basic |
+| `FACEBOOK_REDIRECT_URI` | Valid OAuth Redirect URI di Facebook Login for Business |
+| `FACEBOOK_CONFIG_ID` | ID konfigurasi Facebook Login for Business (token user). Kosong: izin diminta lewat `FACEBOOK_SCOPES` |
+| `FACEBOOK_SCOPES` | Bawaan `pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish` |
+| `FACEBOOK_GRAPH_VERSION` | Bawaan `v26.0` |
 
-**Bisakah satu server dipakai beramai-ramai?**
-Bisa. Lihat [Menambah pengguna lain](#-menambah-pengguna-lain). Untuk banyak pengguna, tambah `numprocs` worker dan pakai server yang lebih besar.
+**Threads** (use case Threads API di app Meta yang sama, App ID dan secret sendiri)
 
----
+| Variabel | Fungsi |
+|---|---|
+| `THREADS_APP_ID`, `THREADS_APP_SECRET` | Threads app ID dan secret |
+| `THREADS_REDIRECT_URI` | Redirect Callback URL di pengaturan Threads API |
+| `THREADS_SCOPES` | Bawaan `threads_basic,threads_content_publish` |
+| `THREADS_AUTHORIZE_URL`, `THREADS_GRAPH_URL`, `THREADS_GRAPH_VERSION` | Host dan versi API, hampir tidak perlu diubah |
 
-## 👩‍💻 Untuk developer
+**Beban server, tes hook, biaya** (semuanya opsional, ada nilai bawaan)
 
-Dibangun dengan **Laravel 13**, PostgreSQL, Blade + Alpine.js, CSS biasa (Vite), FFmpeg, dan yt-dlp.
+| Variabel | Fungsi |
+|---|---|
+| `CLIPPER_CPU_CORES`, `CLIPPER_LOAD_BUSY`, `CLIPPER_LOAD_OVERLOADED`, `CLIPPER_QUEUE_BUSY`, `CLIPPER_QUEUE_OVERLOADED` | Ambang status sibuk dan overload di `/status` |
+| `CLIPPER_HOOK_TEST_WINDOW_HOURS`, `CLIPPER_HOOK_TEST_GRACE_HOURS`, `CLIPPER_HOOK_TEST_MIN_VIEWS`, `CLIPPER_HOOK_TEST_MARGIN` | Umur penilaian, masa tenggang, views minimum, dan selisih yang dibutuhkan pemenang |
+| `BILLING_CPU_USD_PER_HOUR`, `BILLING_GEMINI_USD_PER_CALL`, `BILLING_GROQ_USD_PER_AUDIO_HOUR` | Tarif untuk log biaya per render |
+
+## Redirect URI OAuth
+
+Daftarkan persis seperti ini di dashboard tiap platform, dengan `<APP_URL>` yang sama dengan `.env`, dan samakan isi variabel `*_REDIRECT_URI`-nya:
+
+| Platform | Redirect URI | Didaftarkan di | Variabel |
+|---|---|---|---|
+| TikTok | `<APP_URL>/tiktok/callback` | developers.tiktok.com, app Production, Login Kit | `TIKTOK_REDIRECT_URI` |
+| YouTube | `<APP_URL>/youtube/callback` | Google Cloud, OAuth client, Authorized redirect URIs | `YOUTUBE_REDIRECT_URI` |
+| Facebook dan Instagram | `<APP_URL>/facebook/callback` | Meta, Facebook Login for Business, Valid OAuth Redirect URIs | `FACEBOOK_REDIRECT_URI` |
+| Threads | `<APP_URL>/threads/callback` | Meta, use case Threads API, Redirect Callback URL | `THREADS_REDIRECT_URI` |
+
+Route-nya ada di `routes/web.php` (di balik `auth` dan `approved`); alur mulai dari `/<platform>/connect`. Instagram ikut login Facebook, jadi tidak punya redirect URI sendiri. Setelah login, Page dan akun Instagram dipilih di Pengaturan > Akun terhubung.
+
+## Menjalankan test
 
 ```bash
-composer dev     # web + worker + scheduler + log + vite sekaligus
-composer test    # jalankan semua test (SQLite in-memory, tidak menyentuh database asli)
-composer lint    # rapikan gaya kode (Laravel Pint) — jalankan sebelum commit
+composer test            # SQLite in-memory, tidak menyentuh database asli
+php artisan test --filter=PublicPagesTest
 ```
 
-### Struktur kode
+Beberapa kolom dan constraint berperilaku beda di Postgres, dan CI memakai Postgres 17. Jalankan di Postgres sebelum push perubahan yang menyentuh migrasi atau query:
+
+```bash
+createdb clipper_test
+DB_CONNECTION=pgsql DB_DATABASE=clipper_test php artisan test
+# tambah DB_HOST, DB_USERNAME, DB_PASSWORD bila berbeda dari .env
+```
+
+Beberapa test memanggil `ffmpeg` sungguhan (mis. `MusicLibraryTest`), jadi FFmpeg harus terpasang. Workflow `.github/workflows/deploy.yml` menjalankan job `test` (PHP 8.4, Postgres 17, `npm run build`, `php artisan test`) pada setiap push dan pull request; deploy hanya jalan bila test lolos dan ref-nya `main`.
+
+## Deploy
+
+Produksi berjalan di Docker (`app`, `queue`, `scheduler`, `postgres`) lewat GitHub Actions; langkah, rollback, backup, dan `.env` produksi ada di [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Folder `deploy/` adalah jalur lama untuk server bare-metal Ubuntu (`setup-ubuntu.sh`, `deploy.sh`, `nginx.conf`, `supervisor.conf`, `php-clipper.ini`) dan tidak dipakai pipeline Docker.
+
+Hal yang perlu diingat:
+
+- **Migrasi**: `php artisan migrate --force` dijalankan oleh script deploy sebelum worker baru naik. Migrasi yang menghapus atau mengganti nama kolom dan tabel butuh dua deploy (lihat bagian 6.2 di DEPLOYMENT.md).
+- **Kosongkan queue bila kelas job berubah**: payload di tabel `jobs` menyimpan nama kelas dan properti job. Kalau kelas job di `app/Jobs/` diganti nama, dipindah, atau konstruktornya berubah, job yang sudah antre gagal dengan kode baru. Tunggu sampai antrian kosong (`select count(*) from jobs`) sebelum deploy, atau jangan ubah bentuk job yang masih bisa antre.
+- **Worker**: setelah deploy jalankan `php artisan queue:restart` (script `deploy/deploy.sh` sudah). Deploy Docker menunggu job yang sedang jalan sampai 65 menit (`stop_grace_period: 65m`).
+- **Batas upload**: footage gameplay sampai 200 MB per file dan musik sampai 50 MB. `deploy/php-clipper.ini` mengatur `upload_max_filesize=205M`, `post_max_size=210M`, `memory_limit=512M`; `deploy/nginx.conf` mengatur `client_max_body_size 210M` dan `fastcgi_read_timeout 600`. Image Docker memakai batas 2 GB di `docker/nginx.conf` dan PHP; Nginx di host yang jadi reverse proxy juga harus mengizinkan body sebesar itu.
+- **`.env`**: container men-cache config saat start, jadi perubahan `.env` baru berlaku setelah container dibuat ulang.
+- **yt-dlp**: perbarui rutin, YouTube sering berubah. Server tanpa browser memakai `YTDLP_COOKIES`.
+
+## Halaman publik dan review platform
+
+`/welcome` (beranda aplikasi), `/privacy`, `/terms`, dan `/status` terbuka tanpa login. URL `/welcome`, `/privacy`, dan `/terms` didaftarkan di branding OAuth Google, listing app TikTok, dan listing app Meta. Saat mengubah halaman itu, pertahankan penjelasan fitur, cara data YouTube, TikTok, dan Meta dipakai (hanya klip yang disetujui atau dijadwalkan pengguna ke akunnya sendiri), serta link ke kebijakan privasi dan syarat layanan. `tests/Feature/PublicPagesTest.php` memeriksa sebagian di antaranya.
+
+## Struktur kode
 
 | Bagian | Lokasi |
 |---|---|
-| Halaman (Blade + Alpine.js) | `resources/views/studio/*`, `autopilot.blade.php`, `music.blade.php` |
-| Job antrian | `app/Jobs/` — `AnalyzeVideoJob`, `RenderClipJob`, `DiscoverVideosJob`, `UploadToTikTokJob` |
+| Studio (Blade + Alpine.js) | `resources/views/studio.blade.php`, `resources/views/studio/*` |
+| Autopilot, kalender, musik, paket | `autopilot.blade.php`, `calendar.blade.php`, `music.blade.php`, `pricing.blade.php` |
+| Pengaturan (akun terhubung, brand kit, gameplay, token API) | `resources/views/settings/*` |
+| Job antrian | `app/Jobs/`: `AnalyzeVideoJob`, `RenderClipJob`, `DiscoverVideosJob`, `UploadToTikTokJob`, `UploadToYouTubeJob`, `PublishToMetaJob` |
 | AI (gateway + Gemini) | `app/Services/GeminiService.php` |
-| Render video & hook | `app/Services/FFmpegService.php`, `app/Services/HookRenderer.php` |
-| Download & transkrip | `app/Services/YtDlpService.php`, `app/Services/TranscriptService.php` |
-| Autopilot | `app/Services/DiscoveryService.php`, `app/Models/VideoSource.php` |
-| TikTok | `app/Services/TikTokService.php`, `app/Http/Controllers/TikTokController.php` |
-| Pengaturan tampilan klip | `app/Support/ClipSettings.php` |
-| REST API & MCP untuk agent | `routes/agent.php`, `app/Http/Controllers/McpController.php` — panduan di [`docs/agent-api.md`](docs/agent-api.md) |
-| Jadwal otomatis | `routes/console.php` — hapus klip kedaluwarsa, autopilot (tiap 10 menit), bersih-bersih file (03:17) |
+| Render, hook, layout, SFX | `FFmpegService`, `HookRenderer`, `VideoLayoutService`, `FaceTracker`, `SmartCut`, `app/Support/SfxCues.php`, `resources/facetrack/`, `resources/sfx/` |
+| Unduh dan transkrip | `YtDlpService`, `TranscriptService` |
+| Publikasi | `TikTokService`, `YouTubeService`, `FacebookReels`, `InstagramReels`, `ThreadsPosts`, `ConnectedAccounts`, `ScheduledPublisher`, `Autopost` |
+| Tes hook A/B | `HookTestService`, `ClipPerformanceSummary`, `TikTokStatsService` |
+| Kuota dan paket | `RenderQuota`, `app/Models/Plan.php` |
+| REST API dan MCP | `routes/agent.php`, `app/Http/Controllers/McpController.php`, [`docs/agent-api.md`](docs/agent-api.md) |
+| Jadwal dan perintah artisan | `routes/console.php` |
 
-### Alur proses
+Alur proses:
 
 ```
-Tempel link ─► AnalyzeVideoJob (download + transkrip + AI pilih momen)
-            ─► pilih klip ─► RenderClipJob (ffmpeg: potong, reframe, subtitle, hook, musik)
-            ─► unduh MP4 / UploadToTikTokJob
+Link YouTube -> AnalyzeVideoJob (unduh, transkrip, AI memilih momen)
+             -> pilih klip -> RenderClipJob (ffmpeg: potong, reframe/layout, subtitle, hook, musik, SFX)
+             -> unduh MP4/ZIP, atau Publikasikan / Kalender / Autopilot
+             -> UploadToTikTokJob, UploadToYouTubeJob, PublishToMetaJob
 ```
+
+Issue tracking memakai [beads](https://github.com/gastownhall/beads): `bd ready`, `bd show <id>`, `bd prime`.
+
+## Masalah yang sering muncul
+
+| Gejala | Penyebab dan solusi |
+|---|---|
+| Project berhenti di "Menunggu antrian" | Queue worker tidak jalan. Lokal: `composer dev`. Produksi: restart service `queue` |
+| Autopilot, kalender, atau status upload tidak bergerak | Scheduler tidak jalan (`schedule:work` atau cron `schedule:run`) |
+| Kuota Gemini habis atau 503 | Isi `LLM_GATEWAY_*` atau key berbayar, lalu coba lagi dari project |
+| "Sign in to confirm you're not a bot" | Isi `YTDLP_COOKIES_BROWSER` atau `YTDLP_COOKIES`, perbarui yt-dlp |
+| "Transcript kosong" | Video tanpa subtitle dan `GROQ_API_KEY` kosong |
+| Upload TikTok `scope_not_authorized` | Aktifkan scope di app TikTok, sesuaikan `TIKTOK_SCOPES`, hubungkan ulang akun |
+| Instagram atau Threads gagal mengunduh video | `APP_URL` belum bisa dibuka dari internet (HTTPS publik) |
+| Tampilan berantakan setelah update | `npm run build` |
