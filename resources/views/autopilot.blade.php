@@ -133,6 +133,7 @@
   .ap-ed-aside { position: sticky; top: 0; align-self: start; }
   .ap-ed-aside .phone-frame { max-width: 260px; }
   .ap-ed-note { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; }
+  .ap-ed-note a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
   .ap-pv-bg { position: absolute; inset: 0; background: linear-gradient(160deg, oklch(0.36 0.07 205), oklch(0.17 0.04 255)); }
   .ap-pv-bg.gameplay::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: linear-gradient(160deg, oklch(0.4 0.08 160), oklch(0.2 0.05 30)); border-top: 2px solid rgba(0,0,0,.6); }
   .ap-pv-bg.gaussian::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); aspect-ratio: 16/9; background: linear-gradient(135deg, oklch(0.42 0.08 280), oklch(0.2 0.05 330)); outline: 1px solid rgba(255,255,255,.25); }
@@ -433,7 +434,7 @@
                 <button :class="{ on: ed.s.layout_type === 'gaussian' }" @click="ed.s.layout_type = 'gaussian'" type="button">Gaussian blur</button>
                 <button :class="{ on: ed.s.layout_type === 'gameplay' }" :disabled="!GAMEPLAY_READY" @click="ed.s.layout_type = 'gameplay'" type="button">Split gameplay</button>
               </div>
-              <div class="ap-ed-note" x-show="!GAMEPLAY_READY">Split gameplay belum tersedia: taruh klip .mp4 di <code>storage/app/gameplay</code>, lalu muat ulang halaman.</div>
+              <div class="ap-ed-note" x-show="!GAMEPLAY_READY">Split gameplay butuh footage. <a href="{{ route('gameplay.page') }}" target="_blank" rel="noopener">Unggah footage gameplay-mu</a> di Pengaturan, lalu muat ulang halaman ini.</div>
             </div>
             <div class="fblock">
               <button class="tgl" :class="{ on: ed.s.edit.jump_cut }" @click="ed.s.edit.jump_cut = !ed.s.edit.jump_cut" type="button">
@@ -713,7 +714,7 @@
 </div>
 
 <script>
-const GAMEPLAY_READY = @json(app(\App\Services\GameplayFootage::class)->available());
+const GAMEPLAY_READY = @json(\App\Services\GameplayFootage::for(auth()->id())->available());
 
 const LAYOUT_NAMES = { gaussian: 'Gaussian', gameplay: 'Split gameplay' };
 

@@ -30,6 +30,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M12 22a10 10 0 110-20 10 10 0 0110 10c0 2-2 2-3.5 2H16a2 2 0 00-1.5 3.4c.3.4.5.9.5 1.6 0 1.1-.9 2-2 2h-1z"/></svg>
       Brand kit
     </a>
+    <a class="user-menu-item" href="{{ route('gameplay.page') }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18"/><path d="M10 16.5l4 2.5v-5z"/></svg>
+      Footage gameplay
+    </a>
     <a class="user-menu-item" href="{{ route('api.tokens') }}">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 11-7.8 7.8 5.5 5.5 0 017.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
       Akses API

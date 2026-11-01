@@ -851,6 +851,44 @@ class FFmpegService
     }
 
     /** Frame rate of the rendered clip: the source's, at most 30 */
+    /**
+     * Size and length of the first real video stream (cover art does not count),
+     * or null when the file has none or no usable length (audio, images, garbage).
+     *
+     * @return array{duration: float, width: int, height: int}|null
+     */
+    public function probeVideo(string $input): ?array
+    {
+        exec(sprintf(
+            '%s -v error -select_streams v -show_entries stream=width,height:stream_disposition=attached_pic:format=duration -of json %s 2>/dev/null',
+            $this->probeBin(),
+            escapeshellarg($input)
+        ), $out, $code);
+
+        $data = $code === 0 ? json_decode(implode("\n", $out), true) : null;
+        $stream = collect($data['streams'] ?? [])->first(fn ($s) => empty($s['disposition']['attached_pic']) && ($s['width'] ?? 0) > 0 && ($s['height'] ?? 0) > 0);
+        $duration = (float) ($data['format']['duration'] ?? 0);
+        if (! $stream || $duration <= 0) {
+            return null;
+        }
+
+        return ['duration' => $duration, 'width' => (int) $stream['width'], 'height' => (int) $stream['height']];
+    }
+
+    /** One frame at $at seconds as a 320px-wide JPEG; false when ffmpeg cannot make it. */
+    public function thumbnail(string $input, float $at, string $output): bool
+    {
+        exec(sprintf(
+            '%s -v error -y -ss %s -i %s -frames:v 1 -vf scale=320:-2 -q:v 4 %s 2>&1',
+            $this->bin,
+            escapeshellarg(sprintf('%.3f', $at)),
+            escapeshellarg($input),
+            escapeshellarg($output)
+        ), $o, $code);
+
+        return $code === 0 && is_file($output);
+    }
+
     public function outputFps(string $input): float
     {
         $fps = $this->probeFps($input);

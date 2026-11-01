@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
+use App\Http\Controllers\GameplayClipController;
 use App\Http\Controllers\HookTestController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
@@ -61,6 +62,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/schedule', [ScheduleController::class, 'store'])->middleware('throttle:30,1');
     Route::patch('/schedule/{postId}', [ScheduleController::class, 'update'])->middleware('throttle:30,1');
     Route::delete('/schedule/{postId}', [ScheduleController::class, 'destroy']);
+
+    Route::get('/gameplay', [GameplayClipController::class, 'index']);
+    Route::post('/gameplay', [GameplayClipController::class, 'store'])->middleware('throttle:20,1');
+    Route::delete('/gameplay/{clipId}', [GameplayClipController::class, 'destroy'])->whereNumber('clipId');
 
     Route::get('/music', [MusicController::class, 'index']);
     Route::post('/music', [MusicController::class, 'store']);

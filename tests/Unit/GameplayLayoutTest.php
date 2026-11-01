@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use App\Services\FFmpegService;
-use App\Services\GameplayFootage;
 use App\Services\VideoLayoutService;
 use Tests\TestCase;
 
@@ -37,62 +36,6 @@ class GameplayLayoutTest extends TestCase
         $a = $audio ? '-f lavfi -i sine=f=300:d='.$seconds.' -c:a aac' : '-an';
         exec(sprintf('%s -v error -y -f lavfi -i color=c=%s:s=%dx%d:r=30:d=%d %s -c:v libx264 -pix_fmt yuv420p %s 2>&1', $bin, $color, $w, $h, $seconds, $a, escapeshellarg($file)), $o, $code);
         $this->assertSame(0, $code, implode("\n", $o));
-    }
-
-    public function test_footage_folder_lists_only_video_files(): void
-    {
-        touch($this->dir.'/a.mp4');
-        touch($this->dir.'/b.MOV');
-        touch($this->dir.'/notes.txt');
-        touch($this->dir.'/.hidden.mp4');
-        mkdir($this->dir.'/sub.mp4');
-
-        $footage = new GameplayFootage($this->dir);
-
-        $this->assertSame([$this->dir.'/a.mp4', $this->dir.'/b.MOV'], $footage->files());
-        $this->assertTrue($footage->available());
-    }
-
-    public function test_empty_or_missing_folder_means_the_layout_is_unavailable(): void
-    {
-        $this->assertFalse((new GameplayFootage($this->dir))->available());
-        $this->assertFalse((new GameplayFootage($this->dir.'/nope'))->available());
-        $this->assertNull((new GameplayFootage($this->dir))->pick(30.0));
-    }
-
-    public function test_pick_chooses_among_the_clips_and_leaves_room_for_the_clip_length(): void
-    {
-        if (! $this->ffmpegAvailable()) {
-            $this->markTestSkipped('ffmpeg not available');
-        }
-        $this->color($this->dir.'/a.mp4', 'red', 160, 90, 20);
-        $this->color($this->dir.'/b.mp4', 'blue', 160, 90, 20);
-
-        $footage = new GameplayFootage($this->dir);
-        $seen = [];
-        $starts = [];
-        for ($i = 0; $i < 30; $i++) {
-            $pick = $footage->pick(8.0);
-            $seen[basename($pick['path'])] = true;
-            $starts[] = $pick['start'];
-            $this->assertLessThanOrEqual(12.0, $pick['start']); // 20s of footage, 8s needed
-        }
-
-        $this->assertCount(2, $seen);
-        $this->assertGreaterThan(1, count(array_unique($starts)), 'the offset should vary');
-    }
-
-    public function test_footage_shorter_than_the_clip_still_gets_an_offset_inside_it(): void
-    {
-        if (! $this->ffmpegAvailable()) {
-            $this->markTestSkipped('ffmpeg not available');
-        }
-        $this->color($this->dir.'/short.mp4', 'red', 160, 90, 3);
-
-        $pick = (new GameplayFootage($this->dir))->pick(40.0);
-
-        $this->assertGreaterThanOrEqual(0.0, $pick['start']);
-        $this->assertLessThanOrEqual(3.0, $pick['start']);
     }
 
     public function test_top_half_is_a_wide_face_following_crop_and_bottom_fills_the_other_half(): void

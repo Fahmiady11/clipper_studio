@@ -2,7 +2,7 @@
 function studio() {
   const SESSION_KEY = 'clipper_studio_v1';
   const BRAND = @json($brand ?? []);
-  const GAMEPLAY_READY = @json(app(\App\Services\GameplayFootage::class)->available()); // clips in storage/app/gameplay
+  const GAMEPLAY_READY = @json(\App\Services\GameplayFootage::for(auth()->id())->available()); // the user's own uploaded footage
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
     'url','meta',

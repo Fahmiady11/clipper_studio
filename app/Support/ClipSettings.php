@@ -17,7 +17,7 @@ final class ClipSettings
 
     public const Y_MAX = 95;
 
-    /** gameplay = speaker on top, looping footage below (needs clips in storage/app/gameplay) */
+    /** gameplay = speaker on top, looping footage below (needs the user's own uploaded footage) */
     public const LAYOUTS = ['reframe', 'gaussian', 'gameplay'];
 
     public const SUBTITLE_STYLES = ['karaoke', 'pop', 'word'];
@@ -55,8 +55,8 @@ final class ClipSettings
 
         $rules = [
             'layout_type' => [$need, 'in:'.implode(',', self::LAYOUTS), function ($attribute, $value, $fail) {
-                if ($value === 'gameplay' && ! app(GameplayFootage::class)->available()) {
-                    $fail('Layout split gameplay belum tersedia: folder footage masih kosong.');
+                if ($value === 'gameplay' && ! GameplayFootage::for(auth()->id())->available()) {
+                    $fail('Layout split gameplay butuh footage: unggah klip gameplay-mu di Pengaturan, Footage gameplay.');
                 }
             }],
             'clip_count' => [$need, 'integer', 'in:1,3,5'],

@@ -694,15 +694,32 @@ a.btn {
     opacity: .45
 }
 
+.layout-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0
+}
+
+.layout-item > .layout-card {
+    flex: 1
+}
+
 .layout-card-lock {
     font-size: 12px;
     line-height: 1.45;
     color: var(--text-muted)
 }
 
-.layout-card-lock code {
-    font-family: var(--font-mono);
-    color: var(--text)
+.layout-card-lock a {
+    color: var(--accent-ink);
+    text-decoration: underline;
+    text-underline-offset: 2px
+}
+
+.layout-card-lock a:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px
 }
 
 .layout-card-check {

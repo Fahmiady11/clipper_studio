@@ -115,11 +115,6 @@ return [
         'path' => env('MUSIC_LIBRARY_PATH', storage_path('app/music')),
     ],
 
-    // Footage for the split-screen gameplay layout: your own clips, <path>/*.mp4
-    'gameplay' => [
-        'path' => env('GAMEPLAY_FOOTAGE_PATH', storage_path('app/gameplay')),
-    ],
-
     'groq' => [
         'api_key' => env('GROQ_API_KEY'),
     ],

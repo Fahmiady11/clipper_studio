@@ -28,7 +28,7 @@ Semua request memakai header `Authorization: Bearer clp_...`. Batas 120 request/
 
 | Method | Path | Fungsi |
 |---|---|---|
-| POST | `/projects` | Buat project. Wajib `youtube_url`; opsional `clip_count` (1/3/5, default 3), `layout_type` (`reframe`/`gaussian`), `duration_mode`, `min_duration`, `max_duration` |
+| POST | `/projects` | Buat project. Wajib `youtube_url`; opsional `clip_count` (1/3/5, default 3), `layout_type` (`reframe`/`gaussian`/`gameplay`; `gameplay` hanya jika pemilik token sudah mengunggah footage di Pengaturan > Footage gameplay, kalau belum jawabannya 422), `duration_mode`, `min_duration`, `max_duration` |
 | GET | `/projects` | Riwayat project |
 | GET | `/projects/{id}/status` | Progres analisis + klip |
 | GET | `/projects/{id}/clips` | Klip berurut ranking: skor viral, hook, status render, `download_url`, status publish |

@@ -6,6 +6,7 @@
   </div>
   <div class="layout-grid">
     <template x-for="L in LAYOUTS" :key="L.id">
+      <div class="layout-item">
       <button class="layout-card" :class="['c-'+L.color, layout === L.id ? 'lsel' : '']"
               :disabled="L.ready === false" @click="if (L.ready !== false) layout = L.id" type="button">
         <div class="layout-card-meta">
@@ -18,11 +19,12 @@
           <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">
             <span :style="'color:'+L.accent">Cocok:</span> <span x-text="L.good"></span>
           </div>
-          <div class="layout-card-lock" x-show="L.ready === false">Belum tersedia: taruh klip .mp4 di <code>storage/app/gameplay</code>, lalu muat ulang halaman.</div>
         </div>
         <div class="layout-card-illu" x-html="layoutIllu(L.id, L.accent)"></div>
         <span class="layout-card-check">✓ Dipilih</span>
       </button>
+      <div class="layout-card-lock" x-show="L.ready === false">Belum ada footage. <a href="{{ route('gameplay.page') }}" target="_blank" rel="noopener">Unggah footage gameplay-mu</a> di Pengaturan, lalu muat ulang halaman ini.</div>
+      </div>
     </template>
   </div>
   <div class="edit-opts">

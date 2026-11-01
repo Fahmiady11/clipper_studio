@@ -105,13 +105,13 @@ class RenderClipJob implements ShouldQueue
         // stream-copy cut snaps to the previous keyframe, so the clip started up
         // to a few seconds early and subtitles landed late by a varying amount.
         // Reframe follows the faces (and the speaker on a two-shot) when the tracker is available
-        // Split-screen needs footage on disk; without it the clip renders as a plain reframe
+        // Split-screen uses the owner's own footage, picked now: a file deleted since the clip was queued just means a plain reframe
         $gameplay = null;
         $layoutType = $project->layout_type;
         if ($layoutType === 'gameplay') {
-            $gameplay = app(GameplayFootage::class)->pick((float) $clip->end_seconds - (float) $clip->start_seconds, $ffmpeg);
+            $gameplay = GameplayFootage::for($project->user_id)->pick((float) $clip->end_seconds - (float) $clip->start_seconds);
             if (! $gameplay) {
-                $log->warning('Gameplay layout but no footage — rendering reframe', ['path' => config('services.gameplay.path')]);
+                $log->warning('Gameplay layout but the owner has no footage, rendering reframe', ['user_id' => $project->user_id]);
                 $layoutType = 'reframe';
             }
         }
