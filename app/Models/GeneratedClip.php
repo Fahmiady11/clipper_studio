@@ -39,6 +39,8 @@ class GeneratedClip extends Model
         'tiktok_publish_id',
         'tiktok_status',
         'tiktok_error',
+        'tiktok_uploaded_at',
+        'tiktok_checked_at',
         'youtube_account_id',
         'youtube_video_id',
         'youtube_status',
@@ -66,6 +68,8 @@ class GeneratedClip extends Model
         'cancelled_at' => 'datetime',
         'youtube_uploaded_at' => 'datetime',
         'youtube_checked_at' => 'datetime',
+        'tiktok_uploaded_at' => 'datetime',
+        'tiktok_checked_at' => 'datetime',
     ];
 
     protected static function boot(): void

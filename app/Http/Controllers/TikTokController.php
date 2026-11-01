@@ -8,6 +8,7 @@ use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
 use App\Services\ConnectedAccounts;
 use App\Services\TikTokService;
+use App\Services\TikTokStatusPoller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class TikTokController extends Controller
 {
     use EnsuresQueueWorker;
 
-    public function __construct(private TikTokService $tiktok) {}
+    public function __construct(private TikTokService $tiktok, private TikTokStatusPoller $poller) {}
 
     public function connect(Request $request): RedirectResponse
     {
@@ -152,19 +153,10 @@ class TikTokController extends Controller
     {
         $clip = $this->ownedClip($clipId);
 
-        // The job stops polling after ~1 minute; pick up the final state here
-        if ($clip->tiktok_status === 'processing' && $clip->tiktok_publish_id && $clip->tiktok_account_id) {
-            try {
-                // Scoped to the user too: never use someone else's tokens, even via a stale id
-                $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($clip->tiktok_account_id);
-                $status = $this->tiktok->publishStatus($account, $clip->tiktok_publish_id);
-                $clip->update([
-                    'tiktok_status' => UploadToTikTokJob::mapStatus($status['status']),
-                    'tiktok_error' => $status['fail_reason'],
-                ]);
-            } catch (Throwable $e) {
-                Log::channel('clipper_api')->warning('TikTok status refresh failed', ['error' => $e->getMessage()]);
-            }
+        // The job stops polling after ~1 minute; clipper:tiktok-status follows it too, this is the faster path while Studio is open
+        if ($clip->tiktok_status === 'processing' && $clip->tiktok_publish_id && $this->poller->isDue($clip)) {
+            // Scoped to the user too: never use someone else's tokens, even via a stale id
+            $this->poller->refresh($clip, TiktokAccount::where('user_id', Auth::id())->find($clip->tiktok_account_id));
         }
 
         return $this->statusResponse($clip);

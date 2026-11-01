@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
 use App\Services\TikTokService;
+use App\Services\TikTokStatusPoller;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -56,33 +57,32 @@ class UploadToTikTokJob implements ShouldQueue
         $publishId = $this->mode === 'direct'
             ? $tiktok->directPost($account, $path, $this->postInfo)
             : $tiktok->uploadToInbox($account, $path);
-        $clip->update(['tiktok_publish_id' => $publishId, 'tiktok_status' => 'processing']);
+        $clip->update([
+            'tiktok_publish_id' => $publishId,
+            'tiktok_status' => 'processing',
+            'tiktok_uploaded_at' => now(),
+            'tiktok_checked_at' => null,
+        ]);
 
         // TikTok processes the upload asynchronously; wait briefly for a final
-        // state. If it's still processing, the status endpoint keeps polling.
+        // state. If it's still processing, clipper:tiktok-status keeps polling.
+        $poller = app(TikTokStatusPoller::class);
         for ($i = 0; $i < self::POLL_ATTEMPTS; $i++) {
             sleep($this->pollSeconds);
-            $status = $tiktok->publishStatus($account, $publishId);
-            $mapped = self::mapStatus($status['status']);
-            if ($mapped !== 'processing') {
-                $clip->update(['tiktok_status' => $mapped, 'tiktok_error' => $status['fail_reason']]);
-                $log->info('TikTok upload finished', ['clip_id' => $clip->id, 'status' => $status]);
+            try {
+                $status = $tiktok->publishStatus($account, $publishId);
+            } catch (Throwable $e) {
+                // The file is with TikTok already: failing the job here would hide a draft that did arrive
+                $log->warning('TikTok status check failed, left to the poller', ['clip_id' => $clip->id, 'error' => $e->getMessage()]);
 
+                return;
+            }
+            if ($poller->apply($clip, $status)) {
                 return;
             }
         }
 
         $log->info('TikTok upload still processing', ['clip_id' => $clip->id, 'publish_id' => $publishId]);
-    }
-
-    public static function mapStatus(string $tiktokStatus): string
-    {
-        return match ($tiktokStatus) {
-            'SEND_TO_USER_INBOX' => 'inbox',
-            'PUBLISH_COMPLETE' => 'published',
-            'FAILED' => 'failed',
-            default => 'processing',
-        };
     }
 
     public function failed(Throwable $e): void

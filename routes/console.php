@@ -14,6 +14,7 @@ use App\Services\ScheduledPublisher;
 use App\Services\StorageCleanup;
 use App\Services\ThreadsLogin;
 use App\Services\TikTokStatsService;
+use App\Services\TikTokStatusPoller;
 use App\Services\YouTubeStatusPoller;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -55,6 +56,14 @@ Artisan::command('clipper:youtube-status', function (YouTubeStatusPoller $poller
 })->purpose('Refresh the status of YouTube uploads still processing');
 
 Schedule::command('clipper:youtube-status')->everyFiveMinutes()->name('youtube-status')->withoutOverlapping();
+
+// TikTok uploads: the job polls for about a minute, this follows drafts and posts until TikTok gives a final state
+Artisan::command('clipper:tiktok-status', function (TikTokStatusPoller $poller) {
+    $r = $poller->run();
+    $this->info("Checked {$r['checked']} TikTok uploads, {$r['settled']} settled");
+})->purpose('Refresh the status of TikTok uploads still processing');
+
+Schedule::command('clipper:tiktok-status')->everyMinute()->name('tiktok-status')->withoutOverlapping();
 
 // Meta uploads: follow Facebook Reels until published, publish Instagram / Threads containers once ready
 Artisan::command('clipper:meta-status', function (MetaStatusPoller $poller) {

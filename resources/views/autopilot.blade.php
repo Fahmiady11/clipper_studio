@@ -426,7 +426,7 @@
             </div>
             <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': ['failed', 'skipped'].includes(c.tiktok_status) }">
               <span x-text="reviewLabel(c)"></span>
-              <small x-show="['failed', 'skipped'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
+              <small x-show="['failed', 'skipped', 'processing'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
               <a class="ap-link" x-show="c.tiktok_status === 'skipped'" href="/settings/accounts#tiktok">Pilih akun utama TikTok</a>
               <template x-for="pf in AUTOPOST" :key="pf.id">
                 <div class="ap-ytline" :class="{ 'is-fail': autopostFailed(c, pf.id) }" x-show="c.review_status === 'approved' && c[pf.id]">
@@ -1097,9 +1097,9 @@ function autopilot() {
         queued: 'Disetujui · menunggu antrian upload…',
         uploading: 'Disetujui · mengupload ke TikTok…',
         processing: 'Disetujui · TikTok sedang memproses…',
-        inbox: '✓ Terkirim ke inbox TikTok',
+        inbox: '✓ Masuk inbox TikTok, selesaikan di aplikasi',
         published: '✓ Sudah diposting',
-        failed: 'Upload gagal',
+        failed: 'Upload TikTok gagal',
         skipped: 'Disetujui · tidak dikirim ke TikTok',
       }[c.tiktok_status] || 'Disetujui';
     },
