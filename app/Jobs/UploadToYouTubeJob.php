@@ -47,8 +47,14 @@ class UploadToYouTubeJob implements ShouldQueue
         $log->info('YouTube upload started', ['clip_id' => $clip->id, 'channel' => $account->title, 'privacy' => $this->meta['privacy'] ?? null]);
 
         $videoId = $youtube->upload($account, Storage::path($clip->output_path), $this->meta);
-        // YouTube processes the video for a minute or two; the status endpoint follows it up
-        $clip->update(['youtube_video_id' => $videoId, 'youtube_status' => 'processing']);
+        // YouTube processes the video for a minute or two; YouTubeStatusPoller follows it up
+        $clip->update([
+            'youtube_video_id' => $videoId,
+            'youtube_status' => 'processing',
+            'youtube_privacy' => null,
+            'youtube_uploaded_at' => now(),
+            'youtube_checked_at' => null,
+        ]);
         $log->info('YouTube upload finished', ['clip_id' => $clip->id, 'video_id' => $videoId]);
     }
 

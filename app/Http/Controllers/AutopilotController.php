@@ -231,12 +231,14 @@ class AutopilotController extends Controller
             $this->ensureQueueWorkerRunning();
         }
 
-        // The approval stands either way; a clip YouTube can't take says why
+        // The approval stands either way; a clip YouTube can't take keeps the reason on its card
         try {
             $post = $autopost->schedule($clip);
             $youtube = $post ? ['scheduled_at' => $post->scheduled_at->toISOString()] : null;
+            $clip->update(['youtube_autopost_error' => null]);
         } catch (RuntimeException $e) {
             $youtube = ['error' => $e->getMessage()];
+            $clip->update(['youtube_autopost_error' => mb_substr($e->getMessage(), 0, 1000)]);
         }
 
         return response()->json(['success' => true, 'youtube' => $youtube]);
@@ -253,7 +255,7 @@ class AutopilotController extends Controller
         abort_if($sent, 422, 'Clip sudah dikirim ke YouTube, approve tidak bisa dibatalkan.');
 
         $autopost->cancelWaiting($clip);
-        $clip->update(['review_status' => 'pending']);
+        $clip->update(['review_status' => 'pending', 'youtube_autopost_error' => null]);
 
         return response()->json(['success' => true]);
     }
@@ -367,12 +369,16 @@ class AutopilotController extends Controller
 
     /**
      * Where the clip is on its way to YouTube: its calendar post, then what the
-     * upload job reported once the post was handed over.
+     * upload job reported once the post was handed over. Without a post,
+     * 'skipped' carries why autopilot could not book one.
      */
     private function youtubeState(GeneratedClip $clip, ?ScheduledPost $post): ?array
     {
         if (! $post) {
-            return null;
+            return $clip->youtube_autopost_error
+                ? ['post_id' => null, 'status' => 'skipped', 'scheduled_at' => null, 'delivery' => null,
+                    'error' => $clip->youtube_autopost_error, 'url' => null, 'privacy' => null]
+                : null;
         }
         $handedOff = $post->status === ScheduledPost::STATUS_QUEUED;
 
@@ -384,6 +390,7 @@ class AutopilotController extends Controller
             'delivery' => $handedOff ? $clip->youtube_status : null,
             'error' => $post->error ?? ($handedOff ? $clip->youtube_error : null),
             'url' => $handedOff && $clip->youtube_video_id ? 'https://youtube.com/shorts/'.$clip->youtube_video_id : null,
+            'privacy' => $handedOff ? $clip->youtube_privacy : null,
         ];
     }
 

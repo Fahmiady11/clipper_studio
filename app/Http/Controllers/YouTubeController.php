@@ -133,7 +133,12 @@ class YouTubeController extends Controller
                 $account = YoutubeAccount::where('user_id', Auth::id())->findOrFail($clip->youtube_account_id);
                 $status = $this->youtube->videoStatus($account, $clip->youtube_video_id);
                 $privacy = $status['privacy'];
-                $clip->update(['youtube_status' => $status['status'], 'youtube_error' => $status['reason']]);
+                $clip->update([
+                    'youtube_status' => $status['status'],
+                    'youtube_error' => $status['reason'],
+                    'youtube_privacy' => $status['privacy'],
+                    'youtube_checked_at' => now(),
+                ]);
             } catch (Throwable $e) {
                 Log::channel('clipper_api')->warning('YouTube status refresh failed', ['error' => $e->getMessage()]);
             }

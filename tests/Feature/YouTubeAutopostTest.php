@@ -206,6 +206,12 @@ class YouTubeAutopostTest extends TestCase
         $long = $this->reviewClip($user, ['end_seconds' => 240]);
         $this->approve($user, $long)->assertOk()->assertJsonPath('youtube.error', 'Tidak dijadwalkan ke YouTube: Shorts maksimal 3 menit, clip ini 240 detik.');
         $this->assertSame('approved', $long->fresh()->review_status);
+        // The reason survives a reload, and goes once the approval is undone
+        $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
+            ->assertJsonPath('data.0.youtube.status', 'skipped')
+            ->assertJsonPath('data.0.youtube.error', 'Tidak dijadwalkan ke YouTube: Shorts maksimal 3 menit, clip ini 240 detik.');
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$long->id}/unapprove")->assertOk();
+        $this->assertNull($long->fresh()->youtube_autopost_error);
 
         // Channel disconnected after the settings were saved
         $settings->account->delete();

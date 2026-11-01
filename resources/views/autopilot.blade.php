@@ -486,14 +486,14 @@
             <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': c.tiktok_status === 'failed' }">
               <span x-text="reviewLabel(c)"></span>
               <small x-show="c.tiktok_status === 'failed' && c.tiktok_error" x-text="c.tiktok_error"></small>
-              <template x-if="c.review_status === 'approved' && (c.youtube || c.ytNote)">
+              <template x-if="c.review_status === 'approved' && c.youtube">
                 <div class="ap-ytline" :class="{ 'is-fail': ytFailed(c) }">
                   <span>YouTube: <b x-text="ytLabel(c)"></b></span>
                   <small x-show="ytError(c)" x-text="ytError(c)"></small>
                   <div class="ap-row">
                     <a class="ap-link" x-show="c.youtube?.url" :href="c.youtube?.url" target="_blank" rel="noopener">Buka di YouTube</a>
                     <a class="ap-link" x-show="/hubungkan ulang/i.test(ytError(c) || '')" href="/youtube/connect">Hubungkan ulang channel</a>
-                    <a class="ap-link" x-show="c.youtube && ['scheduled', 'failed'].includes(c.youtube.status)" href="/calendar">Atur di kalender</a>
+                    <a class="ap-link" x-show="['scheduled', 'failed'].includes(c.youtube.status)" href="/calendar">Atur di kalender</a>
                     <button class="ap-link" type="button" x-show="c.youtube?.status === 'scheduled'" :disabled="c.busy" @click="cancelYt(c)">Batalkan jadwal</button>
                   </div>
                 </div>
@@ -934,8 +934,7 @@ function autopilot() {
           this.reviewPage = res.last_page;
           return this.loadClips();
         }
-        const notes = Object.fromEntries(this.clips.filter(c => c.ytNote).map(c => [c.id, c.ytNote]));
-        this.clips = res.data.map(c => ({ ...c, actionError: errors[c.id] || null, ytNote: notes[c.id] || null, busy: false }));
+        this.clips = res.data.map(c => ({ ...c, actionError: errors[c.id] || null, busy: false }));
         Object.assign(this, { reviewLastPage: res.last_page, reviewTotal: res.total, pendingCount: res.pending, reviewCounts: res.counts });
       } catch (e) { console.error(e); }
       this.fillCaptions();
@@ -1036,8 +1035,7 @@ function autopilot() {
       c.actionError = null;
       c.busy = true;
       try {
-        const r = await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST', body: JSON.stringify({ account_id: this.accountId }) });
-        c.ytNote = r.youtube?.error || null; // approved, but YouTube could not take it: keep the reason on the card
+        await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST', body: JSON.stringify({ account_id: this.accountId }) });
         await this.loadClips();
       } catch (e) { c.actionError = e.message; }
       finally { c.busy = false; }
@@ -1047,7 +1045,6 @@ function autopilot() {
       c.busy = true;
       try {
         await api(`/api/autopilot/review/${c.id}/unapprove`, { method: 'POST' });
-        c.ytNote = null;
         await this.loadClips();
       } catch (e) { c.actionError = e.message; }
       finally { c.busy = false; }
@@ -1067,7 +1064,7 @@ function autopilot() {
     },
     // Nothing went out yet: TikTok untouched and the YouTube post still waiting
     canUnapprove(c) {
-      return c.review_status === 'approved' && !c.tiktok_status && (!c.youtube || ['scheduled', 'failed'].includes(c.youtube.status));
+      return c.review_status === 'approved' && !c.tiktok_status && (!c.youtube || ['scheduled', 'failed', 'skipped'].includes(c.youtube.status));
     },
 
     // ── YouTube autopost ─────────────────────────────────────────
@@ -1112,12 +1109,12 @@ function autopilot() {
     toggleYt() { this.saveYt(!this.yt.enabled); },
     ytFailed(c) {
       const y = c.youtube;
-      return !y ? !!c.ytNote : (y.status === 'failed' || y.delivery === 'failed');
+      return !!y && (['failed', 'skipped'].includes(y.status) || y.delivery === 'failed');
     },
-    ytError(c) { return c.youtube?.error || (!c.youtube ? c.ytNote : null); },
+    ytError(c) { return c.youtube?.error || null; },
     ytLabel(c) {
       const y = c.youtube;
-      if (!y) return 'tidak dijadwalkan';
+      if (!y || y.status === 'skipped') return 'tidak dijadwalkan';
       if (y.status === 'scheduled') {
         return 'terjadwal ' + new Date(y.scheduled_at).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       }
@@ -1127,7 +1124,7 @@ function autopilot() {
         queued: 'menunggu antrian upload…',
         uploading: 'mengupload…',
         processing: 'terupload, YouTube sedang memproses',
-        published: 'sudah tayang',
+        published: y.privacy === 'private' ? 'terupload sebagai privat' : 'sudah tayang',
         failed: 'upload gagal',
       }[y.delivery] || 'dikirim';
     },
@@ -1169,7 +1166,7 @@ function autopilot() {
       if (c.review_status === 'pending') {
         return c.status === 'done' ? { label: 'Perlu review', cls: 'b-pending' } : { label: 'Rendering', cls: 'b-busy' };
       }
-      if (c.tiktok_status === 'failed' || (c.youtube && this.ytFailed(c))) return { label: 'Upload gagal', cls: 'b-fail' };
+      if (c.tiktok_status === 'failed' || (c.youtube && c.youtube.status !== 'skipped' && this.ytFailed(c))) return { label: 'Upload gagal', cls: 'b-fail' };
       if (['inbox', 'published'].includes(c.tiktok_status) || ['processing', 'published'].includes(c.youtube?.delivery)) return { label: 'Terkirim', cls: 'b-ok' };
       if (c.youtube?.status === 'scheduled') return { label: 'Terjadwal', cls: 'b-busy' };
       return { label: 'Disetujui', cls: 'b-busy' };

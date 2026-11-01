@@ -198,8 +198,8 @@ class YouTubeTest extends TestCase
         $clip->update(['youtube_account_id' => $account->id, 'youtube_video_id' => 'vid123', 'youtube_status' => 'processing']);
 
         Http::fakeSequence('www.googleapis.com/youtube/v3/videos*')
-            ->push(['items' => [['status' => ['uploadStatus' => 'uploaded', 'privacyStatus' => 'private']]]])
-            ->push(['items' => [['status' => ['uploadStatus' => 'processed', 'privacyStatus' => 'private']]]]);
+            ->push(['items' => [['id' => 'vid123', 'status' => ['uploadStatus' => 'uploaded', 'privacyStatus' => 'private']]]])
+            ->push(['items' => [['id' => 'vid123', 'status' => ['uploadStatus' => 'processed', 'privacyStatus' => 'private']]]]);
 
         $this->actingAs($user)->getJson("/api/clips/{$clip->id}/youtube-status")->assertJson(['status' => 'processing']);
         $this->actingAs($user)->getJson("/api/clips/{$clip->id}/youtube-status")

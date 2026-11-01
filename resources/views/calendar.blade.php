@@ -459,7 +459,7 @@ function scheduleCalendar() {
       const name = this.PLATFORM[p.platform].name;
       return ({
         queued: 'Antre upload', uploading: 'Mengupload', processing: 'Diproses ' + name,
-        inbox: 'Masuk draft TikTok', published: p.platform === 'youtube' ? 'Sudah di YouTube' : 'Tayang di TikTok', failed: 'Upload gagal',
+        inbox: 'Masuk draft TikTok', published: p.platform === 'youtube' ? (p.privacy === 'private' ? 'Di YouTube, privat' : 'Sudah di YouTube') : 'Tayang di TikTok', failed: 'Upload gagal',
       })[p.delivery] || 'Dikirim ke ' + name;
     },
     stateClass(p) {

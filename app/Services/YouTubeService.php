@@ -30,6 +30,31 @@ class YouTubeService
 
     private const CATEGORY_PEOPLE_BLOGS = '22';
 
+    private const MAX_IDS_PER_LIST = 50;
+
+    // status.rejectionReason / status.failureReason of videos.list
+    private const REJECTION_REASONS = [
+        'claim' => 'ada klaim hak cipta',
+        'copyright' => 'melanggar hak cipta',
+        'duplicate' => 'duplikat video yang sudah ada',
+        'inappropriate' => 'konten tidak pantas',
+        'legal' => 'alasan hukum',
+        'length' => 'video terlalu panjang',
+        'termsOfUse' => 'melanggar ketentuan YouTube',
+        'trademark' => 'melanggar merek dagang',
+        'uploaderAccountClosed' => 'akun channel sudah ditutup',
+        'uploaderAccountSuspended' => 'akun channel ditangguhkan',
+    ];
+
+    private const FAILURE_REASONS = [
+        'codec' => 'codec video tidak didukung',
+        'conversion' => 'video gagal dikonversi',
+        'emptyFile' => 'file video kosong',
+        'invalidFile' => 'file video tidak valid',
+        'tooSmall' => 'file video terlalu kecil',
+        'uploadAborted' => 'upload terputus',
+    ];
+
     public function isConfigured(): bool
     {
         return (bool) (config('services.youtube.client_id')
@@ -136,17 +161,54 @@ class YouTubeService
      */
     public function videoStatus(YoutubeAccount $account, string $videoId): array
     {
-        $item = $this->api($this->freshToken($account), 'get', 'videos', ['part' => 'status', 'id' => $videoId])['items'][0] ?? null;
-        if (! $item) {
-            return ['status' => 'failed', 'privacy' => null, 'reason' => 'Video tidak ditemukan di YouTube (mungkin dihapus).'];
-        }
-        $s = $item['status'] ?? [];
+        return $this->videoStatuses($account, [$videoId])[$videoId];
+    }
 
-        return match ($s['uploadStatus'] ?? '') {
-            'processed' => ['status' => 'published', 'privacy' => $s['privacyStatus'] ?? null, 'reason' => null],
-            'failed', 'rejected', 'deleted' => ['status' => 'failed', 'privacy' => $s['privacyStatus'] ?? null,
-                'reason' => 'YouTube menolak video: '.($s['rejectionReason'] ?? $s['failureReason'] ?? $s['uploadStatus'])],
-            default => ['status' => 'processing', 'privacy' => $s['privacyStatus'] ?? null, 'reason' => null],
+    /**
+     * Status of up to 50 videos of one channel in one videos.list call (1 quota unit).
+     * A video YouTube no longer returns comes back failed.
+     *
+     * @param  list<string>  $videoIds
+     * @return array<string, array{status: string, privacy: ?string, reason: ?string}>
+     */
+    public function videoStatuses(YoutubeAccount $account, array $videoIds): array
+    {
+        if (count($videoIds) > self::MAX_IDS_PER_LIST) {
+            throw new RuntimeException('videos.list menerima maksimal '.self::MAX_IDS_PER_LIST.' video sekali panggil.');
+        }
+        $items = collect($this->api($this->freshToken($account), 'get', 'videos', [
+            'part' => 'status,processingDetails',
+            'id' => implode(',', $videoIds),
+            'maxResults' => self::MAX_IDS_PER_LIST,
+        ])['items'] ?? [])->keyBy('id');
+
+        return collect($videoIds)->mapWithKeys(fn (string $id) => [$id => isset($items[$id])
+            ? self::statusFromItem($items[$id])
+            : ['status' => 'failed', 'privacy' => null, 'reason' => 'Video tidak ditemukan di YouTube (mungkin dihapus).'],
+        ])->all();
+    }
+
+    /**
+     * One videos.list item to our status. Done processing counts as published
+     * whatever the privacy: an unaudited API project gets every upload locked
+     * to private, and that is as far as the video can go.
+     *
+     * @return array{status: string, privacy: ?string, reason: ?string}
+     */
+    public static function statusFromItem(array $item): array
+    {
+        $s = $item['status'] ?? [];
+        $privacy = $s['privacyStatus'] ?? null;
+        $processing = $item['processingDetails']['processingStatus'] ?? null;
+        $failed = fn (string $reason) => ['status' => 'failed', 'privacy' => $privacy, 'reason' => $reason];
+
+        return match (true) {
+            ($s['uploadStatus'] ?? '') === 'rejected' => $failed('YouTube menolak video: '.(self::REJECTION_REASONS[$s['rejectionReason'] ?? ''] ?? ($s['rejectionReason'] ?? 'tanpa alasan')).'.'),
+            ($s['uploadStatus'] ?? '') === 'failed' => $failed('YouTube gagal memproses video: '.(self::FAILURE_REASONS[$s['failureReason'] ?? ''] ?? ($s['failureReason'] ?? 'tanpa alasan')).'.'),
+            ($s['uploadStatus'] ?? '') === 'deleted' => $failed('Video sudah dihapus di YouTube.'),
+            in_array($processing, ['failed', 'terminated'], true) => $failed('YouTube gagal memproses video.'),
+            ($s['uploadStatus'] ?? '') === 'processed', $processing === 'succeeded' => ['status' => 'published', 'privacy' => $privacy, 'reason' => null],
+            default => ['status' => 'processing', 'privacy' => $privacy, 'reason' => null],
         };
     }
 

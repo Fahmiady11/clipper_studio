@@ -238,6 +238,8 @@ class ScheduleController extends Controller
             'error' => $p->error ?? $deliveryError,
             // What the platform reported after hand-off: queued, uploading, processing, inbox, published, failed
             'delivery' => $delivery,
+            // YouTube only: private while the API project is unaudited
+            'privacy' => $p->platform === 'youtube' && $p->status === ScheduledPost::STATUS_QUEUED ? $clip?->youtube_privacy : null,
             'url' => $p->platform === 'youtube' && $clip?->youtube_video_id && $p->status === ScheduledPost::STATUS_QUEUED
                 ? 'https://youtube.com/shorts/'.$clip->youtube_video_id
                 : null,

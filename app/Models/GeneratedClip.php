@@ -43,6 +43,10 @@ class GeneratedClip extends Model
         'youtube_video_id',
         'youtube_status',
         'youtube_error',
+        'youtube_autopost_error',
+        'youtube_uploaded_at',
+        'youtube_checked_at',
+        'youtube_privacy',
         'output_path',
         'status',
         'review_status',
@@ -60,6 +64,8 @@ class GeneratedClip extends Model
         'hashtags_json' => 'array',
         'broll_json' => 'array',
         'cancelled_at' => 'datetime',
+        'youtube_uploaded_at' => 'datetime',
+        'youtube_checked_at' => 'datetime',
     ];
 
     protected static function boot(): void
