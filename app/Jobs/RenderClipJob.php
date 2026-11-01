@@ -6,6 +6,7 @@ use App\Models\BrandKit;
 use App\Models\GeneratedClip;
 use App\Services\FaceTracker;
 use App\Services\FFmpegService;
+use App\Services\GameplayFootage;
 use App\Services\GeminiService;
 use App\Services\HookRenderer;
 use App\Services\JobWatchdog;
@@ -17,6 +18,7 @@ use App\Services\YtDlpService;
 use App\Support\BrollCues;
 use App\Support\Cancellation;
 use App\Support\JobCancelled;
+use App\Support\SfxCues;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -103,8 +105,19 @@ class RenderClipJob implements ShouldQueue
         // stream-copy cut snaps to the previous keyframe, so the clip started up
         // to a few seconds early and subtitles landed late by a varying amount.
         // Reframe follows the faces (and the speaker on a two-shot) when the tracker is available
+        // Split-screen needs footage on disk; without it the clip renders as a plain reframe
+        $gameplay = null;
+        $layoutType = $project->layout_type;
+        if ($layoutType === 'gameplay') {
+            $gameplay = app(GameplayFootage::class)->pick((float) $clip->end_seconds - (float) $clip->start_seconds, $ffmpeg);
+            if (! $gameplay) {
+                $log->warning('Gameplay layout but no footage — rendering reframe', ['path' => config('services.gameplay.path')]);
+                $layoutType = 'reframe';
+            }
+        }
+
         $track = null;
-        if ($project->layout_type === 'reframe') {
+        if (in_array($layoutType, ['reframe', 'gameplay'], true)) {
             $track = app(FaceTracker::class)->plan($srcVideo, (float) $clip->start_seconds, (float) $clip->end_seconds);
             $log->info('Face tracking', ['pieces' => $track ? count($track) : 0]);
         }
@@ -175,8 +188,8 @@ class RenderClipJob implements ShouldQueue
                     'font_size' => $subtitle->font_size,
                     'text_color' => $subtitle->text_color,
                     'highlight_color' => $subtitle->highlight_color,
-                    'position' => $subtitle->position,
-                    'position_y' => $subtitle->position_y,
+                    'position' => $gameplay ? 'center' : $subtitle->position, // the seam of the split
+                    'position_y' => $gameplay ? null : $subtitle->position_y,
                     'background_style' => $subtitle->background_style,
                     'style' => $subtitle->style,
                 ], $clipStart, $hookDuration);
@@ -211,7 +224,7 @@ class RenderClipJob implements ShouldQueue
         // B-roll: stock footage over concrete things being talked about, after the hook
         $broll = [];
         $stock = app(StockFootage::class);
-        if ($project->broll && $stock->configured()) {
+        if ($project->broll && ! $gameplay && $stock->configured()) {
             if (is_array($clip->broll_json)) {
                 // Picked during analysis (source time): onto the cut timeline
                 $cues = BrollCues::fromAnalysis($clip->broll_json, $pieces, $clipStart, $clipDuration, $hookDuration + 1.0);
@@ -237,9 +250,9 @@ class RenderClipJob implements ShouldQueue
         $logoPath = $logo && Storage::disk('local')->exists($logo) ? Storage::disk('local')->path($logo) : null;
 
         $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
-        $ffmpeg->applyLayout($srcVideo, $project->layout_type, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
+        $ffmpeg->applyLayout($srcVideo, $layoutType, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
-            'title' => $titlePath, 'progress' => $progress, 'broll' => $broll, 'logo' => $logoPath,
+            'title' => $titlePath, 'progress' => $progress, 'broll' => $broll, 'logo' => $logoPath, 'gameplay' => $gameplay,
         ]);
         $current = $step2;
         Cancellation::throwIfCancelled();
@@ -268,6 +281,18 @@ class RenderClipJob implements ShouldQueue
         }
 
         // 7. Move to output
+        if ($project->sfx) {
+            $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
+                array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
+            $cues = SfxCues::plan(SfxCues::cutTimes($pieces), $zoom, array_column($emojis, 'start'), $assPath ? $words : [], $clipDuration, $hookDuration);
+            if ($cues) {
+                $log->info('Mixing sfx', ['cues' => count($cues)]);
+                $withSfx = $tempDir.'/sfx_'.$this->clipId.'.mp4';
+                $ffmpeg->mixSfx($current, $cues, $withSfx);
+                $current = $withSfx;
+            }
+        }
+
         Cancellation::throwIfCancelled();
         $outDir = 'clips/'.$project->user_id.'/'.$project->id;
         Storage::makeDirectory($outDir);
@@ -309,7 +334,7 @@ class RenderClipJob implements ShouldQueue
 
     private function cleanupTemp(string $dir, string $clipId): void
     {
-        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_', 'title_'] as $prefix) {
+        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_', 'sfx_', 'title_'] as $prefix) {
             foreach (['.mp4', '.ass', '.png'] as $ext) {
                 $f = $dir.'/'.$prefix.$clipId.$ext;
                 if (file_exists($f)) {

@@ -6,6 +6,7 @@ use App\Support\Cancellation;
 use App\Support\ClipSettings;
 use App\Support\EmojiCues;
 use App\Support\FontMetrics;
+use App\Support\SfxCues;
 use RuntimeException;
 
 class FFmpegService
@@ -96,9 +97,14 @@ class FFmpegService
         $layoutMap = [
             'reframe' => 'auto_reframe',
             'gaussian' => 'gaussian_blur',
+            'gameplay' => 'split_gameplay',
         ];
 
         $mode = $layoutMap[$layoutType] ?? 'gaussian_blur';
+        $gameplay = $mode === 'split_gameplay' ? ($overlay['gameplay'] ?? null) : null;
+        if ($mode === 'split_gameplay' && ! $gameplay) {
+            $mode = 'auto_reframe'; // no footage to put underneath: plain reframe
+        }
         $filterGraph = $this->layout->layoutFilter($mode, '[lay]', $track);
         // Drop to 30fps before the per-frame crop/scale/sharpen, not after it
         if ($this->outputFps($input) < $this->probeFps($input)) {
@@ -107,12 +113,21 @@ class FFmpegService
         $audio = $this->hasAudio($input);
         [$filterGraph, $video, $audioOut] = $this->jumpCuts($filterGraph, '[lay]', $audio ? '[0:a]' : null, $pieces ?? []);
         if ($zoom) {
-            $filterGraph .= ';'.$this->punchZoom($video, $zoom, '[zoomed]');
+            $filterGraph .= ';'.$this->punchZoom($video, $zoom, '[zoomed]', $gameplay ? 960 : 1920);
             $video = '[zoomed]';
         }
         $extraInputs = '';
-        // B-roll cut-ins go under the subtitles, hook and emoji
         $nextInput = 1;
+        if ($gameplay) {
+            // Footage joins after the cuts, so it keeps playing through them; it loops from its random start
+            $length = SmartCut::outputDuration($pieces ?: [[0.0, ($end ?? 0.0) - ($start ?? 0.0)]]);
+            $extraInputs .= sprintf(' -stream_loop -1 -ss %.3f -t %.3f -i %s', $gameplay['start'], $length + 1, escapeshellarg($gameplay['path']));
+            $fps = $this->outputFps($input) ?: 30.0;
+            $filterGraph .= ';'.$this->layout->gameplayFilter($nextInput++, $fps, '[gp]')
+                .';'.$this->layout->stackSplit($video, '[gp]', '[split]');
+            $video = '[split]';
+        }
+        // B-roll cut-ins go under the subtitles, hook and emoji
         foreach (array_values($overlay['broll'] ?? []) as $i => $b) {
             $s = (float) $b['start'];
             $d = (float) $b['duration'];
@@ -199,14 +214,14 @@ class FFmpegService
     }
 
     /** Show a punched-in copy of the frame (zoomed toward the upper middle, where faces sit) during $spans. */
-    private function punchZoom(string $video, array $spans, string $label): string
+    private function punchZoom(string $video, array $spans, string $label, int $height = 1920): string
     {
         $w = (int) round(1080 * SmartCut::ZOOM / 2) * 2;
-        $h = (int) round(1920 * SmartCut::ZOOM / 2) * 2;
+        $h = (int) round($height * SmartCut::ZOOM / 2) * 2;
         $on = implode('+', array_map(fn ($s) => sprintf('between(t,%.3f,%.3f)', $s[0], $s[1] - 0.001), $spans));
 
         return "{$video}split=2[zbase][zsrc];"
-            ."[zsrc]scale={$w}:{$h}:flags=bicubic,crop=1080:1920:(iw-ow)/2:(ih-oh)*0.4[zin];"
+            ."[zsrc]scale={$w}:{$h}:flags=bicubic,crop=1080:{$height}:(iw-ow)/2:(ih-oh)*0.4[zin];"
             ."[zbase][zin]overlay=0:0:enable='{$on}'{$label}";
     }
 
@@ -748,6 +763,58 @@ class FFmpegService
      * does it: quiet uploads otherwise play noticeably softer than the feed.
      * Video is stream-copied; returns false when there is no audio to level.
      */
+    /**
+     * Lays sound effects over the clip's audio (already levelled, music included).
+     * $cues is SfxCues::plan(): each sound is delayed to its time and scaled by its gain.
+     *
+     * @param  list<array{sound: string, at: float, gain: float}>  $cues
+     */
+    public function mixSfx(string $input, array $cues, string $output): void
+    {
+        $this->exec($this->sfxCommand($input, $cues, $this->probeDuration($input), $this->hasAudio($input), $output), 'mixSfx');
+    }
+
+    public function sfxCommand(string $input, array $cues, float $duration, bool $hasAudio, string $output): string
+    {
+        $sounds = array_values(array_unique(array_column($cues, 'sound')));
+        $inputs = '-i '.escapeshellarg($input);
+        foreach ($sounds as $sound) {
+            $inputs .= ' -i '.escapeshellarg(SfxCues::path($sound));
+        }
+        if (! $hasAudio) {
+            $inputs .= sprintf(' -f lavfi -t %.3f -i anullsrc=r=48000:cl=stereo', $duration);
+        }
+
+        $norm = 'aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo';
+        $parts = [];
+        $labels = [];
+        foreach ($sounds as $i => $sound) {
+            $mine = array_keys(array_filter($cues, fn ($c) => $c['sound'] === $sound));
+            $copies = implode('', array_map(fn ($n) => "[x{$i}_{$n}]", $mine));
+            $parts[] = sprintf('[%d:a]%s,asplit=%d%s', $i + 1, $norm, count($mine), $copies);
+            foreach ($mine as $n) {
+                $ms = (int) round($cues[$n]['at'] * 1000);
+                $parts[] = sprintf('[x%d_%d]adelay=%d|%d,volume=%.3f[s%d_%d]', $i, $n, $ms, $ms, $cues[$n]['gain'], $i, $n);
+                $labels[] = "[s{$i}_{$n}]";
+            }
+        }
+
+        $base = $hasAudio ? '[0:a]'.$norm : sprintf('[%d:a]', count($sounds) + 1).$norm;
+        $parts[] = $base.'[base]';
+        $parts[] = sprintf('[base]%samix=inputs=%d:duration=first:normalize=0,alimiter=limit=0.95[aout]',
+            implode('', $labels), count($labels) + 1);
+
+        return sprintf(
+            '%s -y %s -filter_complex %s -map 0:v -map %s -t %s -c:v copy -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            $this->bin,
+            $inputs,
+            escapeshellarg(implode(';', $parts)),
+            escapeshellarg('[aout]'),
+            escapeshellarg(sprintf('%.3f', $duration)),
+            escapeshellarg($output)
+        );
+    }
+
     public function normalizeVoice(string $input, string $output): bool
     {
         if (! $this->hasAudio($input)) {

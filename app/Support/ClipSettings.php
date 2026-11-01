@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Services\GameplayFootage;
 use App\Services\MusicService;
 
 /**
@@ -16,6 +17,9 @@ final class ClipSettings
 
     public const Y_MAX = 95;
 
+    /** gameplay = speaker on top, looping footage below (needs clips in storage/app/gameplay) */
+    public const LAYOUTS = ['reframe', 'gaussian', 'gameplay'];
+
     public const SUBTITLE_STYLES = ['karaoke', 'pop', 'word'];
 
     /** Bundled in resources/fonts; see VideoLayoutService::resolveFontByFamily. */
@@ -27,7 +31,7 @@ final class ClipSettings
         'duration_mode' => 'auto',
         'min_duration' => 20,
         'max_duration' => 60,
-        'edit' => ['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false, 'broll' => true],
+        'edit' => ['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false, 'broll' => true, 'sfx' => false],
         'subtitle' => [
             'enabled' => true, 'font_family' => 'Montserrat', 'font_size' => 56, 'text_color' => '#ffffff',
             'highlight_color' => '#facc15', 'position' => 'bottom', 'position_y' => null, 'background_style' => 'semi',
@@ -50,7 +54,11 @@ final class ClipSettings
         $color = ['sometimes', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'];
 
         $rules = [
-            'layout_type' => [$need, 'in:reframe,gaussian'],
+            'layout_type' => [$need, 'in:'.implode(',', self::LAYOUTS), function ($attribute, $value, $fail) {
+                if ($value === 'gameplay' && ! app(GameplayFootage::class)->available()) {
+                    $fail('Layout split gameplay belum tersedia: folder footage masih kosong.');
+                }
+            }],
             'clip_count' => [$need, 'integer', 'in:1,3,5'],
             'duration_mode' => [$need, 'in:auto,manual'],
             'min_duration' => ['nullable', 'integer', 'min:5', 'max:300'],
@@ -62,6 +70,7 @@ final class ClipSettings
             'edit.progress' => ['sometimes', 'boolean'],
             'edit.title' => ['sometimes', 'boolean'],
             'edit.broll' => ['sometimes', 'boolean'],
+            'edit.sfx' => ['sometimes', 'boolean'],
 
             'subtitle' => ['sometimes', 'array'],
             'subtitle.enabled' => ['sometimes', 'boolean'],

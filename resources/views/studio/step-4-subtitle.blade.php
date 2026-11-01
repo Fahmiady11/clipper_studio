@@ -97,7 +97,8 @@
               <span x-text="'Kustom · ' + subtitleY + '%'"></span> ✕
             </button>
           </div>
-          <div class="fhint" style="margin-top:8px">Atau seret subtitle di preview untuk menaruhnya persis di posisi yang kamu mau.</div>
+          <div class="fhint" style="margin-top:8px" x-show="!pvSplit">Atau seret subtitle di preview untuk menaruhnya persis di posisi yang kamu mau.</div>
+          <div class="fhint" style="margin-top:8px" x-show="pvSplit"><b>Layout Split Gameplay:</b> subtitle selalu di garis pertemuan atas dan bawah, jadi posisi di sini tidak dipakai.</div>
         </div>
         <div class="fblock">
           <div class="fblock-title" style="margin-bottom:10px">Background subtitle</div>

@@ -2,10 +2,11 @@
 function studio() {
   const SESSION_KEY = 'clipper_studio_v1';
   const BRAND = @json($brand ?? []);
+  const GAMEPLAY_READY = @json(app(\App\Services\GameplayFootage::class)->available()); // clips in storage/app/gameplay
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
     'url','meta',
-    'layout','jumpCut','autoZoom','progressBar','topTitle','broll',
+    'layout','jumpCut','autoZoom','progressBar','topTitle','broll','sfx',
     'clipCount','durationMode','minDuration','maxDuration',
     'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
@@ -42,7 +43,7 @@ function studio() {
     sessionId: null, historyOpen: false, history: [], clearingHistory: false,
 
     url: '', meta: null, loadingMeta: false, metaError: null,
-    layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true,
+    layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true, sfx: false,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: BRAND.font_family || 'Montserrat', subtitleSize: 56,
     subtitleTextColor: BRAND.text_color || '#ffffff', subtitleHighlight: BRAND.highlight_color || '#facc15',
@@ -88,6 +89,7 @@ function studio() {
     LAYOUTS: [
       { id:'reframe',  title:'Reframe Wajah', sub:'Face tracking',      color:'teal',   accent:'var(--accent-ink)', badge:{ text:'DISARANKAN', cls:'badge-teal' },   desc:'Video di-crop 9:16 dan kamera mengikuti wajah. Di podcast, pindah ke orang yang sedang bicara.', good:'Podcast, wawancara, talking head, vlog' },
       { id:'gaussian', title:'Gaussian',      sub:'Blurred background', color:'purple', accent:'var(--accent-ink)', badge:null,                                        desc:'Video 16:9 di tengah, area kosong diisi duplikat blur + zoom.',      good:'Gameplay, screen recording, tutorial, olahraga' },
+      { id:'gameplay', title:'Split Gameplay', sub:'Atas + bawah',      color:'amber',  accent:'var(--accent-ink)', badge:null, ready: GAMEPLAY_READY,        desc:'Pembicara di separuh atas, footage gameplay yang berulang di separuh bawah. Subtitle di garis pertemuan.', good:'Video bicara saja: opini, cerita, tips' },
     ],
     FONTS: ['Arial','Roboto','Montserrat','Oswald','Bebas Neue'],
     COLOR_PRESETS: ['#ffffff','#facc15','#2dd4bf','#a78bfa','#60a5fa','#fb7185','#f97316','#000000'],
@@ -160,13 +162,16 @@ function studio() {
     },
 
     // ── preview style helpers (shared with autopilot: partials/clip-preview-js) ──
-    pvSubStyle()     { return ClipPreview.subStyle(this.subtitlePos, this.subtitleY); },
+    // Split layout: the render puts subtitles on the seam, wherever they were set
+    get pvSplit()    { return this.layout === 'gameplay'; },
+    pvSubStyle()     { return this.pvSplit ? ClipPreview.subStyle('center') : ClipPreview.subStyle(this.subtitlePos, this.subtitleY); },
     startSubDrag(e) {
+      if (this.pvSplit) return;
       this.subDragging = true;
       ClipPreview.dragSubtitle(e, y => { this.subtitleY = y; }, () => { this.subDragging = false; });
     },
     pvSubBoxStyle()  { return ClipPreview.subBoxStyle({ font: this.subtitleFont, size: this.subtitleSize, bg: this.subtitleBg, style: this.subtitleStyle }); },
-    get pvEmojiBelow() { return ClipPreview.emojiBelow(this.subtitlePos, this.subtitleY); },
+    get pvEmojiBelow() { return this.pvSplit ? ClipPreview.emojiBelow('center') : ClipPreview.emojiBelow(this.subtitlePos, this.subtitleY); },
     get pvSubWords() { return ClipPreview.subWords(this.pvSubWordsAlways, this.subtitleStyle); },
     pvSubWordStyle(w) { return ClipPreview.subWordStyle(w, { style: this.subtitleStyle, text: this.subtitleTextColor, hl: this.subtitleHighlight }); },
     get subPreset() {
@@ -408,7 +413,7 @@ function studio() {
           body: JSON.stringify({
             youtube_url: this.url,
             layout_type: this.layout,
-            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll },
+            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx },
             watermark: this.hasLogo && this.watermark,
             clip_count: this.clipCount,
             duration_mode: this.durationMode,
@@ -1086,6 +1091,7 @@ function studio() {
       const wrap = (inner) => `<svg viewBox="0 0 96 96" width="100" height="100"><rect x="33" y="6" width="30" height="84" rx="6" fill="none" style="stroke:var(--border-strong)" stroke-width="1"/>${inner}</svg>`;
       if (id === 'reframe')  return wrap(`<rect x="35" y="8" width="26" height="80" rx="4" style="fill:var(--surface-2)"/><rect x="26" y="40" width="44" height="16" rx="1" fill="none" style="stroke:var(--border-strong)" stroke-width=".8" stroke-dasharray="2 2"/><rect x="40" y="34" width="16" height="28" rx="2" fill="none" style="stroke:${c}" stroke-width="1.5"/><path d="M40 34 L37 34 M40 34 L40 37" style="stroke:${c}" stroke-width="1.5"/><path d="M56 34 L59 34 M56 34 L56 37" style="stroke:${c}" stroke-width="1.5"/><circle cx="48" cy="44" r="4" style="fill:${c}"/><path d="M43 56 Q48 50 53 56" fill="none" style="stroke:${c}" stroke-width="1.4"/>`);
       if (id === 'gaussian') return wrap(`<defs><filter id="gf"><feGaussianBlur stdDeviation="3.5"/></filter><clipPath id="gc"><rect x="35" y="8" width="26" height="80" rx="4"/></clipPath><clipPath id="gcs"><rect x="35" y="40" width="26" height="16"/></clipPath></defs><rect x="35" y="8" width="26" height="80" rx="4" style="fill:var(--surface-3)"/><g clip-path="url(#gc)"><circle cx="41" cy="15" r="15" style="fill:${c}" opacity=".75" filter="url(#gf)"/><circle cx="59" cy="26" r="11" style="fill:${c}" opacity=".5" filter="url(#gf)"/><circle cx="46" cy="76" r="15" style="fill:${c}" opacity=".7" filter="url(#gf)"/><circle cx="59" cy="67" r="10" style="fill:${c}" opacity=".45" filter="url(#gf)"/></g><rect x="35" y="40" width="26" height="16" style="fill:var(--surface-2)"/><g clip-path="url(#gcs)"><path d="M35 56 L40 49 L44 52.5 L48.5 43 L53 50 L57 46 L61 56Z" style="fill:${c}" opacity=".35"/><rect x="35" y="40" width="26" height="6" style="fill:${c}" opacity=".07"/></g><rect x="35" y="40" width="26" height="16" fill="none" style="stroke:${c}" stroke-width="1" opacity=".85"/><line x1="35" y1="40" x2="61" y2="40" style="stroke:var(--text-dim)" stroke-width=".7" stroke-dasharray="2 1.5"/><line x1="35" y1="56" x2="61" y2="56" style="stroke:var(--text-dim)" stroke-width=".7" stroke-dasharray="2 1.5"/>`);
+      if (id === 'gameplay') return wrap(`<defs><clipPath id="gpc"><rect x="35" y="8" width="26" height="80" rx="4"/></clipPath></defs><g clip-path="url(#gpc)"><rect x="35" y="8" width="26" height="40" style="fill:var(--surface-2)"/><circle cx="48" cy="26" r="6" style="fill:${c}"/><path d="M38 48 Q38 35 48 35 Q58 35 58 48Z" style="fill:${c}" opacity=".8"/><rect x="35" y="48" width="26" height="40" style="fill:var(--surface-3)"/><rect x="38" y="72" width="8" height="16" style="fill:${c}" opacity=".35"/><rect x="49" y="64" width="9" height="24" style="fill:${c}" opacity=".35"/><circle cx="42" cy="66" r="3" style="fill:${c}" opacity=".7"/></g><line x1="35" y1="48" x2="61" y2="48" style="stroke:var(--text-dim)" stroke-width=".7" stroke-dasharray="2 1.5"/><rect x="39" y="45.5" width="18" height="5" rx="1.5" style="fill:var(--bg);stroke:${c}" stroke-width=".8"/>`);
       return '';
     },
 
@@ -1099,12 +1105,14 @@ function studio() {
       };
       if (id === 'reframe')  return `<div style="position:absolute;inset:0;overflow:hidden"><div style="width:100%;height:100%;transform:scale(1.35);transform-origin:center 42%">${thumb(0)}</div></div>`;
       if (id === 'gaussian') return `<div style="position:absolute;inset:0;filter:blur(22px) saturate(2);transform:scale(1.5)">${thumb(1)}</div><div style="position:absolute;inset:0;background:rgba(0,0,0,.3)"></div><div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);aspect-ratio:16/9;overflow:hidden;outline:1px solid rgba(255,255,255,.28);box-shadow:0 0 0 1px rgba(0,0,0,.6),0 8px 30px rgba(0,0,0,.75)">${thumb(1)}</div>`;
+      if (id === 'gameplay') return `<div style="position:absolute;left:0;right:0;top:0;height:50%;overflow:hidden"><div style="width:100%;height:100%;transform:scale(1.2);transform-origin:center 40%">${thumb(0)}</div></div><div style="position:absolute;left:0;right:0;bottom:0;height:50%;overflow:hidden">${thumb(3)}</div><div style="position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:rgba(0,0,0,.6)"></div>`;
       return '';
     },
 
     // ── init ───────────────────────────────────────────────────────────────
     async init() {
       this.loadSession();
+      if (this.layout === 'gameplay' && !GAMEPLAY_READY) this.layout = 'reframe'; // footage was removed since this session was saved
       // The brand link on other pages (/?new=1) opens a fresh project
       if (new URLSearchParams(location.search).has('new')) {
         this.restart();

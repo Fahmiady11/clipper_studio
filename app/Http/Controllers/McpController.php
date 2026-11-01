@@ -160,7 +160,7 @@ class McpController extends Controller
                 'inputSchema' => ['type' => 'object', 'required' => ['youtube_url'], 'properties' => [
                     'youtube_url' => $str('YouTube watch, youtu.be or Shorts link'),
                     'clip_count' => ['type' => 'integer', 'enum' => [1, 3, 5], 'description' => 'How many clips to find (default 3)'],
-                    'layout_type' => ['type' => 'string', 'enum' => ['reframe', 'gaussian'], 'description' => 'Vertical reframe or blurred-background (default reframe)'],
+                    'layout_type' => ['type' => 'string', 'enum' => ['reframe', 'gaussian', 'gameplay'], 'description' => 'Vertical reframe, blurred-background, or gameplay (speaker on top, looping footage below; only when the server has footage). Default reframe'],
                     'duration_mode' => ['type' => 'string', 'enum' => ['auto', 'manual']],
                     'min_duration' => ['type' => 'integer', 'description' => 'Seconds, with duration_mode=manual'],
                     'max_duration' => ['type' => 'integer', 'description' => 'Seconds, with duration_mode=manual'],

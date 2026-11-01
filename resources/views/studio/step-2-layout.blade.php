@@ -7,7 +7,7 @@
   <div class="layout-grid">
     <template x-for="L in LAYOUTS" :key="L.id">
       <button class="layout-card" :class="['c-'+L.color, layout === L.id ? 'lsel' : '']"
-              @click="layout = L.id" type="button">
+              :disabled="L.ready === false" @click="if (L.ready !== false) layout = L.id" type="button">
         <div class="layout-card-meta">
           <div class="layout-card-badges">
             <span x-show="L.badge" :class="['badge', L.badge ? L.badge.cls : '']" x-text="L.badge ? L.badge.text : ''"></span>
@@ -18,6 +18,7 @@
           <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">
             <span :style="'color:'+L.accent">Cocok:</span> <span x-text="L.good"></span>
           </div>
+          <div class="layout-card-lock" x-show="L.ready === false">Belum tersedia: taruh klip .mp4 di <code>storage/app/gameplay</code>, lalu muat ulang halaman.</div>
         </div>
         <div class="layout-card-illu" x-html="layoutIllu(L.id, L.accent)"></div>
         <span class="layout-card-check">✓ Dipilih</span>
@@ -52,6 +53,13 @@
         <span class="tgl-text">Judul di atas</span>
       </button>
       <div class="fhint" style="margin-top:8px">Topik clip dari AI tampil terus di bagian atas setelah hook selesai.</div>
+    </div>
+    <div class="fblock">
+      <button class="tgl" :class="{ on: sfx }" @click="sfx = !sfx" type="button">
+        <span class="tgl-track"></span>
+        <span class="tgl-text">Efek suara otomatis</span>
+      </button>
+      <div class="fhint" style="margin-top:8px">Whoosh di potongan dan zoom, pop saat emoji muncul, ding di angka dan kata penting. Dicampur pelan di bawah suara pembicara.</div>
     </div>
     <div class="fblock">
       <button class="tgl" :class="{ on: broll }" @click="broll = !broll" type="button">

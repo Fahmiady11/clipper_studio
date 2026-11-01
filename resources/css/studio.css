@@ -681,6 +681,30 @@ a.btn {
     overflow: hidden
 }
 
+.layout-card:disabled {
+    cursor: not-allowed
+}
+
+.layout-card:disabled:hover {
+    border-color: var(--border-strong);
+    background: var(--surface)
+}
+
+.layout-card:disabled .layout-card-illu {
+    opacity: .45
+}
+
+.layout-card-lock {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted)
+}
+
+.layout-card-lock code {
+    font-family: var(--font-mono);
+    color: var(--text)
+}
+
 .layout-card-check {
     position: absolute;
     bottom: 14px;
@@ -804,6 +828,12 @@ a.btn {
     border-radius: 8px;
     white-space: nowrap;
     transition: background .15s, color .15s
+}
+
+.seg button:disabled,
+.seg button:disabled:hover {
+    cursor: not-allowed;
+    color: var(--text-dim)
 }
 
 .seg button:hover {
