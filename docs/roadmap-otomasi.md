@@ -56,7 +56,7 @@ Setup:
 Teknis:
 - `TikTokService`: OAuth v2 (`/v2/oauth/token/`), refresh otomatis sebelum access token habis, upload `inbox/video/init` + PUT per chunk (≤64 MB satu chunk, lebih besar dipecah 10 MB), cek `status/fetch`.
 - Token disimpan terenkripsi (`tiktok_accounts`), satu user bisa menghubungkan beberapa akun.
-- `UploadToTikTokJob` tidak di-retry otomatis (retry = draft dobel). Status: queued → uploading → processing → inbox / failed.
+- `UploadToTikTokJob` tidak di-retry otomatis (retry = draft dobel). Status: queued → uploading → processing → inbox / published / failed; `clipper:tiktok-status` menyerah setelah 24 jam → unknown (draft mungkin ada di inbox, boleh kirim ulang).
 - Endpoint & format API ditulis dari dokumentasi v2 tanpa bisa dicek ulang dari environment ini; kalau TikTok mengembalikan error, pesan lengkapnya tampil di UI & log `clipper_jobs`.
 
 Mode **Posting langsung (Direct Post)** — selesai:

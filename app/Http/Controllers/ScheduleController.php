@@ -167,7 +167,7 @@ class ScheduleController extends Controller
             'status' => $p->status,
             'error' => $error,
             'reconnect_url' => ScheduledPost::reconnectUrl($p->platform, $error),
-            // What the platform reported after hand-off: queued, uploading, processing, inbox, published, failed
+            // What the platform reported after hand-off: queued, uploading, processing, inbox, unknown, published, failed
             'delivery' => $delivery['status'],
             // YouTube only: private while the API project is unaudited
             'privacy' => $delivery['privacy'],

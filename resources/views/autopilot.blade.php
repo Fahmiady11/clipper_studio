@@ -67,6 +67,7 @@
   .ap-badge.b-ok { color: var(--accent-ink); }
   .ap-badge.b-fail { color: var(--danger); }
   .ap-badge.b-busy { color: var(--info); }
+  .ap-badge.b-warn { color: var(--warn); }
   .ap-topic { font-weight: 600; font-size: 15px; line-height: 1.35; margin: 14px 0 6px; }
   .ap-meta { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
   .ap-meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -91,6 +92,7 @@
   .ap-actions .btn:first-child { flex: 1; justify-content: center; min-width: 0; }
   .ap-result { margin-top: auto; padding-top: 14px; font-size: 13px; color: var(--text-muted); }
   .ap-result.is-fail { color: var(--danger); }
+  .ap-result.is-warn { color: var(--warn); }
   .ap-result small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
 
   .ap-filter { margin-bottom: 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
@@ -424,9 +426,9 @@
                 <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
               </div>
             </div>
-            <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': ['failed', 'skipped'].includes(c.tiktok_status) }">
+            <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': ['failed', 'skipped'].includes(c.tiktok_status), 'is-warn': c.tiktok_status === 'unknown' }">
               <span x-text="reviewLabel(c)"></span>
-              <small x-show="['failed', 'skipped', 'processing'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
+              <small x-show="['failed', 'skipped', 'processing', 'unknown'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
               <a class="ap-link" x-show="c.tiktok_status === 'skipped'" href="/settings/accounts#tiktok">Pilih akun utama TikTok</a>
               <template x-for="pf in AUTOPOST" :key="pf.id">
                 <div class="ap-ytline" :class="{ 'is-fail': autopostFailed(c, pf.id) }" x-show="c.review_status === 'approved' && c[pf.id]">
@@ -1087,6 +1089,7 @@ function autopilot() {
       }
       const posts = this.AUTOPOST.map(p => c[p.id]).filter(Boolean);
       if (c.tiktok_status === 'failed' || posts.some(y => y.status !== 'skipped' && (y.status === 'failed' || y.delivery === 'failed'))) return { label: 'Upload gagal', cls: 'b-fail' };
+      if (c.tiktok_status === 'unknown') return { label: 'Cek TikTok', cls: 'b-warn' };
       if (['inbox', 'published'].includes(c.tiktok_status) || posts.some(y => ['processing', 'published'].includes(y.delivery))) return { label: 'Terkirim', cls: 'b-ok' };
       if (posts.some(y => y.status === 'scheduled')) return { label: 'Terjadwal', cls: 'b-busy' };
       return { label: 'Disetujui', cls: 'b-busy' };
@@ -1100,6 +1103,7 @@ function autopilot() {
         inbox: '✓ Masuk inbox TikTok, selesaikan di aplikasi',
         published: '✓ Sudah diposting',
         failed: 'Upload TikTok gagal',
+        unknown: 'Status TikTok tidak diketahui. Cek inbox TikTok sebelum kirim ulang.',
         skipped: 'Disetujui · tidak dikirim ke TikTok',
       }[c.tiktok_status] || 'Disetujui';
     },

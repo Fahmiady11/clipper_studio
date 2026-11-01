@@ -127,7 +127,7 @@ class GeneratedClip extends Model
 
     /**
      * What the upload job and the platform reported for this clip.
-     * status: queued, uploading, processing, inbox (TikTok), published, failed; null when nothing was sent.
+     * status: queued, uploading, processing, inbox (TikTok), unknown (TikTok never gave a final state), published, failed; null when nothing was sent.
      * note: something to know about a published post, e.g. Meta never confirmed it.
      *
      * @return array{status: ?string, error: ?string, url: ?string, privacy: ?string, note: ?string}

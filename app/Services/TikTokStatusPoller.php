@@ -16,6 +16,10 @@ class TikTokStatusPoller
 {
     public const GIVE_UP_HOURS = 24;
 
+    public const NO_ANSWER = 'TikTok tidak memberi status akhir dalam '.self::GIVE_UP_HOURS.' jam.';
+
+    public const ACCOUNT_GONE = 'Akun TikTok sudah diputus, statusnya tidak bisa dicek lagi.';
+
     // TikTok allows 30 status fetches per minute per user token; leave room for the upload job and Studio
     private const PER_ACCOUNT = 20;
 
@@ -81,7 +85,7 @@ class TikTokStatusPoller
 
         // Never use someone else's tokens, even via a stale account id
         if (! $account || $account->user_id !== $clip->clipProject?->user_id) {
-            return $this->settle($clip, 'Akun TikTok sudah diputus, status tidak bisa dicek lagi. Cek inbox TikTok di aplikasi.');
+            return $this->settle($clip, self::ACCOUNT_GONE);
         }
 
         try {
@@ -145,12 +149,13 @@ class TikTokStatusPoller
             return false;
         }
 
-        return $this->settle($clip, 'TikTok belum memberi status akhir setelah '.self::GIVE_UP_HOURS.' jam. Cek inbox TikTok di aplikasi; kalau draftnya tidak ada, kirim ulang.');
+        return $this->settle($clip, self::NO_ANSWER);
     }
 
+    /** The draft may well be in the inbox: 'unknown' is final but not a failure, and sending again stays possible */
     private function settle(GeneratedClip $clip, string $reason): bool
     {
-        $clip->update(['tiktok_status' => 'failed', 'tiktok_error' => $reason, 'tiktok_checked_at' => now()]);
+        $clip->update(['tiktok_status' => 'unknown', 'tiktok_error' => $reason, 'tiktok_checked_at' => now()]);
         Log::channel('clipper_jobs')->warning('TikTok upload given up', ['clip_id' => $clip->id, 'reason' => $reason]);
 
         return true;

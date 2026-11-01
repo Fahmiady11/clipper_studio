@@ -57,6 +57,7 @@
   .cal-state { font-weight: 600; color: var(--info); }
   .cal-state.good { color: var(--accent-ink); }
   .cal-state.bad { color: var(--danger); }
+  .cal-state.warn { color: var(--warn); }
   .cal-err { grid-column: 1 / -1; font-size: 12.5px; color: var(--danger); background: var(--danger-soft); border-radius: 8px; padding: 8px 10px; word-break: break-word; }
   .cal-acts { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
   .cal-acts .btn, .cal-acts a.btn { min-height: 44px; padding: 8px 14px; font-size: 13px; border-radius: 10px; }
@@ -500,12 +501,13 @@ function scheduleCalendar() {
       const name = this.PLATFORM[p.platform].name;
       return ({
         queued: 'Antre upload', uploading: 'Mengupload', processing: 'Diproses ' + name,
-        inbox: 'Masuk draft TikTok', failed: 'Upload gagal', skipped: 'Tidak dikirim',
+        inbox: 'Masuk draft TikTok', unknown: 'Status TikTok tidak diketahui. Cek inbox TikTok sebelum kirim ulang.', failed: 'Upload gagal', skipped: 'Tidak dikirim',
         published: ({ youtube: p.privacy === 'private' ? 'Di YouTube, privat' : 'Sudah di YouTube' })[p.platform] || 'Tayang di ' + this.PLATFORM[p.platform].site,
       })[p.delivery] || 'Dikirim ke ' + name;
     },
     stateClass(p) {
       if (this.isFailed(p)) return 'bad';
+      if (p.delivery === 'unknown') return 'warn';
       return ['published', 'inbox'].includes(p.delivery) ? 'good' : '';
     },
 

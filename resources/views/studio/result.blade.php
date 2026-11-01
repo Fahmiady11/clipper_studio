@@ -240,7 +240,7 @@
                     <span x-show="arm.is_winner" class="ht-win">Pemenang</span>
                   </div>
                   <div class="ht-arm-hook" x-text="plainHook(arm.hook_text) || '(tanpa teks)'"></div>
-                  <div class="ht-arm-state" :class="{ 'is-fail': arm.status === 'failed' || arm.post_status === 'failed' || arm.delivery === 'failed' }" x-text="hookArmState(arm)"></div>
+                  <div class="ht-arm-state" :class="{ 'is-fail': arm.status === 'failed' || arm.post_status === 'failed' || arm.delivery === 'failed', 'is-warn': arm.status === 'done' && arm.post_status === 'queued' && arm.delivery === 'unknown' }" x-text="hookArmState(arm)"></div>
                 </div>
                 <div class="ht-arm-side">
                   <div class="ht-arm-num" x-text="hookArmStats(arm)"></div>

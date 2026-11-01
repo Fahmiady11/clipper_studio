@@ -990,6 +990,7 @@ function studio() {
       return {
         queued: 'Menunggu antrian…', uploading: 'Mengupload…', processing: 'Terupload, ' + p.name + ' sedang memproses…',
         inbox: 'Masuk inbox TikTok. Selesaikan posting di aplikasi TikTok.',
+        unknown: 'Status TikTok tidak diketahui. Cek inbox TikTok sebelum kirim ulang.',
         published: st.privacy === 'private' ? 'Sudah di YouTube sebagai Pribadi' : 'Sudah tayang',
         failed: 'Upload gagal', skipped: 'Tidak dikirim ke ' + p.name + ': akun utama belum dipilih.',
       }[st.delivery] || 'Dikirim';
@@ -997,6 +998,7 @@ function studio() {
     pubStateTone(st) {
       if (!st) return '';
       if (st.status === 'failed' || st.delivery === 'failed' || st.delivery === 'skipped') return 'bad';
+      if (st.delivery === 'unknown') return 'warn';
       return ['published', 'inbox'].includes(st.delivery) ? 'good' : '';
     },
     accountLabel(list, id) {
@@ -1078,7 +1080,7 @@ function studio() {
       if (arm.post_status === 'scheduled') return 'Tayang ' + when;
       if (arm.post_status === 'publishing') return 'Diserahkan ke upload';
       if (arm.post_status === 'queued') {
-        const label = { queued: 'Mengantre', uploading: 'Mengupload', processing: 'Diproses TikTok', published: 'Sudah tayang ' + when, failed: 'Upload gagal', inbox: 'Ada di draft TikTok', skipped: 'Tidak dikirim ke TikTok' }[arm.delivery];
+        const label = { queued: 'Mengantre', uploading: 'Mengupload', processing: 'Diproses TikTok', published: 'Sudah tayang ' + when, failed: 'Upload gagal', inbox: 'Ada di draft TikTok', unknown: 'Status tidak diketahui, cek inbox TikTok', skipped: 'Tidak dikirim ke TikTok' }[arm.delivery];
         return label || 'Diserahkan ke upload';
       }
       return 'Siap diposting';

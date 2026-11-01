@@ -12,6 +12,7 @@ use App\Services\TikTokStatusPoller;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\TestCase;
@@ -32,7 +33,7 @@ class TikTokStatusPollerTest extends TestCase
     {
         return TiktokAccount::create([
             'user_id' => $user->id, 'open_id' => $openId, 'display_name' => 'Creator',
-            'access_token' => 'at', 'refresh_token' => 'rt',
+            'access_token' => 'at', 'refresh_token' => 'rt', 'scope' => 'video.upload',
             'access_expires_at' => now()->addDay(), 'refresh_expires_at' => now()->addDays(300),
         ]);
     }
@@ -121,8 +122,8 @@ class TikTokStatusPollerTest extends TestCase
         $this->assertSame('processing', $young->refresh()->tiktok_status);
         $this->assertStringStartsWith('Status TikTok belum bisa dicek: ', $young->tiktok_error);
         $this->assertStringContainsString('rate_limit_exceeded', $young->tiktok_error);
-        $this->assertSame('failed', $stale->refresh()->tiktok_status);
-        $this->assertStringContainsString('Cek inbox TikTok', $stale->tiktok_error);
+        $this->assertSame('unknown', $stale->refresh()->tiktok_status); // the draft may be in the inbox: not a failure
+        $this->assertSame(TikTokStatusPoller::NO_ANSWER, $stale->tiktok_error);
     }
 
     public function test_rows_stuck_before_the_poller_existed_are_settled(): void
@@ -138,8 +139,8 @@ class TikTokStatusPollerTest extends TestCase
         $this->artisan('clipper:tiktok-status')->expectsOutput('Checked 2 TikTok uploads, 2 settled')->assertSuccessful();
 
         $this->assertSame('inbox', $arrived->refresh()->tiktok_status);
-        $this->assertSame('failed', $lost->refresh()->tiktok_status);
-        $this->assertStringContainsString('24 jam', $lost->tiktok_error);
+        $this->assertSame('unknown', $lost->refresh()->tiktok_status);
+        $this->assertSame('TikTok tidak memberi status akhir dalam 24 jam.', $lost->tiktok_error);
     }
 
     public function test_disconnected_or_foreign_account_is_never_asked(): void
@@ -155,8 +156,8 @@ class TikTokStatusPollerTest extends TestCase
 
         Http::assertNothingSent();
         foreach ([$gone, $stolen] as $clip) {
-            $this->assertSame('failed', $clip->refresh()->tiktok_status);
-            $this->assertStringContainsString('Akun TikTok sudah diputus', $clip->tiktok_error);
+            $this->assertSame('unknown', $clip->refresh()->tiktok_status);
+            $this->assertSame(TikTokStatusPoller::ACCOUNT_GONE, $clip->tiktok_error);
         }
     }
 
@@ -209,5 +210,46 @@ class TikTokStatusPollerTest extends TestCase
         $this->actingAs($user)->getJson("/api/clips/{$clip->id}/tiktok-status")
             ->assertOk()
             ->assertJson(['status' => 'failed', 'error' => 'Durasi video di luar batas TikTok. (duration_check_failed)']);
+    }
+
+    public function test_unknown_is_final_so_the_clip_can_be_sent_again_and_cleaned(): void
+    {
+        Queue::fake();
+        Storage::fake();
+        $user = User::factory()->create();
+        $account = $this->account($user);
+        Storage::put('clips/x.mp4', 'v');
+        $clip = $this->processing($account, 'p-old', ['tiktok_status' => 'unknown', 'tiktok_error' => TikTokStatusPoller::NO_ANSWER]);
+
+        Http::fake();
+        $this->assertSame(['checked' => 0, 'settled' => 0], app(TikTokStatusPoller::class)->run());
+
+        $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", ['account_id' => $account->id])
+            ->assertOk()->assertJson(['status' => 'queued']);
+        Queue::assertPushed(UploadToTikTokJob::class);
+
+        $clip->refresh()->update(['tiktok_status' => 'unknown']); // as if that send also never settled
+        $this->actingAs($user)->postJson('/api/autopilot/review/clean-approved')->assertOk()->assertJson(['removed' => 1]);
+        $this->assertModelMissing($clip);
+    }
+
+    public function test_migration_turns_the_first_pollers_give_ups_into_unknown(): void
+    {
+        $account = $this->account(User::factory()->create());
+        $noAnswer = $this->processing($account, 'p1', ['tiktok_status' => 'failed',
+            'tiktok_error' => 'TikTok belum memberi status akhir setelah 24 jam. Cek inbox TikTok di aplikasi; kalau draftnya tidak ada, kirim ulang.']);
+        $gone = $this->processing($account, 'p2', ['tiktok_status' => 'failed',
+            'tiktok_error' => 'Akun TikTok sudah diputus, status tidak bisa dicek lagi. Cek inbox TikTok di aplikasi.']);
+        $realFailure = $this->processing($account, 'p3', ['tiktok_status' => 'failed', 'tiktok_error' => 'TikTok menolak video ini.']);
+
+        $migration = require database_path('migrations/2026_11_14_000001_mark_given_up_tiktok_uploads_unknown.php');
+        $migration->up();
+
+        $this->assertSame(['unknown', TikTokStatusPoller::NO_ANSWER], [$noAnswer->refresh()->tiktok_status, $noAnswer->tiktok_error]);
+        $this->assertSame(['unknown', TikTokStatusPoller::ACCOUNT_GONE], [$gone->refresh()->tiktok_status, $gone->tiktok_error]);
+        $this->assertSame('failed', $realFailure->refresh()->tiktok_status);
+
+        $migration->down();
+        $this->assertSame('failed', $noAnswer->refresh()->tiktok_status);
     }
 }
