@@ -40,7 +40,7 @@
       Ganti tema
     </button>
     {{-- Drop the studio draft so the next person on this browser starts clean --}}
-    <form method="POST" action="{{ route('logout') }}" @submit="try { localStorage.removeItem('clipper_studio_v1') } catch (e) {}">
+    <form method="POST" action="{{ route('logout') }}" @submit="(() => { try { localStorage.removeItem('clipper_studio_v1') } catch (e) {} })()">
       @csrf
       <button type="submit" class="user-menu-item">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>

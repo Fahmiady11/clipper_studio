@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\VideoSource;
 use App\Services\JobWatchdog;
 use App\Services\LoadMonitor;
+use App\Services\ScheduledPublisher;
 use App\Services\StorageCleanup;
 use App\Services\TikTokStatsService;
 use Illuminate\Support\Facades\Artisan;
@@ -28,6 +29,13 @@ Schedule::call(function () {
 Schedule::call(function (TikTokStatsService $stats) {
     $stats->collectPublishedStats();
 })->hourly()->name('clip-stats-tiktok')->withoutOverlapping();
+
+// Calendar: hand posts whose time has come to the upload jobs
+Artisan::command('clipper:publish-scheduled', function (ScheduledPublisher $publisher) {
+    $this->info('Picked up '.$publisher->publishDue().' scheduled posts');
+})->purpose('Send due scheduled posts to TikTok / YouTube');
+
+Schedule::command('clipper:publish-scheduled')->everyMinute()->name('publish-scheduled')->withoutOverlapping();
 
 // Free disk from downloaded source videos; rendered clips are kept
 Artisan::command('clipper:cleanup {--hours= : Keep files touched within this many hours}', function (StorageCleanup $cleanup) {

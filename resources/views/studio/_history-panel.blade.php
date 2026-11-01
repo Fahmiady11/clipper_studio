@@ -42,8 +42,12 @@
               <span class="hs-badge" :class="'hs-' + item.status"
                 x-text="({ draft: 'DRAFT', processing: 'DIPROSES', generated: 'GENERATED', rendered: 'RENDERED' })[item.status] || item.status.toUpperCase()">
               </span>
+              <a class="hs-badge hs-scheduled" href="/calendar" x-show="item.scheduledCount > 0"
+                 :title="'Tayang berikutnya ' + fmtSchedule(item.nextScheduledAt)"
+                 x-text="'TERJADWAL ' + item.scheduledCount"></a>
             </div>
             <div class="hist-date" x-text="fmtDate(item.savedAt)"></div>
+            <div class="hist-date hist-next" x-show="item.scheduledCount > 0" x-text="'Tayang ' + fmtSchedule(item.nextScheduledAt)"></div>
           </div>
 
           <div class="hist-actions">

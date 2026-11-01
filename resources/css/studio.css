@@ -1685,6 +1685,9 @@ textarea.field {
 .hs-generated{background:var(--warn-soft);color:var(--warn)}
 .hs-rendered{background:var(--accent-soft);color:var(--accent-ink)}
 .hs-processing{background:var(--info-soft);color:var(--info)}
+.hs-scheduled{background:var(--info-soft);color:var(--info);text-decoration:none}
+.hs-scheduled:hover{text-decoration:underline}
+.hist-next{font-family:var(--font-mono);color:var(--info);margin-top:2px}
 .hist-clear[disabled]{opacity:.5;pointer-events:none}
 .hist-date{font-size:11px;color:var(--text-dim)}
 .hist-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0}

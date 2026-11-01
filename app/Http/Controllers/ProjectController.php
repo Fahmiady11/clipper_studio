@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Http\Requests\StoreProjectRequest;
 use App\Jobs\AnalyzeVideoJob;
 use App\Models\ClipProject;
+use App\Models\ScheduledPost;
 use App\Services\ProjectCreator;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
@@ -49,6 +50,13 @@ class ProjectController extends Controller
             ->limit(50)
             ->get();
 
+        // Posts still waiting for their time, per project, for the "Terjadwal" badge
+        $waiting = ScheduledPost::with('clip:id,clip_project_id')
+            ->where('user_id', Auth::id())
+            ->where('status', ScheduledPost::STATUS_SCHEDULED)
+            ->get()
+            ->groupBy(fn (ScheduledPost $s) => $s->clip->clip_project_id);
+
         return response()->json($projects->map(fn ($p) => [
             'project_id' => $p->id,
             'title' => $p->video_title,
@@ -57,6 +65,8 @@ class ProjectController extends Controller
             'status' => $p->status,
             'created_at' => $p->created_at->toISOString(),
             'rendered_clip_id' => $p->generatedClips->first()?->id,
+            'scheduled_count' => $waiting->get($p->id)?->count() ?? 0,
+            'next_scheduled_at' => $waiting->get($p->id)?->min('scheduled_at')?->toISOString(),
         ]));
     }
 

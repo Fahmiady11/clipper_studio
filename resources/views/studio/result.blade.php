@@ -31,6 +31,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
       </a>
       <button class="btn btn-secondary" @click="done = false; step = 7">Pilih clip lain</button>
+      <a class="btn btn-secondary" :href="'/calendar?clip=' + selectedClipObj?.id" x-show="selectedClipObj">Jadwalkan publish</a>
     </div>
     <div style="text-align:center;margin-top:10px" x-show="hookEnabled">
       <button class="res-edit" type="button" @click="openEditHook()">✎ Edit teks hook &amp; render ulang</button>

@@ -41,6 +41,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/', fn () => view('studio', ['brand' => auth()->user()->brandKit?->studioDefaults() ?? []]))->name('home');
         Route::get('/autopilot', fn () => view('autopilot'))->name('autopilot');
         Route::get('/music', fn () => view('music'))->name('music');
+        Route::get('/calendar', fn () => view('calendar'))->name('calendar');
         Route::get('/pricing', [PricingController::class, 'show'])->name('pricing');
         Route::get('/admin/users', [UserApprovalController::class, 'index'])->middleware('admin')->name('admin.users');
     });

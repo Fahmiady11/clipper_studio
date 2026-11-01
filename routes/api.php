@@ -7,6 +7,7 @@ use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RenderController;
+use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\YouTubeController;
 use Illuminate\Support\Facades\Route;
@@ -47,6 +48,12 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::delete('/youtube/accounts/{accountId}', [YouTubeController::class, 'disconnect']);
     Route::post('/clips/{clipId}/youtube', [YouTubeController::class, 'upload'])->middleware('throttle:10,1');
     Route::get('/clips/{clipId}/youtube-status', [YouTubeController::class, 'status']);
+
+    Route::get('/schedule', [ScheduleController::class, 'index']);
+    Route::get('/schedule/clips', [ScheduleController::class, 'clips']);
+    Route::post('/schedule', [ScheduleController::class, 'store'])->middleware('throttle:30,1');
+    Route::patch('/schedule/{postId}', [ScheduleController::class, 'update'])->middleware('throttle:30,1');
+    Route::delete('/schedule/{postId}', [ScheduleController::class, 'destroy']);
 
     Route::get('/music', [MusicController::class, 'index']);
     Route::post('/music', [MusicController::class, 'store']);

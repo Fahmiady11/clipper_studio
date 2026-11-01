@@ -238,6 +238,8 @@ function studio() {
               layout:         p.layout_type,
               renderedClipId: p.rendered_clip_id || null,
               downloadUrl:    p.rendered_clip_id ? `/api/clips/${p.rendered_clip_id}/download` : null,
+              scheduledCount: p.scheduled_count || 0,
+              nextScheduledAt: p.next_scheduled_at || null,
             };
           });
       } catch {}
@@ -824,6 +826,9 @@ function studio() {
     fmtClock(s) {
       s = Math.round(s);
       return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+    },
+    fmtSchedule(iso) {
+      return new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
     },
     fmtDate(iso) {
       const d = new Date(iso), now = new Date(), diff = now - d;
