@@ -172,7 +172,7 @@ Hanya nama dan fungsi; nilai rahasia jangan di-commit. Sumber: `.env.example` da
 |---|---|
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | Kredensial app |
 | `TIKTOK_REDIRECT_URI` | Harus persis sama dengan yang didaftarkan |
-| `TIKTOK_SCOPES` | Bawaan di config `user.info.basic,video.upload`. Tambah `video.publish` untuk posting langsung dan `video.list` untuk statistik (tes hook A/B, learning loop Autopilot) |
+| `TIKTOK_SCOPES` | Kalau kosong, kode meminta `user.info.basic,video.upload`. `.env.example` mengisi keempatnya: `user.info.basic,video.upload,video.publish,video.list` (`video.publish` untuk posting langsung, `video.list` untuk statistik tes hook A/B dan learning loop Autopilot). Scope harus sudah aktif di app TikTok |
 
 **YouTube** (Google Cloud: OAuth client Web application, YouTube Data API v3 aktif)
 

@@ -407,8 +407,9 @@ Setelah app TikTok di-*approve* untuk production (dashboard developers.tiktok.co
    TIKTOK_CLIENT_KEY=<production-key>
    TIKTOK_CLIENT_SECRET='<production-secret>'
    TIKTOK_REDIRECT_URI=https://clipper.asfahmidev.com/tiktok/callback
-   TIKTOK_SCOPES=user.info.basic,video.upload,video.publish
+   TIKTOK_SCOPES=user.info.basic,video.upload,video.publish,video.list
    ```
+   `video.list` dipakai untuk membaca views klip yang diposting (tes hook A/B, learning loop Autopilot). Aktifkan scope ini di app TikTok dulu; scope yang belum disetujui membuat login TikTok gagal.
 4. **Buat ulang container** (6.4) agar env baru terbaca: `docker compose -p clipper -f docker-compose.prod.yml up -d app queue scheduler`.
 5. **Hubungkan ulang akun TikTok** — semua token OAuth yang lama masih milik app sandbox dan **tidak valid** untuk production. Setiap pengguna harus klik *Hubungkan TikTok* lagi dari halaman Studio.
 
