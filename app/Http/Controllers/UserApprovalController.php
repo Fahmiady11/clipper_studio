@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,8 @@ class UserApprovalController extends Controller
     {
         return view('admin.users', [
             'pending' => User::whereNull('approved_at')->oldest()->get(),
-            'approved' => User::whereNotNull('approved_at')->orderByDesc('is_admin')->oldest('approved_at')->get(),
+            'plans' => Plan::orderBy('sort')->get(),
+            'approved' => User::with('plan')->whereNotNull('approved_at')->orderByDesc('is_admin')->oldest('approved_at')->get(),
         ]);
     }
 
@@ -42,6 +44,18 @@ class UserApprovalController extends Controller
         Log::channel('clipper_api')->info('User approved', ['admin_id' => Auth::id(), 'user_id' => $user->id]);
 
         return back()->with('status', "{$user->name} sekarang bisa masuk.");
+    }
+
+    /** Billing is manual for now: the admin moves a user between plans after payment. */
+    public function setPlan(Request $request, User $user): RedirectResponse
+    {
+        $data = $request->validate(['plan_id' => ['required', 'exists:plans,id']]);
+        $plan = Plan::findOrFail($data['plan_id']);
+
+        $user->forceFill(['plan_id' => $plan->slug === Plan::FREE ? null : $plan->id])->save();
+        Log::channel('clipper_api')->info('User plan changed', ['admin_id' => Auth::id(), 'user_id' => $user->id, 'plan' => $plan->slug]);
+
+        return back()->with('status', "{$user->name} sekarang di paket {$plan->name}.");
     }
 
     /** Take access away; open sessions end on their next request (EnsureUserIsApproved). */

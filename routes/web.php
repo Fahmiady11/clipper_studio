@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BrandKitController;
+use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
@@ -38,6 +39,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/', fn () => view('studio', ['brand' => auth()->user()->brandKit?->studioDefaults() ?? []]))->name('home');
         Route::get('/autopilot', fn () => view('autopilot'))->name('autopilot');
         Route::get('/music', fn () => view('music'))->name('music');
+        Route::get('/pricing', [PricingController::class, 'show'])->name('pricing');
         Route::get('/admin/users', [UserApprovalController::class, 'index'])->middleware('admin')->name('admin.users');
     });
 
@@ -45,6 +47,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/admin/users', [UserApprovalController::class, 'store'])->middleware('admin')->name('admin.users.store');
     Route::middleware('admin')->prefix('admin/users/{user}')->group(function () {
         Route::post('/approve', [UserApprovalController::class, 'approve'])->name('admin.users.approve');
+        Route::post('/plan', [UserApprovalController::class, 'setPlan'])->name('admin.users.plan');
         Route::post('/revoke', [UserApprovalController::class, 'revoke'])->name('admin.users.revoke');
         Route::delete('/', [UserApprovalController::class, 'reject'])->name('admin.users.reject');
     });

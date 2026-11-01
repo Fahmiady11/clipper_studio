@@ -20,6 +20,12 @@
         @endif
       </a>
     @endif
+    @php($quota = app(\App\Services\RenderQuota::class))
+    <a class="user-menu-item" href="{{ route('pricing') }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Paket &amp; kuota
+      <span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;color:var(--text-dim)">{{ intdiv($quota->usedSeconds(Auth::user()), 60) }}/{{ $quota->plan(Auth::user())->render_minutes }} mnt</span>
+    </a>
     <a class="user-menu-item" href="{{ route('brand.edit') }}">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M12 22a10 10 0 110-20 10 10 0 0110 10c0 2-2 2-3.5 2H16a2 2 0 00-1.5 3.4c.3.4.5.9.5 1.6 0 1.1-.9 2-2 2h-1z"/></svg>
       Brand kit

@@ -112,6 +112,14 @@
               <span class="us-tag">Admin</span>
             @else
               <div class="us-actions">
+                <form method="POST" action="{{ route('admin.users.plan', $u) }}" style="display:flex;gap:8px">
+                  @csrf
+                  <select class="field" name="plan_id" aria-label="Paket {{ $u->name }}" onchange="this.form.submit()">
+                    @foreach ($plans as $plan)
+                      <option value="{{ $plan->id }}" @selected(($u->plan_id ?? $plans->firstWhere('slug', 'free')->id) === $plan->id)>{{ $plan->name }}</option>
+                    @endforeach
+                  </select>
+                </form>
                 <form method="POST" action="{{ route('admin.users.revoke', $u) }}" onsubmit="return confirm(@js('Cabut akses '.$u->email.'? Datanya tetap tersimpan.'))">
                   @csrf
                   <button class="btn btn-ghost us-danger" type="submit">Cabut akses</button>

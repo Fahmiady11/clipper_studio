@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\QuotaExceeded;
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\RenderClipJob;
 use App\Models\GeneratedClip;
 use App\Services\GeminiService;
 use App\Services\MusicService;
+use App\Services\RenderQuota;
 use App\Support\HookText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +21,7 @@ class RenderController extends Controller
 
     private const TRIM_CONTEXT = 20.0; // seconds of transcript shown around a clip when trimming
 
-    public function render(Request $request, string $clipId): JsonResponse
+    public function render(Request $request, string $clipId, RenderQuota $quota): JsonResponse
     {
         $data = $request->validate(['hook_text' => ['sometimes', 'nullable', 'string', 'max:100']]);
         $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
@@ -36,6 +38,12 @@ class RenderController extends Controller
         // Already done or in-flight — return current status, frontend will poll
         if (! $rerender && in_array($clip->status, ['done', 'processing'])) {
             return response()->json(['clip_id' => $clip->id, 'status' => $clip->status]);
+        }
+
+        try {
+            $quota->reserve(Auth::user(), $clip);
+        } catch (QuotaExceeded $e) {
+            return response()->json(['message' => $e->getMessage()], 402);
         }
 
         $clip->fill(['status' => 'processing', 'error_msg' => null, 'cancelled_at' => null])->save();
@@ -106,7 +114,7 @@ class RenderController extends Controller
         return response()->json(['start_seconds' => $clip->start_seconds, 'end_seconds' => $clip->end_seconds, 'status' => 'pending']);
     }
 
-    public function cancel(string $clipId): JsonResponse
+    public function cancel(string $clipId, RenderQuota $quota): JsonResponse
     {
         $clip = GeneratedClip::with('clipProject')->findOrFail($clipId);
 
@@ -120,6 +128,7 @@ class RenderController extends Controller
             'error_msg' => null,
             'cancelled_at' => now(),
         ]);
+        $quota->release($clip->id);
 
         return response()->json(['clip_id' => $clip->id, 'status' => $clip->status]);
     }

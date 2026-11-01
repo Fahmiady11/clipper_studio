@@ -2,12 +2,14 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\QuotaExceeded;
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Models\Transcript;
 use App\Services\ClipPerformanceSummary;
 use App\Services\GeminiService;
 use App\Services\MusicService;
+use App\Services\RenderQuota;
 use App\Services\TranscriptService;
 use App\Services\YtDlpService;
 use App\Support\Cancellation;
@@ -193,14 +195,23 @@ class AnalyzeVideoJob implements ShouldQueue
             ]);
             // Autopilot: render every clip straight away; they land in the review queue
             if ($auto) {
-                RenderClipJob::dispatch($generated->id);
+                try {
+                    app(RenderQuota::class)->reserve($project->user, $generated);
+                    RenderClipJob::dispatch($generated->id);
+                } catch (QuotaExceeded $e) {
+                    $generated->update(['error_msg' => $e->getMessage()]);
+                    $log->warning('Autopilot render skipped, quota exhausted', ['clip_id' => $generated->id, 'user_id' => $project->user_id]);
+                }
             }
             $log->debug('GeneratedClip saved', ['ranking' => $clip['ranking']]);
         }
 
         // whereNull: a cancel that landed during the save wins over "done"
         ClipProject::whereKey($project->id)->whereNull('cancelled_at')->update(['status' => 'done', 'progress_stage' => 6]);
-        $log->info('AnalyzeVideoJob done', ['project_id' => $project->id]);
+        $log->info('AnalyzeVideoJob done', [
+            'project_id' => $project->id,
+            'est_ai_cost_usd' => round(config('billing.gemini_usd_per_call') + ($project->duration_seconds ?? 0) / 3600 * config('billing.groq_usd_per_audio_hour'), 6),
+        ]);
     }
 
     public function failed(Throwable $e): void

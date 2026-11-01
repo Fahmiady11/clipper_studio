@@ -9,6 +9,7 @@ use App\Services\FFmpegService;
 use App\Services\GeminiService;
 use App\Services\HookRenderer;
 use App\Services\MusicService;
+use App\Services\RenderQuota;
 use App\Services\SmartCut;
 use App\Services\StockFootage;
 use App\Services\YtDlpService;
@@ -47,6 +48,8 @@ class RenderClipJob implements ShouldQueue
     {
         $clip = GeneratedClip::with(['clipProject.subtitleSetting', 'clipProject.hookSetting', 'clipProject.transcript'])->find($this->clipId);
         if (! $clip || $clip->cancelled_at || $clip->review_status === 'rejected') {
+            app(RenderQuota::class)->release($this->clipId);
+
             return; // cancelled, deleted from history or rejected while still waiting in the queue
         }
 
@@ -61,6 +64,7 @@ class RenderClipJob implements ShouldQueue
         } catch (JobCancelled) {
             // The cancel endpoint already reset the clip; just drop the half-made files
             $this->cleanupTemp($tempDir, $this->clipId);
+            app(RenderQuota::class)->release($this->clipId);
             Log::channel('clipper_jobs')->info('RenderClipJob cancelled', ['clip_id' => $this->clipId]);
         }
     }
@@ -69,6 +73,8 @@ class RenderClipJob implements ShouldQueue
     {
         $log = Log::channel('clipper_jobs');
         $project = $clip->clipProject;
+        $startedAt = microtime(true);
+        $aiCostUsd = 0.0;
 
         $clip->update(['status' => 'processing']);
 
@@ -219,6 +225,7 @@ class RenderClipJob implements ShouldQueue
                 $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
                     array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
                 $cues = app(GeminiService::class)->brollCues($words, $clipDuration, $hookDuration + 1.0);
+                $aiCostUsd += config('billing.gemini_usd_per_call');
             }
             $used = [];
             foreach ($cues as $cue) {
@@ -277,6 +284,7 @@ class RenderClipJob implements ShouldQueue
         // whereNull: a cancel that landed during the final copy wins over "done"
         GeneratedClip::whereKey($this->clipId)->whereNull('cancelled_at')
             ->update(['output_path' => $outPath, 'status' => 'done', 'music_track' => $musicTrack]);
+        app(RenderQuota::class)->settle($this->clipId, (int) ceil($clipDuration), microtime(true) - $startedAt, $aiCostUsd);
 
         $log->info('RenderClipJob done', [
             'clip_id' => $this->clipId,
@@ -292,6 +300,8 @@ class RenderClipJob implements ShouldQueue
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString(),
         ]);
+
+        app(RenderQuota::class)->release($this->clipId);
 
         GeneratedClip::where('id', $this->clipId)->whereNull('cancelled_at')->update([
             'status' => 'failed',
