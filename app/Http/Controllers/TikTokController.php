@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\UploadToTikTokJob;
 use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
+use App\Services\ConnectedAccounts;
 use App\Services\TikTokService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,7 @@ class TikTokController extends Controller
     public function connect(Request $request): RedirectResponse
     {
         if (! $this->tiktok->isConfigured()) {
-            return redirect('/?tiktok=not_configured');
+            return redirect('/settings/accounts?tiktok=not_configured');
         }
 
         $state = Str::random(40);
@@ -38,10 +39,10 @@ class TikTokController extends Controller
     {
         $expected = $request->session()->pull('tiktok_oauth_state');
         if (! $expected || ! hash_equals($expected, (string) $request->query('state'))) {
-            return redirect('/?tiktok=invalid_state');
+            return redirect('/settings/accounts?tiktok=invalid_state');
         }
         if ($request->query('error') || ! $request->query('code')) {
-            return redirect('/?tiktok=denied');
+            return redirect('/settings/accounts?tiktok=denied');
         }
 
         try {
@@ -49,10 +50,10 @@ class TikTokController extends Controller
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('TikTok connect failed', ['error' => $e->getMessage()]);
 
-            return redirect('/?tiktok=error');
+            return redirect('/settings/accounts?tiktok=error');
         }
 
-        return redirect('/?tiktok=connected');
+        return redirect('/settings/accounts?tiktok=connected');
     }
 
     public function accounts(): JsonResponse
@@ -62,6 +63,8 @@ class TikTokController extends Controller
             'accounts' => TiktokAccount::where('user_id', Auth::id())
                 ->orderBy('display_name')
                 ->get(['id', 'display_name', 'avatar_url']),
+            // Chosen on Settings → Akun terhubung; Studio and the calendar start from it
+            'default_id' => app(ConnectedAccounts::class)->default(Auth::id(), 'tiktok')?->id,
         ]);
     }
 

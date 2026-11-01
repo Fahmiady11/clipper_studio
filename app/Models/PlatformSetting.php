@@ -4,8 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-/** Autopilot upload slots of one user on one platform. account_id is that platform's account (see Autopost). */
-class AutopostSetting extends Model
+/**
+ * One user's settings for one publishing platform, managed on Settings → Akun terhubung:
+ * account_id is the default account (Studio, calendar and autopilot publish there),
+ * enabled switches autopost on (for TikTok: send to the inbox when a clip is approved),
+ * max_per_day and slot_times are the autopost slots. account_id may point at a
+ * disconnected account; ConnectedAccounts::default() then falls back to the first one.
+ */
+class PlatformSetting extends Model
 {
     public const DEFAULT_SLOTS = ['09:00', '15:00', '20:00'];
 

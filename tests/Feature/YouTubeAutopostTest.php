@@ -4,9 +4,9 @@ namespace Tests\Feature;
 
 use App\Jobs\UploadToTikTokJob;
 use App\Jobs\UploadToYouTubeJob;
-use App\Models\AutopostSetting;
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\User;
@@ -44,9 +44,9 @@ class YouTubeAutopostTest extends TestCase
         ]);
     }
 
-    private function autopost(User $user, YoutubeAccount $account, array $attrs = []): AutopostSetting
+    private function autopost(User $user, YoutubeAccount $account, array $attrs = []): PlatformSetting
     {
-        return AutopostSetting::create($attrs + [
+        return PlatformSetting::create($attrs + [
             'user_id' => $user->id, 'platform' => 'youtube', 'account_id' => $account->id, 'enabled' => true,
             'max_per_day' => 3, 'slot_times' => ['09:00', '15:00', '20:00'], 'timezone' => 'Asia/Jakarta',
         ]);
@@ -92,8 +92,14 @@ class YouTubeAutopostTest extends TestCase
         ])->assertOk()->assertJson(['enabled' => true, 'slot_times' => ['08:30', '20:00'], 'timezone' => 'Asia/Makassar', 'saved' => true]);
 
         $this->actingAs($user)->putJson('/api/autopilot/youtube', [
-            'enabled' => true, 'account_id' => null, 'max_per_day' => 2, 'slot_times' => ['25:00', '08:30', '08:30'], 'timezone' => 'Mars/Base',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['account_id', 'slot_times.0', 'slot_times.1', 'timezone']);
+            'enabled' => true, 'max_per_day' => 2, 'slot_times' => ['25:00', '08:30', '08:30'], 'timezone' => 'Mars/Base',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['slot_times.0', 'slot_times.1', 'timezone']);
+
+        // Without a channel there is nothing to switch on
+        $alone = User::factory()->create();
+        $this->actingAs($alone)->putJson('/api/autopilot/youtube', [
+            'enabled' => true, 'max_per_day' => 2, 'slot_times' => ['08:30'], 'timezone' => 'Asia/Jakarta',
+        ])->assertUnprocessable()->assertJsonPath('errors.account_id.0', 'Hubungkan akun YouTube dulu.');
 
         // Someone else's channel
         $other = $this->channel(User::factory()->create());
@@ -215,7 +221,7 @@ class YouTubeAutopostTest extends TestCase
 
         // Channel disconnected after the settings were saved
         YoutubeAccount::find($settings->account_id)->delete();
-        $this->approve($user, $this->reviewClip($user))->assertOk()->assertJsonPath('youtube.error', fn ($msg) => str_contains($msg, 'Channel YouTube untuk autopilot'));
+        $this->approve($user, $this->reviewClip($user))->assertOk()->assertJsonPath('youtube.error', fn ($msg) => str_contains($msg, 'Belum ada channel YouTube yang terhubung'));
         $this->assertSame(0, ScheduledPost::count());
     }
 

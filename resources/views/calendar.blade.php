@@ -207,10 +207,10 @@
             </div>
 
             <div x-show="form.platform && currentAccounts.length > 1">
-              <label class="cal-label" for="cal-account" x-text="({ youtube: 'Channel', facebook: 'Page', threads: 'Profil' })[form.platform] || 'Akun'"></label>
+              <label class="cal-label" for="cal-account" x-text="(({ youtube: 'Channel', facebook: 'Page', threads: 'Profil' })[form.platform] || 'Akun') + ' untuk jadwal ini'"></label>
               <select id="cal-account" class="select" x-model.number="form.accountId" style="min-height:44px">
                 <template x-for="a in currentAccounts" :key="a.id">
-                  <option :value="a.id" x-text="accountName(a)" :selected="a.id === form.accountId"></option>
+                  <option :value="a.id" x-text="accountName(a) + (a.id === $data[form.platform].defaultId ? ' (utama)' : '')" :selected="a.id === form.accountId"></option>
                 </template>
               </select>
             </div>
@@ -373,11 +373,11 @@ function scheduleCalendar() {
       threads: { name: 'Threads', short: 'TH', site: 'Threads' },
     },
     CONNECT: {
-      tiktok: { noun: 'akun TikTok', url: '/tiktok/connect' },
-      youtube: { noun: 'channel YouTube', url: '/youtube/connect' },
-      facebook: { noun: 'Page Facebook', url: '/settings/meta' },
-      instagram: { noun: 'Instagram', url: '/settings/meta' },
-      threads: { noun: 'Threads', url: '/settings/meta' },
+      tiktok: { noun: 'akun TikTok', url: '/settings/accounts#tiktok' },
+      youtube: { noun: 'channel YouTube', url: '/settings/accounts#youtube' },
+      facebook: { noun: 'Page Facebook', url: '/settings/accounts#facebook' },
+      instagram: { noun: 'Instagram', url: '/settings/accounts#instagram' },
+      threads: { noun: 'Threads', url: '/settings/accounts#threads' },
     },
     // Text limits as each API states them; Threads counts emoji by their UTF-8 bytes
     META: {
@@ -485,9 +485,9 @@ function scheduleCalendar() {
       const get = async url => { try { const r = await fetch(url, { headers: { 'Accept': 'application/json' } }); return r.ok ? await r.json() : null; } catch { return null; } };
       const meta = ['facebook', 'instagram', 'threads'];
       const [tt, yt, ...rest] = await Promise.all([get('/api/tiktok/accounts'), get('/api/youtube/accounts'), ...meta.map(p => get('/api/meta/targets/' + p))]);
-      if (tt) this.tiktok = { configured: tt.configured, accounts: tt.accounts || [] };
-      if (yt) this.youtube = { configured: yt.configured, accounts: yt.accounts || [] };
-      meta.forEach((p, i) => { if (rest[i]) this[p] = { configured: rest[i].configured, accounts: rest[i].accounts || [], blocked: rest[i].blocked }; });
+      if (tt) this.tiktok = { configured: tt.configured, accounts: tt.accounts || [], defaultId: tt.default_id };
+      if (yt) this.youtube = { configured: yt.configured, accounts: yt.accounts || [], defaultId: yt.default_id };
+      meta.forEach((p, i) => { if (rest[i]) this[p] = { configured: rest[i].configured, accounts: rest[i].accounts || [], blocked: rest[i].blocked, defaultId: rest[i].default_id }; });
     },
 
     // ── status text (always words, never color alone) ──────────────────────
@@ -571,10 +571,11 @@ function scheduleCalendar() {
       return out.trimEnd() + '…';
     },
     closeForm() { this.form.open = false; this.formError = ''; },
+    // Starts at the platform's default account (Akun terhubung); the select overrides it for this post
     pickPlatform(platform) {
       this.form.platform = platform;
       const list = this.currentAccounts;
-      if (!list.some(a => a.id === this.form.accountId)) this.form.accountId = list[0]?.id ?? null;
+      this.form.accountId = (this[platform] || {}).defaultId ?? list[0]?.id ?? null;
     },
     // Defaults from the clip's own topic and AI caption; the user edits from there
     fillFromClip() {

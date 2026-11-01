@@ -5,15 +5,16 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\DiscoverVideosJob;
 use App\Jobs\UploadToTikTokJob;
-use App\Models\AutopostSetting;
 use App\Models\ClipProject;
 use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\VideoSource;
 use App\Services\Autopost;
 use App\Services\ClipPerformanceSummary;
+use App\Services\ConnectedAccounts;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
 use App\Services\StorageCleanup;
@@ -24,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class AutopilotController extends Controller
 {
@@ -205,16 +207,19 @@ class AutopilotController extends Controller
     }
 
     /**
-     * Approve a clip: it goes to the chosen TikTok account right away and takes
-     * the next free calendar slot of every platform with autopost on.
+     * Approve a clip: with TikTok on (Akun terhubung) it goes to the default
+     * TikTok account right away, and it takes the next free calendar slot of
+     * every platform with autopost on. account_id picks another TikTok account.
      */
-    public function approve(Request $request, string $clipId, Autopost $autopost): JsonResponse
+    public function approve(Request $request, string $clipId, Autopost $autopost, ConnectedAccounts $connected): JsonResponse
     {
         $data = $request->validate(['account_id' => ['nullable', 'integer']]);
         $clip = $this->ownedReviewClip($clipId);
-        $account = isset($data['account_id']) ? TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']) : null;
+        $account = isset($data['account_id'])
+            ? TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id'])
+            : $this->tiktokOnApprove($connected);
 
-        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Pilih akun TikTok atau nyalakan upload otomatis ke salah satu platform di atas.');
+        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Belum ada tujuan. Nyalakan TikTok atau upload otomatis di Akun terhubung.');
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
         abort_if($clip->review_status === 'rejected', 422, 'Clip sudah ditolak dan filenya dihapus.');
         if ($account) {
@@ -263,41 +268,46 @@ class AutopilotController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /** Autopost settings of one platform: GET /api/autopilot/{youtube|facebook|instagram|threads} */
-    public function autopostSettings(string $platform, Autopost $autopost): JsonResponse
+    /** A platform's switch and slots, shown on Settings → Akun terhubung: GET /api/autopilot/{platform} */
+    public function autopostSettings(string $platform, Autopost $autopost, ConnectedAccounts $connected): JsonResponse
     {
-        return response()->json($this->presentAutopost(AutopostSetting::for(Auth::id(), $platform), $autopost));
+        return response()->json($this->presentAutopost(PlatformSetting::for(Auth::id(), $platform), $autopost, $connected));
     }
 
-    public function updateAutopostSettings(Request $request, string $platform, Autopost $autopost): JsonResponse
+    /**
+     * TikTok has only the switch (send to the inbox on approve); the other
+     * platforms also have slots. account_id, when given, becomes the default.
+     */
+    public function updateAutopostSettings(Request $request, string $platform, Autopost $autopost, ConnectedAccounts $connected): JsonResponse
     {
-        $noun = ['youtube' => 'channel YouTube', 'facebook' => 'Page Facebook', 'instagram' => 'akun Instagram', 'threads' => 'profil Threads'][$platform];
+        $slots = $platform !== 'tiktok';
         $data = $request->validate([
             'enabled' => ['required', 'boolean'],
-            'account_id' => ['nullable', 'integer', 'required_if:enabled,true'],
+            'account_id' => ['nullable', 'integer'],
+        ] + ($slots ? [
             'max_per_day' => ['required', 'integer', 'min:1', 'max:10'],
             'slot_times' => ['required', 'array', 'min:1', 'max:10'],
             'slot_times.*' => ['required', 'string', 'distinct', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
             'timezone' => ['required', 'timezone:all'],
-        ], [
-            'account_id.required_if' => "Pilih {$noun} dulu.",
+        ] : []), [
             'slot_times.*.regex' => 'Jam upload harus format JJ:MM, misalnya 09:00.',
             'slot_times.*.distinct' => 'Ada jam upload yang sama.',
         ]);
         if (isset($data['account_id'])) {
-            abort_unless($autopost->platform($platform)->accounts(Auth::id())->contains('id', $data['account_id']), 404);
+            $connected->setDefault(Auth::id(), $platform, $data['account_id']);
+        }
+        if ($data['enabled'] && ! $connected->default(Auth::id(), $platform)) {
+            throw ValidationException::withMessages(['account_id' => 'Hubungkan akun '.ConnectedAccounts::NAMES[$platform].' dulu.']);
         }
 
-        $settings = AutopostSetting::for(Auth::id(), $platform);
-        $settings->fill([
-            'enabled' => $data['enabled'],
-            'account_id' => $data['account_id'] ?? null,
+        $settings = PlatformSetting::for(Auth::id(), $platform);
+        $settings->fill(['enabled' => $data['enabled']] + ($slots ? [
             'max_per_day' => $data['max_per_day'],
             'slot_times' => collect($data['slot_times'])->sort()->values()->all(),
             'timezone' => $data['timezone'],
-        ])->save();
+        ] : []))->save();
 
-        return response()->json($this->presentAutopost($settings, $autopost));
+        return response()->json($this->presentAutopost($settings, $autopost, $connected));
     }
 
     public function reject(string $clipId, StorageCleanup $cleanup, Autopost $autopost): JsonResponse
@@ -407,23 +417,33 @@ class AutopilotController extends Controller
         ];
     }
 
-    private function presentAutopost(AutopostSetting $settings, Autopost $autopost): array
+    private function presentAutopost(PlatformSetting $settings, Autopost $autopost, ConnectedAccounts $connected): array
     {
-        $platform = $autopost->platform($settings->platform);
-        $accounts = $platform->accounts(Auth::id());
+        $platform = $settings->platform;
+        $accounts = $platform === 'tiktok'
+            ? $connected->accounts(Auth::id(), 'tiktok')->map(fn ($a) => ['id' => $a->id, 'name' => $a->display_name])
+            : $autopost->platform($platform)->accounts(Auth::id());
 
         return [
-            'platform' => $settings->platform,
-            'configured' => $platform->isConfigured(),
+            'platform' => $platform,
+            'configured' => $connected->isConfigured($platform),
             'accounts' => $accounts->values(),
             'enabled' => $settings->enabled,
-            // null once the chosen account was disconnected
-            'account_id' => $accounts->contains('id', $settings->account_id) ? $settings->account_id : null,
+            // The default account: posts go there
+            'account_id' => $connected->default(Auth::id(), $platform)?->id,
             'max_per_day' => $settings->max_per_day,
             'slot_times' => $settings->slot_times,
             'timezone' => $settings->timezone,
             'saved' => $settings->exists,
         ];
+    }
+
+    /** The default TikTok account when TikTok is switched on for approvals, else null. */
+    private function tiktokOnApprove(ConnectedAccounts $connected): ?TiktokAccount
+    {
+        $on = PlatformSetting::where('user_id', Auth::id())->where('platform', 'tiktok')->where('enabled', true)->exists();
+
+        return $on ? $connected->default(Auth::id(), 'tiktok') : null;
     }
 
     private function latestManualProject(): ?ClipProject

@@ -63,7 +63,7 @@ class FacebookConnectTest extends TestCase
         $this->assertArrayNotHasKey('scope', $q);
 
         config(['services.facebook.app_id' => null]);
-        $this->actingAs($user)->get('/facebook/connect')->assertRedirect('/settings/meta?facebook=not_configured');
+        $this->actingAs($user)->get('/facebook/connect')->assertRedirect('/settings/accounts?facebook=not_configured');
     }
 
     public function test_callback_stores_a_long_lived_login_and_rejects_a_bad_state(): void
@@ -83,13 +83,13 @@ class FacebookConnectTest extends TestCase
         ]);
 
         $this->actingAs($user)->withSession(['facebook_oauth_state' => 'abc'])
-            ->get('/facebook/callback?state=wrong&code=x')->assertRedirect('/settings/meta?facebook=invalid_state');
+            ->get('/facebook/callback?state=wrong&code=x')->assertRedirect('/settings/accounts?facebook=invalid_state');
         $this->actingAs($user)->withSession(['facebook_oauth_state' => 'abc'])
-            ->get('/facebook/callback?state=abc&error=access_denied')->assertRedirect('/settings/meta?facebook=denied');
+            ->get('/facebook/callback?state=abc&error=access_denied')->assertRedirect('/settings/accounts?facebook=denied');
 
         $res = $this->actingAs($user)->withSession(['facebook_oauth_state' => 'abc'])->get('/facebook/callback?state=abc&code=the-code');
         $account = MetaAccount::sole();
-        $res->assertRedirect('/settings/meta?facebook=connected&account='.$account->id);
+        $res->assertRedirect('/settings/accounts?facebook=connected&account='.$account->id);
 
         $this->assertSame(['9001', 'Rina', 'user-long', 'pages_show_list'], [$account->provider_user_id, $account->name, $account->access_token, $account->scopes]);
         $this->assertTrue($account->token_expires_at->between(now()->addDays(59), now()->addDays(61)));
@@ -170,7 +170,8 @@ class FacebookConnectTest extends TestCase
         $account = $this->login($user);
         MetaTarget::create(['user_id' => $user->id, 'meta_account_id' => $account->id, 'platform' => 'facebook', 'external_id' => '1', 'access_token' => 't']);
 
-        $this->actingAs($user)->get('/settings/meta')->assertOk()->assertSee('Akun Meta');
+        $this->actingAs($user)->get('/settings/meta')->assertRedirect('/settings/accounts');
+        $this->actingAs($user)->get('/settings/accounts')->assertOk()->assertSee('Akun terhubung');
 
         $user->delete();
         $this->assertSame([0, 0], [MetaAccount::count(), MetaTarget::count()]);

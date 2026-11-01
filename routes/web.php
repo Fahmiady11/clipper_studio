@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
@@ -7,7 +8,6 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BrandKitController;
 use App\Http\Controllers\FacebookController;
 use App\Http\Controllers\GameplayClipController;
-use App\Http\Controllers\MetaAccountController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicMediaController;
 use App\Http\Controllers\PublicPageController;
@@ -81,8 +81,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/youtube/connect', [YouTubeController::class, 'connect'])->name('youtube.connect');
     Route::get('/youtube/callback', [YouTubeController::class, 'callback'])->name('youtube.callback');
 
-    // Facebook Login for Business (Valid OAuth Redirect URI → /facebook/callback); Pages are picked on /settings/meta
-    Route::get('/settings/meta', [MetaAccountController::class, 'page'])->middleware('cache.headers:no_store;private')->name('meta.page');
+    // One place for every publishing account; the old Meta page points there
+    Route::get('/settings/accounts', [AccountsController::class, 'page'])->middleware('cache.headers:no_store;private')->name('accounts.page');
+    Route::redirect('/settings/meta', '/settings/accounts', 301);
+
+    // Facebook Login for Business (Valid OAuth Redirect URI → /facebook/callback); Pages are picked on /settings/accounts
     Route::get('/facebook/connect', [FacebookController::class, 'connect'])->name('facebook.connect');
     Route::get('/facebook/callback', [FacebookController::class, 'callback'])->name('facebook.callback');
 

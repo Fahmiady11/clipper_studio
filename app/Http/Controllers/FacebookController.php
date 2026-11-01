@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
-/** Facebook Login for Business. After the callback the user picks Pages on /settings/meta. */
+/** Facebook Login for Business. After the callback the user picks Pages and Instagram accounts on Settings → Akun terhubung. */
 class FacebookController extends Controller
 {
     public function __construct(private MetaLogin $login) {}
@@ -18,7 +18,7 @@ class FacebookController extends Controller
     public function connect(Request $request): RedirectResponse
     {
         if (! $this->login->isConfigured()) {
-            return redirect('/settings/meta?facebook=not_configured');
+            return redirect('/settings/accounts?facebook=not_configured');
         }
 
         $state = Str::random(40);
@@ -31,10 +31,10 @@ class FacebookController extends Controller
     {
         $expected = $request->session()->pull('facebook_oauth_state');
         if (! $expected || ! hash_equals($expected, (string) $request->query('state'))) {
-            return redirect('/settings/meta?facebook=invalid_state');
+            return redirect('/settings/accounts?facebook=invalid_state');
         }
         if ($request->query('error') || ! $request->query('code')) {
-            return redirect('/settings/meta?facebook=denied');
+            return redirect('/settings/accounts?facebook=denied');
         }
 
         try {
@@ -42,9 +42,9 @@ class FacebookController extends Controller
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('Facebook connect failed', ['error' => $e->getMessage()]);
 
-            return redirect('/settings/meta?facebook=error');
+            return redirect('/settings/accounts?facebook=error');
         }
 
-        return redirect('/settings/meta?facebook=connected&account='.$account->id);
+        return redirect('/settings/accounts?facebook=connected&account='.$account->id);
     }
 }

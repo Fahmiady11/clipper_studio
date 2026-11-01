@@ -89,7 +89,7 @@ class TikTokTest extends TestCase
 
         $this->actingAs($user)
             ->get('/tiktok/callback?code=abc&state='.$q['state'])
-            ->assertRedirect('/?tiktok=connected');
+            ->assertRedirect('/settings/accounts?tiktok=connected');
 
         $account = TiktokAccount::firstOrFail();
         $this->assertSame('Creator', $account->display_name);
@@ -104,7 +104,7 @@ class TikTokTest extends TestCase
 
         $this->actingAs($user)
             ->get('/tiktok/callback?code=abc&state=forged')
-            ->assertRedirect('/?tiktok=invalid_state');
+            ->assertRedirect('/settings/accounts?tiktok=invalid_state');
         $this->assertSame(0, TiktokAccount::count());
     }
 

@@ -24,7 +24,7 @@ class ThreadsAutopost extends MetaAutopost
 
     public function missingAccount(): string
     {
-        return 'Profil Threads untuk autopilot belum dipilih atau sudah diputus. Pilih profil di pengaturan Threads.';
+        return 'Belum ada profil Threads yang terhubung. Hubungkan di Akun terhubung.';
     }
 
     /** Threads turns only one hashtag into a topic: the caption and the first hashtag, cut to 500. */

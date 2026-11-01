@@ -24,7 +24,7 @@ class FacebookAutopost extends MetaAutopost
 
     public function missingAccount(): string
     {
-        return 'Page Facebook untuk autopilot belum dipilih atau sudah diputus. Pilih Page di pengaturan Facebook.';
+        return 'Belum ada Page Facebook yang terhubung. Hubungkan di Akun terhubung.';
     }
 
     /** The Reel description: AI caption with music credit, then the hashtags. */

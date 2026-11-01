@@ -33,13 +33,13 @@
         ['Atur jadwal & filter', '<b>Cek tiap</b> = seberapa sering sumber dicek (jam). <b>Maks per cek</b> = video baru yang diambil sekali cek. <b>Durasi video</b> = batas panjang video sumber dalam <b>menit</b>; disarankan 10–90.'],
         ['Atur tampilan', 'Klik <b>Atur tampilan</b> untuk layout, subtitle, gaya hook, dan musik clip dari sumber itu. Teks hook selalu ditulis AI per clip.'],
         ['Tunggu clip', 'Sumber dicek otomatis sesuai jadwal, atau klik <b>Cek sekarang</b>. Clip muncul di <b>Antrian review</b> dan dirender otomatis.'],
-        ['Review', 'Tonton preview tiap clip. <b>Approve → TikTok</b> mengirimnya sebagai draft ke akun TikTok yang dipilih di "Kirim ke". <b>Reject</b> menolak clip dan menghapus filenya supaya disk tidak penuh.'],
+        ['Review', 'Tonton preview tiap clip. <b>Approve</b> mengirimnya ke tujuan yang aktif di <b>Akun terhubung</b>: draft ke akun TikTok utama, dan jadwal di kalender untuk YouTube, Facebook, Instagram, atau Threads. <b>Reject</b> menolak clip dan menghapus filenya supaya disk tidak penuh.'],
         ['Salin caption', 'Draft TikTok tidak membawa caption. Pakai <b>Salin semua</b> (caption + hashtag) di kartu clip, lalu tempel saat memposting draft di aplikasi TikTok.'],
       ],
       'tips' => [
         'Pakai filter <b>Belum direview / Disetujui / Ditolak</b> di atas antrian untuk melihat clip per status.',
         'Matikan sumber dengan tombol on/off kalau sedang tidak mau ada clip baru; sumbernya tidak terhapus.',
-        'Hubungkan akun TikTok dulu (menu "Hubungkan akun" di bagian review) supaya tombol Approve aktif.',
+        'Hubungkan akun dan nyalakan tujuannya di <b>Akun terhubung</b> (menu akun di kanan atas) supaya tombol Approve aktif.',
       ],
     ],
   ];

@@ -885,9 +885,8 @@ function studio() {
         const data = await res.json();
         this.ytConfigured = data.configured;
         this.ytAccounts = data.accounts || [];
-        if (!this.ytAccounts.some(a => a.id === this.ytAccountId)) {
-          this.ytAccountId = this.ytAccounts[0]?.id ?? null;
-        }
+        // The default channel from Settings → Akun terhubung
+        this.ytAccountId = data.default_id ?? this.ytAccounts[0]?.id ?? null;
       } catch (e) { console.error('loadYoutubeAccounts', e); }
     },
     // Title from the clip topic, description from the AI caption; once per clip, edits are kept
@@ -948,6 +947,10 @@ function studio() {
         if (res.ok) { const d = await res.json(); this.musicLibrary = { total: d.total, counts: d.counts }; }
       } catch (e) { console.error('loadMusicLibrary', e); }
     },
+    accountLabel(list, id) {
+      const a = list.find(x => x.id === id);
+      return a ? (a.display_name || a.title || a.name || ('Akun #' + a.id)) : '';
+    },
     async loadTiktokAccounts() {
       try {
         const res = await fetch('/api/tiktok/accounts', { headers: { 'Accept': 'application/json' } });
@@ -955,9 +958,8 @@ function studio() {
         const data = await res.json();
         this.tiktokConfigured = data.configured;
         this.tiktokAccounts = data.accounts || [];
-        if (!this.tiktokAccounts.some(a => a.id === this.tiktokAccountId)) {
-          this.tiktokAccountId = this.tiktokAccounts[0]?.id ?? null;
-        }
+        // The default account from Settings → Akun terhubung
+        this.tiktokAccountId = data.default_id ?? this.tiktokAccounts[0]?.id ?? null;
       } catch (e) { console.error('loadTiktokAccounts', e); }
     },
     get tiktokCanSubmit() {
@@ -1249,18 +1251,6 @@ function studio() {
       this.$watch('tiktokMode', () => this.loadTiktokCreator());
       this.$watch('tiktokAccountId', () => this.loadTiktokCreator());
 
-      // Back from TikTok OAuth: /?tiktok=connected|denied|error|…
-      const tiktokResult = new URLSearchParams(location.search).get('tiktok');
-      if (tiktokResult) {
-        history.replaceState(null, '', location.pathname);
-        if (tiktokResult !== 'connected') alert('Gagal menghubungkan TikTok (' + tiktokResult + ').');
-      }
-      // Back from Google OAuth: /?youtube=connected|denied|error|…
-      const youtubeResult = new URLSearchParams(location.search).get('youtube');
-      if (youtubeResult) {
-        history.replaceState(null, '', location.pathname);
-        if (youtubeResult !== 'connected') alert('Gagal menghubungkan YouTube (' + youtubeResult + ').');
-      }
       await Promise.all([this.loadTiktokAccounts(), this.loadYoutubeAccounts(), this.loadMusicLibrary()]);
       if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.loadHookTest(); }
       // If restored from session and already done

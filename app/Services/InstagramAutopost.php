@@ -24,7 +24,7 @@ class InstagramAutopost extends MetaAutopost
 
     public function missingAccount(): string
     {
-        return 'Akun Instagram untuk autopilot belum dipilih atau sudah diputus. Pilih akun di pengaturan Instagram.';
+        return 'Belum ada akun Instagram yang terhubung. Hubungkan di Akun terhubung.';
     }
 
     /** Caption with music credit, then at most 30 hashtags, within 2200 characters. */

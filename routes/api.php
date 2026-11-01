@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\RenderController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\YouTubeController;
+use App\Services\ConnectedAccounts;
 use Illuminate\Support\Facades\Route;
 
 // New Studio API (auth required)
@@ -58,6 +60,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/clips/{clipId}/youtube', [YouTubeController::class, 'upload'])->middleware('throttle:10,1');
     Route::get('/clips/{clipId}/youtube-status', [YouTubeController::class, 'status']);
 
+    // Settings → Akun terhubung: every platform's accounts and its default
+    Route::get('/accounts', [AccountsController::class, 'index']);
+    Route::put('/accounts/{platform}/default', [AccountsController::class, 'setDefault'])->whereIn('platform', ConnectedAccounts::PLATFORMS);
+    Route::delete('/accounts/{platform}/{accountId}', [AccountsController::class, 'destroy'])->whereIn('platform', ConnectedAccounts::PLATFORMS)->whereNumber('accountId');
+
     // Meta: Facebook Pages, the Instagram accounts linked to them, Threads profiles
     Route::get('/meta/accounts', [MetaAccountController::class, 'index']);
     Route::delete('/meta/accounts/{accountId}', [MetaAccountController::class, 'destroyAccount'])->whereNumber('accountId');
@@ -95,6 +102,6 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/autopilot/review/{clipId}/approve', [AutopilotController::class, 'approve']);
     Route::post('/autopilot/review/{clipId}/reject', [AutopilotController::class, 'reject']);
     Route::post('/autopilot/review/{clipId}/unapprove', [AutopilotController::class, 'unapprove']);
-    Route::get('/autopilot/{platform}', [AutopilotController::class, 'autopostSettings'])->whereIn('platform', ['youtube', 'facebook', 'instagram', 'threads']);
-    Route::put('/autopilot/{platform}', [AutopilotController::class, 'updateAutopostSettings'])->whereIn('platform', ['youtube', 'facebook', 'instagram', 'threads']);
+    Route::get('/autopilot/{platform}', [AutopilotController::class, 'autopostSettings'])->whereIn('platform', ConnectedAccounts::PLATFORMS);
+    Route::put('/autopilot/{platform}', [AutopilotController::class, 'updateAutopostSettings'])->whereIn('platform', ConnectedAccounts::PLATFORMS);
 });

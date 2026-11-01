@@ -18,7 +18,7 @@ class ThreadsController extends Controller
     public function connect(Request $request): RedirectResponse
     {
         if (! $this->login->isConfigured()) {
-            return redirect('/settings/meta?threads=not_configured');
+            return redirect('/settings/accounts?threads=not_configured');
         }
 
         $state = Str::random(40);
@@ -31,10 +31,10 @@ class ThreadsController extends Controller
     {
         $expected = $request->session()->pull('threads_oauth_state');
         if (! $expected || ! hash_equals($expected, (string) $request->query('state'))) {
-            return redirect('/settings/meta?threads=invalid_state');
+            return redirect('/settings/accounts?threads=invalid_state');
         }
         if ($request->query('error') || ! $request->query('code')) {
-            return redirect('/settings/meta?threads=denied');
+            return redirect('/settings/accounts?threads=denied');
         }
 
         try {
@@ -43,9 +43,9 @@ class ThreadsController extends Controller
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('Threads connect failed', ['error' => $e->getMessage()]);
 
-            return redirect('/settings/meta?threads=error');
+            return redirect('/settings/accounts?threads=error');
         }
 
-        return redirect('/settings/meta?threads=connected');
+        return redirect('/settings/accounts?threads=connected');
     }
 }

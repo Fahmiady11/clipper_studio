@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\UploadToYouTubeJob;
 use App\Models\GeneratedClip;
 use App\Models\YoutubeAccount;
+use App\Services\ConnectedAccounts;
 use App\Services\FFmpegService;
 use App\Services\YouTubeService;
 use Illuminate\Http\JsonResponse;
@@ -29,7 +30,7 @@ class YouTubeController extends Controller
     public function connect(Request $request): RedirectResponse
     {
         if (! $this->youtube->isConfigured()) {
-            return redirect('/?youtube=not_configured');
+            return redirect('/settings/accounts?youtube=not_configured');
         }
 
         $state = Str::random(40);
@@ -42,10 +43,10 @@ class YouTubeController extends Controller
     {
         $expected = $request->session()->pull('youtube_oauth_state');
         if (! $expected || ! hash_equals($expected, (string) $request->query('state'))) {
-            return redirect('/?youtube=invalid_state');
+            return redirect('/settings/accounts?youtube=invalid_state');
         }
         if ($request->query('error') || ! $request->query('code')) {
-            return redirect('/?youtube=denied');
+            return redirect('/settings/accounts?youtube=denied');
         }
 
         try {
@@ -53,10 +54,10 @@ class YouTubeController extends Controller
         } catch (Throwable $e) {
             Log::channel('clipper_api')->error('YouTube connect failed', ['error' => $e->getMessage()]);
 
-            return redirect('/?youtube=error');
+            return redirect('/settings/accounts?youtube=error');
         }
 
-        return redirect('/?youtube=connected');
+        return redirect('/settings/accounts?youtube=connected');
     }
 
     public function accounts(): JsonResponse
@@ -66,6 +67,8 @@ class YouTubeController extends Controller
             'accounts' => YoutubeAccount::where('user_id', Auth::id())
                 ->orderBy('title')
                 ->get(['id', 'title', 'thumbnail_url']),
+            // Chosen on Settings → Akun terhubung; Studio and the calendar start from it
+            'default_id' => app(ConnectedAccounts::class)->default(Auth::id(), 'youtube')?->id,
         ]);
     }
 

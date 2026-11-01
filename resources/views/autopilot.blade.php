@@ -139,20 +139,12 @@
   .ap-pv-bg.gaussian::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); aspect-ratio: 16/9; background: linear-gradient(135deg, oklch(0.42 0.08 280), oklch(0.2 0.05 330)); outline: 1px solid rgba(255,255,255,.25); }
   .ap-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-  /* YouTube autopost */
-  .ap-yt { display: flex; flex-direction: column; gap: 16px; }
+  /* Where approving sends a clip: one line per platform, the active ones in full text colour */
+  .ap-dest { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .ap-dest li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .ap-dest li b { font-weight: 600; color: var(--text-muted); }
+  .ap-dest li.on, .ap-dest li.on b { color: var(--text); }
   .ap-yt-lead { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin: 0; max-width: 720px; }
-  .ap-yt-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .6fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
-  .ap-slots { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .ap-slot { display: inline-flex; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-  .ap-slot input { width: 104px; min-height: 42px; border: 0; background: transparent; color: var(--text); font-family: var(--font-mono); font-size: 14px; padding: 0 4px 0 12px; }
-  .ap-slot button { width: 36px; min-height: 42px; border: 0; background: none; color: var(--text-dim); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 0 10px 10px 0; }
-  .ap-slot button:hover { color: var(--danger); }
-  .ap-yt-tz { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
-  .ap-yt-tz b { font-family: var(--font-mono); font-weight: 500; color: var(--text-muted); }
-  .ap-yt-priv { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; border-left: 2px solid var(--warn); padding: 2px 0 2px 10px; margin: 0; }
-  .ap-yt-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .ap-yt-saved { font-size: 12.5px; color: var(--text-muted); }
 
   /* YouTube line on an approved card */
   .ap-ytline { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-muted); }
@@ -162,8 +154,6 @@
   .ap-ytline .ap-row { margin-top: 6px; gap: 14px; }
 
   @media (max-width: 820px) {
-    .ap-yt-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .ap-yt-grid > :last-child { grid-column: 1 / -1; }
     .ap-ed-body { grid-template-columns: minmax(0, 1fr); }
     .ap-ed-aside { position: static; order: -1; }
     .ap-ed-aside .phone-frame { max-width: 170px; }
@@ -188,8 +178,6 @@
     .ap-wrap { padding: 28px 16px 72px; }
     .ap-head h1 { font-size: 24px; }
     .ap-form-top .btn { width: 100%; justify-content: center; }
-    .ap-yt-grid { grid-template-columns: minmax(0, 1fr); }
-    .ap-yt-foot .btn { width: 100%; justify-content: center; }
   }
 </style>
 </head>
@@ -308,94 +296,31 @@
       </div>
     </section>
 
-    {{-- ── Autopost: one block per platform (YouTube Shorts, Facebook, Instagram, Threads) ── --}}
-    <template x-for="pf in AUTOPOST" :key="pf.id">
+    {{-- ── Where an approved clip goes: set on Settings → Akun terhubung, summarised here ── --}}
     <section class="ap-section">
       <div class="ap-section-head">
-        <h2 x-text="'Upload otomatis ke ' + pf.title"></h2>
-        <button class="tgl" :class="{ on: ap[pf.id].enabled }" @click="toggleAutopost(pf.id)" type="button" role="switch" :aria-checked="ap[pf.id].enabled ? 'true' : 'false'"
-                :aria-label="'Upload otomatis ke ' + pf.title"
-                :disabled="ap[pf.id].saving || !ap[pf.id].loaded" x-show="ap[pf.id].accounts.length > 0">
-          <span class="tgl-text" x-text="ap[pf.id].enabled ? 'Aktif' : 'Nonaktif'"></span><span class="tgl-track"></span>
-        </button>
+        <h2>Tujuan saat approve</h2>
+        <a class="ap-link" href="/settings/accounts">Atur di Akun terhubung</a>
       </div>
-
-      <div class="ap-card ap-yt">
-        <div class="ap-cap-muted" x-show="!ap[pf.id].loaded && !ap[pf.id].loadError" x-text="'Memuat pengaturan ' + pf.name + '…'"></div>
-        <div class="ap-error" x-show="ap[pf.id].loadError" x-text="ap[pf.id].loadError"></div>
-        <template x-if="ap[pf.id].loaded && !ap[pf.id].configured">
-          <p class="ap-yt-lead" x-text="'Isi kredensial ' + pf.name + ' di .env untuk bisa upload ke ' + pf.name + '.'"></p>
-        </template>
-        <template x-if="ap[pf.id].loaded && ap[pf.id].configured && ap[pf.id].accounts.length === 0">
-          <p class="ap-yt-lead"><span x-text="'Belum ada ' + pf.noun + ' ' + pf.name + '.'"></span> <a class="ap-link" :href="pf.connect" x-text="'Hubungkan ' + pf.noun"></a></p>
-        </template>
-
-        <template x-if="ap[pf.id].loaded && ap[pf.id].accounts.length > 0">
-          <div class="ap-yt">
-            <p class="ap-yt-lead">Clip yang kamu approve masuk ke <a class="ap-link" href="/calendar">kalender</a> di jam upload kosong berikutnya. Kalau jatah hari ini sudah penuh, clip pindah ke besok. Jadwalnya bisa digeser atau dibatalkan dari kalender.</p>
-            <div class="ap-yt-grid">
-              <label>
-                <span class="ap-label" x-text="pf.noun.charAt(0).toUpperCase() + pf.noun.slice(1)"></span>
-                <select class="select" x-model="ap[pf.id].form.account_id">
-                  <option value="" x-text="'Pilih ' + pf.noun"></option>
-                  <template x-for="a in ap[pf.id].accounts" :key="a.id">
-                    <option :value="String(a.id)" x-text="a.name || (pf.noun + ' #' + a.id)" :selected="ap[pf.id].form.account_id === String(a.id)"></option>
-                  </template>
-                </select>
-              </label>
-              <label>
-                <span class="ap-label">Maks per hari</span>
-                <div class="ap-suffix"><input class="field" type="number" min="1" max="10" x-model.number="ap[pf.id].form.max_per_day"><span>clip</span></div>
-              </label>
-              <div>
-                <span class="ap-label" :id="'ap-slots-' + pf.id">Jam upload</span>
-                <div class="ap-slots" role="group" :aria-labelledby="'ap-slots-' + pf.id">
-                  <template x-for="(t, i) in ap[pf.id].form.slot_times" :key="i">
-                    <span class="ap-slot">
-                      <input type="time" x-model="ap[pf.id].form.slot_times[i]" :aria-label="'Jam upload ' + (i + 1)">
-                      <button type="button" @click="ap[pf.id].form.slot_times.splice(i, 1)" x-show="ap[pf.id].form.slot_times.length > 1" :aria-label="'Hapus jam ' + t">×</button>
-                    </span>
-                  </template>
-                  <button class="btn btn-ghost ap-btn" type="button" @click="addSlot(pf.id)" x-show="ap[pf.id].form.slot_times.length < 10">Tambah jam</button>
-                </div>
-                <div class="ap-yt-tz">Zona waktu <b x-text="ap[pf.id].form.timezone"></b>, ikut browser ini.</div>
-              </div>
-            </div>
-            <p class="ap-yt-priv" x-text="pf.note"></p>
-            <div class="ap-error" x-show="ap[pf.id].error" x-text="ap[pf.id].error"></div>
-            <div class="ap-yt-foot">
-              <button class="btn ap-btn" type="button" @click="saveAutopost(pf.id)" :disabled="ap[pf.id].saving" x-text="ap[pf.id].saving ? 'Menyimpan…' : 'Simpan'"></button>
-              <span class="ap-yt-saved" x-show="ap[pf.id].savedMsg" x-text="ap[pf.id].savedMsg" role="status"></span>
-            </div>
-          </div>
-        </template>
+      <div class="ap-card">
+        <div class="ap-cap-muted" x-show="!destLoaded && !destError">Memuat tujuan…</div>
+        <div class="ap-error" x-show="destError" x-text="destError"></div>
+        <ul class="ap-dest" x-show="destLoaded">
+          <template x-for="d in destinations" :key="d.id">
+            <li :class="{ on: d.on }">
+              <b x-text="d.name"></b>
+              <span x-text="d.text"></span>
+            </li>
+          </template>
+        </ul>
+        <p class="ap-yt-lead" style="margin-top:10px" x-show="destLoaded && !anyDestination()">Belum ada tujuan aktif. Nyalakan TikTok atau upload otomatis di <a class="ap-link" href="/settings/accounts">Akun terhubung</a>, lalu approve clip.</p>
       </div>
     </section>
-    </template>
 
     {{-- ── Review queue ────────────────────────────────────────── --}}
     <section class="ap-section" x-ref="review">
       <div class="ap-section-head">
         <h2>Antrian review <span class="ap-count" x-text="pendingCount + ' menunggu'"></span></h2>
-        <div class="ap-note">
-          <template x-if="!tiktokConfigured">
-            <span>Isi kredensial TikTok di <code>.env</code> untuk bisa approve ke TikTok.</span>
-          </template>
-          <template x-if="tiktokConfigured && accounts.length === 0">
-            <span>Belum ada akun TikTok. <a href="/tiktok/connect">Hubungkan akun</a></span>
-          </template>
-          <template x-if="accounts.length > 0">
-            <div class="ap-row">
-              <span>Kirim ke</span>
-              <div class="seg">
-                <template x-for="a in accounts" :key="a.id">
-                  <button :class="{ on: accountId === a.id }" @click="accountId = a.id" type="button" x-text="a.display_name || ('Akun #' + a.id)"></button>
-                </template>
-                <button x-show="anyAutopostOn()" :class="{ on: accountId === null }" @click="accountId = null" type="button">Tanpa TikTok</button>
-              </div>
-            </div>
-          </template>
-        </div>
       </div>
 
       <div class="ap-filter">
@@ -483,7 +408,7 @@
 
             <div class="ap-actions" x-show="c.review_status === 'pending'">
               <button class="btn ap-btn" type="button" @click="approve(c)"
-                      :disabled="c.status !== 'done' || c.busy || (!accountId && !anyAutopostOn())" x-text="approveLabel()"></button>
+                      :disabled="c.status !== 'done' || c.busy || !anyDestination()" x-text="approveLabel()"></button>
               <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
             </div>
             <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': c.tiktok_status === 'failed' }">
@@ -826,12 +751,6 @@ const GAMEPLAY_READY = @json(\App\Services\GameplayFootage::for(auth()->id())->a
 
 const LAYOUT_NAMES = { gaussian: 'Gaussian', gameplay: 'Split gameplay' };
 
-// Autopost settings of one platform, as loaded from /api/autopilot/{platform}
-function autopostState() {
-  return { loaded: false, loadError: '', configured: false, accounts: [], enabled: false, saving: false, error: '', savedMsg: '',
-           form: { account_id: '', max_per_day: 3, slot_times: ['09:00', '15:00', '20:00'], timezone: 'Asia/Jakarta' } };
-}
-
 function autopilot() {
   const headers = () => ({
     'Content-Type': 'application/json',
@@ -846,24 +765,21 @@ function autopilot() {
   };
 
   return {
-    sources: [], clips: [], accounts: [], accountId: null, tiktokConfigured: false,
+    sources: [], clips: [],
+    destinations: [], destLoaded: false, destError: '',
     form: { type: 'channel', value: '', interval_hours: 6, max_per_run: 1, min_minutes: 5, max_minutes: 120, settings: null },
     formError: null, timer: null, copied: '', captionState: {}, captionBusy: false,
     reviewPage: 1, reviewLastPage: 1, reviewTotal: 0, pendingCount: 0,
     reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
     performance: { clip_count: 0, total_views: 0, total_likes: 0, best_clip: null, top_clips: [] },
     cleaning: false, cleanMsg: '',
+    // Card lines per calendar platform; noun goes in "Hubungkan ulang …"
     AUTOPOST: [
-      { id: 'youtube', name: 'YouTube', title: 'YouTube Shorts', noun: 'channel', connect: '/youtube/connect',
-        note: 'Video dikirim sebagai publik. Selama app ini belum lolos audit YouTube API, YouTube menguncinya jadi privat. Ubah ke publik dari YouTube Studio.' },
-      { id: 'facebook', name: 'Facebook', title: 'Reels Facebook', noun: 'Page', connect: '/settings/meta',
-        note: 'Reels di Page selalu publik. Facebook hanya menerima video vertikal 3 sampai 90 detik; clip yang lebih panjang tetap disetujui, alasannya tampil di kartunya.' },
-      { id: 'instagram', name: 'Instagram', title: 'Reels Instagram', noun: 'akun', connect: '/settings/meta',
-        note: 'Reels tampil di tab Reels dan feed. Instagram mengunduh video dari server ini, jadi APP_URL harus alamat HTTPS publik. Instagram membatasi 50 posting lewat API per 24 jam.' },
-      { id: 'threads', name: 'Threads', title: 'Threads', noun: 'profil', connect: '/settings/meta',
-        note: 'Teksnya caption plus satu hashtag, maksimal 500 karakter. Video maksimal 5 menit dan diunduh Threads lewat APP_URL yang sama.' },
+      { id: 'youtube', name: 'YouTube', noun: 'channel' },
+      { id: 'facebook', name: 'Facebook', noun: 'Page' },
+      { id: 'instagram', name: 'Instagram', noun: 'akun' },
+      { id: 'threads', name: 'Threads', noun: 'profil' },
     ],
-    ap: { youtube: autopostState(), facebook: autopostState(), instagram: autopostState(), threads: autopostState() },
     REVIEW_FILTERS: [
       { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
       { id: 'approved', label: 'Disetujui' }, { id: 'rejected', label: 'Ditolak' },
@@ -881,7 +797,7 @@ function autopilot() {
 
     async init() {
       document.fonts?.ready.then(() => this.fontsTick++);
-      await Promise.all([this.loadSources(), this.loadClips(), this.loadAccounts(), this.loadDefaults(), ...['youtube', 'facebook', 'instagram', 'threads'].map(p => this.loadAutopost(p)),
+      await Promise.all([this.loadSources(), this.loadClips(), this.loadDestinations(), this.loadDefaults(),
         api('/api/music').then(d => { this.musicTotal = d.total; }).catch(() => {})]);
       // Rendering and uploads progress in the background; keep the page fresh
       this.timer = setInterval(() => { this.loadClips(); this.loadSources(); }, 10000);
@@ -1013,13 +929,23 @@ function autopilot() {
       this.copied = key;
       setTimeout(() => { if (this.copied === key) this.copied = ''; }, 1200);
     },
-    async loadAccounts() {
+    // What approving does now, per platform, from Settings → Akun terhubung
+    async loadDestinations() {
       try {
-        const data = await api('/api/tiktok/accounts');
-        this.tiktokConfigured = data.configured;
-        this.accounts = data.accounts || [];
-        this.accountId = this.accounts[0]?.id ?? null;
-      } catch (e) { console.error(e); }
+        const d = await api('/api/accounts');
+        this.destinations = d.platforms.map(p => {
+          const account = p.accounts.find(a => a.id === p.default_id);
+          const on = p.autopost.enabled && !!account;
+          let text = !p.configured ? 'belum diatur di server'
+            : !account ? 'belum terhubung'
+            : !p.autopost.enabled ? 'nonaktif'
+            : p.id === 'tiktok' ? 'langsung ke inbox ' + account.name
+            : account.name + ', maks ' + p.autopost.max_per_day + ' per hari pukul ' + p.autopost.slot_times.join(', ');
+          if (account?.reconnect) text += ' (perlu dihubungkan ulang)';
+          return { id: p.id, name: p.name, on, text };
+        });
+        this.destLoaded = true;
+      } catch (e) { this.destError = 'Tujuan gagal dimuat: ' + e.message; }
     },
     async addSource() {
       this.formError = null;
@@ -1054,7 +980,7 @@ function autopilot() {
       c.actionError = null;
       c.busy = true;
       try {
-        await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST', body: JSON.stringify({ account_id: this.accountId }) });
+        await api(`/api/autopilot/review/${c.id}/approve`, { method: 'POST' });
         await this.loadClips();
       } catch (e) { c.actionError = e.message; }
       finally { c.busy = false; }
@@ -1078,7 +1004,7 @@ function autopilot() {
       finally { c.busy = false; }
     },
     approveLabel() {
-      const to = [this.accountId ? 'TikTok' : null, ...this.AUTOPOST.filter(p => this.autopostOn(p.id)).map(p => p.name)].filter(Boolean);
+      const to = this.destinations.filter(d => d.on).map(d => d.name);
       return to.length ? 'Approve → ' + to.join(' + ') : 'Approve';
     },
     // Nothing went out yet: TikTok untouched and every calendar post still waiting
@@ -1087,49 +1013,9 @@ function autopilot() {
         && this.AUTOPOST.every(p => !c[p.id] || ['scheduled', 'failed', 'skipped'].includes(c[p.id].status));
     },
 
-    // ── Autopost (YouTube, Facebook, Instagram, Threads) ─────────────────────────────
-    autopostOn(platform) { return this.ap[platform].loaded && this.ap[platform].enabled; },
-    anyAutopostOn() { return this.AUTOPOST.some(p => this.autopostOn(p.id)); },
-    async loadAutopost(platform) {
-      const st = this.ap[platform];
-      try {
-        const d = await api('/api/autopilot/' + platform);
-        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        Object.assign(st, { loaded: true, loadError: '', configured: d.configured, accounts: d.accounts, enabled: d.enabled });
-        st.form = {
-          account_id: String(d.account_id ?? (d.accounts.length === 1 ? d.accounts[0].id : '')),
-          max_per_day: d.max_per_day, slot_times: [...d.slot_times],
-          // Slots are wall-clock times: follow the browser until the user has saved once
-          timezone: d.saved ? d.timezone : (browserTz || d.timezone),
-        };
-        if (d.enabled && !d.account_id) st.error = 'Akun yang dipilih sudah diputus. Pilih yang lain, lalu simpan.';
-      } catch (e) { st.loadError = 'Pengaturan ' + this.platformInfo(platform).name + ' gagal dimuat: ' + e.message; }
-    },
+    // ── Autopost lines on the cards (YouTube, Facebook, Instagram, Threads) ─────
+    anyDestination() { return this.destinations.some(d => d.on); },
     platformInfo(platform) { return this.AUTOPOST.find(p => p.id === platform); },
-    addSlot(platform) {
-      const slots = this.ap[platform].form.slot_times;
-      const h = (parseInt(slots[slots.length - 1] || '09:00', 10) + 3) % 24;
-      slots.push(String(h).padStart(2, '0') + ':00');
-    },
-    async saveAutopost(platform, enabled = this.ap[platform].enabled) {
-      const st = this.ap[platform], info = this.platformInfo(platform), f = st.form;
-      st.error = ''; st.savedMsg = '';
-      if (enabled && !f.account_id) { st.error = 'Pilih ' + info.noun + ' ' + info.name + ' dulu.'; return false; }
-      if (!(f.max_per_day >= 1 && f.max_per_day <= 10)) { st.error = 'Maks per hari antara 1 dan 10 clip.'; return false; }
-      if (f.slot_times.some(t => !t)) { st.error = 'Ada jam upload yang masih kosong.'; return false; }
-      st.saving = true;
-      try {
-        const body = { ...f, enabled, account_id: f.account_id ? Number(f.account_id) : null };
-        const d = await api('/api/autopilot/' + platform, { method: 'PUT', body: JSON.stringify(body) });
-        st.enabled = d.enabled;
-        st.form.slot_times = [...d.slot_times];
-        st.savedMsg = d.enabled ? 'Tersimpan. Clip yang di-approve dijadwalkan ke ' + info.name + '.' : 'Tersimpan. Upload ' + info.name + ' otomatis mati.';
-        if (!this.anyAutopostOn() && this.accountId === null) this.accountId = this.accounts[0]?.id ?? null;
-        return true;
-      } catch (e) { st.error = e.message; return false; }
-      finally { st.saving = false; }
-    },
-    toggleAutopost(platform) { this.saveAutopost(platform, !this.ap[platform].enabled); },
     autopostFailed(c, platform) {
       const y = c[platform];
       return !!y && (['failed', 'skipped'].includes(y.status) || y.delivery === 'failed');

@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\AutopostSetting;
 use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
 use App\Models\MetaTarget;
+use App\Models\PlatformSetting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -34,9 +34,9 @@ abstract class MetaAutopost implements AutopostPlatform
             ->map(fn (MetaTarget $t) => ['id' => $t->id, 'name' => $t->username ? "{$t->name} (@{$t->username})" : $t->name]);
     }
 
-    public function account(AutopostSetting $settings): ?Model
+    public function account(PlatformSetting $settings): ?Model
     {
-        return $settings->account_id ? MetaTarget::ownedBy($settings->user_id, $this->platform())->find($settings->account_id) : null;
+        return app(ConnectedAccounts::class)->default($settings->user_id, $this->platform());
     }
 
     public function refusal(GeneratedClip $clip): ?string

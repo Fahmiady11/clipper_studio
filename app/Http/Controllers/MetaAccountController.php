@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MetaAccount;
 use App\Models\MetaTarget;
+use App\Services\ConnectedAccounts;
 use App\Services\MetaLogin;
 use App\Services\PublicMediaUrl;
 use App\Services\ThreadsLogin;
@@ -11,18 +12,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Illuminate\View\View;
 use Throwable;
 
 /** Connected Meta logins and what is published to under them: Pages, Instagram accounts, Threads profiles. */
 class MetaAccountController extends Controller
 {
     public function __construct(private MetaLogin $login, private ThreadsLogin $threads, private PublicMediaUrl $media) {}
-
-    public function page(): View
-    {
-        return view('settings.meta');
-    }
 
     public function index(): JsonResponse
     {
@@ -104,6 +99,7 @@ class MetaAccountController extends Controller
             'configured' => $platform === 'threads' ? $this->threads->isConfigured() : $this->login->isConfigured(),
             'blocked' => $platform === 'facebook' ? null : $this->media->problem(),
             'accounts' => MetaTarget::ownedBy(Auth::id(), $platform)->orderBy('name')->get(['id', 'name', 'username', 'picture_url']),
+            'default_id' => app(ConnectedAccounts::class)->default(Auth::id(), $platform)?->id,
         ]);
     }
 

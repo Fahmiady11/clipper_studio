@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\AutopostSetting;
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -19,7 +19,7 @@ interface AutopostPlatform
     public function accounts(int $userId): Collection;
 
     /** The account the settings point at, null when none was picked or it was disconnected. */
-    public function account(AutopostSetting $settings): ?Model;
+    public function account(PlatformSetting $settings): ?Model;
 
     public function missingAccount(): string;
 

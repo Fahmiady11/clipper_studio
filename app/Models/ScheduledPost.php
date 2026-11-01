@@ -2,21 +2,13 @@
 
 namespace App\Models;
 
+use App\Services\ConnectedAccounts;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ScheduledPost extends Model
 {
     public const PLATFORMS = ['tiktok', 'youtube', 'facebook', 'instagram', 'threads'];
-
-    // Where a user whose token expired or was revoked connects again
-    private const CONNECT_URLS = [
-        'tiktok' => '/tiktok/connect',
-        'youtube' => '/youtube/connect',
-        'facebook' => '/facebook/connect',
-        'instagram' => '/facebook/connect', // Instagram rides on the Facebook login
-        'threads' => '/threads/connect',
-    ];
 
     // scheduled: waiting for its time. publishing: claimed by the scheduler. queued: handed to the
     // upload job, whose result lives on the clip. failed: could not be handed over (see error).
@@ -55,9 +47,9 @@ class ScheduledPost extends Model
         return $this->status === self::STATUS_SCHEDULED;
     }
 
-    /** The connect link when the error is a lost session ("Hubungkan ulang …"), else null. */
+    /** Settings → Akun terhubung at this platform when the error is a lost session ("Hubungkan ulang …"), else null. */
     public static function reconnectUrl(string $platform, ?string $error): ?string
     {
-        return $error && stripos($error, 'hubungkan ulang') !== false ? (self::CONNECT_URLS[$platform] ?? null) : null;
+        return $error && stripos($error, 'hubungkan ulang') !== false ? ConnectedAccounts::settingsUrl($platform) : null;
     }
 }

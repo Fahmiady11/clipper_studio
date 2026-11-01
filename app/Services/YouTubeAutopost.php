@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Http\Controllers\YouTubeController;
-use App\Models\AutopostSetting;
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use App\Models\YoutubeAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -32,14 +32,14 @@ class YouTubeAutopost implements AutopostPlatform
             ->map(fn (YoutubeAccount $a) => ['id' => $a->id, 'name' => $a->title]);
     }
 
-    public function account(AutopostSetting $settings): ?Model
+    public function account(PlatformSetting $settings): ?Model
     {
-        return $settings->account_id ? YoutubeAccount::where('user_id', $settings->user_id)->find($settings->account_id) : null;
+        return app(ConnectedAccounts::class)->default($settings->user_id, 'youtube');
     }
 
     public function missingAccount(): string
     {
-        return 'Channel YouTube untuk autopilot belum dipilih atau sudah diputus. Pilih channel di pengaturan YouTube.';
+        return 'Belum ada channel YouTube yang terhubung. Hubungkan di Akun terhubung.';
     }
 
     public function refusal(GeneratedClip $clip): ?string

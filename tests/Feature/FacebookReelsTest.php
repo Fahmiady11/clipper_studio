@@ -4,12 +4,12 @@ namespace Tests\Feature;
 
 use App\Jobs\PublishToMetaJob;
 use App\Jobs\UploadToYouTubeJob;
-use App\Models\AutopostSetting;
 use App\Models\ClipProject;
 use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
 use App\Models\MetaAccount;
 use App\Models\MetaTarget;
+use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
 use App\Models\User;
 use App\Models\VideoSource;
@@ -220,11 +220,11 @@ class FacebookReelsTest extends TestCase
 
         $this->actingAs($user)->getJson('/api/schedule?from=2026-11-01&to=2026-12-01')->assertOk()
             ->assertJsonPath('posts.0.delivery', 'failed')
-            ->assertJsonPath('posts.0.reconnect_url', '/facebook/connect')
+            ->assertJsonPath('posts.0.reconnect_url', '/settings/accounts?reconnect=facebook')
             ->assertJsonPath('posts.0.error', $pub->error);
         $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
             ->assertJsonPath('data.0.facebook.delivery', 'failed')
-            ->assertJsonPath('data.0.facebook.reconnect_url', '/facebook/connect');
+            ->assertJsonPath('data.0.facebook.reconnect_url', '/settings/accounts?reconnect=facebook');
     }
 
     public function test_job_refuses_another_users_page_and_a_missing_file(): void
@@ -316,9 +316,9 @@ class FacebookReelsTest extends TestCase
 
     // ── autopilot ───────────────────────────────────────────────────────
 
-    private function autopost(User $user, string $platform, int $accountId, array $attrs = []): AutopostSetting
+    private function autopost(User $user, string $platform, int $accountId, array $attrs = []): PlatformSetting
     {
-        return AutopostSetting::create($attrs + [
+        return PlatformSetting::create($attrs + [
             'user_id' => $user->id, 'platform' => $platform, 'account_id' => $accountId, 'enabled' => true,
             'max_per_day' => 3, 'slot_times' => ['09:00', '15:00', '20:00'], 'timezone' => 'Asia/Jakarta',
         ]);
@@ -336,17 +336,18 @@ class FacebookReelsTest extends TestCase
         $this->actingAs($user)->putJson('/api/autopilot/facebook', [
             'enabled' => true, 'account_id' => $page->id, 'max_per_day' => 2, 'slot_times' => ['21:00', '07:00'], 'timezone' => 'Asia/Jakarta',
         ])->assertOk()->assertJson(['enabled' => true, 'account_id' => $page->id, 'slot_times' => ['07:00', '21:00'], 'saved' => true]);
-        $this->assertSame(['facebook'], AutopostSetting::pluck('platform')->all());
+        $this->assertSame(['facebook'], PlatformSetting::pluck('platform')->all());
 
+        // Saving without account_id keeps the default Page
         $this->actingAs($user)->putJson('/api/autopilot/facebook', [
-            'enabled' => true, 'account_id' => null, 'max_per_day' => 2, 'slot_times' => ['07:00'], 'timezone' => 'Asia/Jakarta',
-        ])->assertUnprocessable()->assertJsonPath('errors.account_id.0', 'Pilih Page Facebook dulu.');
+            'enabled' => true, 'max_per_day' => 2, 'slot_times' => ['07:00'], 'timezone' => 'Asia/Jakarta',
+        ])->assertOk()->assertJson(['account_id' => $page->id]);
 
         $foreign = $this->page(User::factory()->create(), ['external_id' => '999']);
         $this->actingAs($user)->putJson('/api/autopilot/facebook', [
             'enabled' => true, 'account_id' => $foreign->id, 'max_per_day' => 2, 'slot_times' => ['07:00'], 'timezone' => 'Asia/Jakarta',
         ])->assertNotFound();
-        $this->actingAs($user)->getJson('/api/autopilot/tiktok')->assertNotFound();
+        $this->actingAs($user)->getJson('/api/autopilot/linkedin')->assertNotFound();
     }
 
     public function test_approve_books_youtube_and_facebook_slots_independently(): void
@@ -405,7 +406,7 @@ class FacebookReelsTest extends TestCase
         // Page disconnected after the settings were saved
         MetaTarget::query()->delete();
         $this->actingAs($user)->postJson('/api/autopilot/review/'.$this->clip($user, [], review: true)->id.'/approve')->assertOk()
-            ->assertJsonPath('facebook.error', fn ($m) => str_contains($m, 'Page Facebook untuk autopilot'));
+            ->assertJsonPath('facebook.error', fn ($m) => str_contains($m, 'Belum ada Page Facebook yang terhubung'));
     }
 
     // ── signed media URL ────────────────────────────────────────────────

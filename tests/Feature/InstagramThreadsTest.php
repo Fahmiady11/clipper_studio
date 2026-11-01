@@ -3,12 +3,12 @@
 namespace Tests\Feature;
 
 use App\Jobs\PublishToMetaJob;
-use App\Models\AutopostSetting;
 use App\Models\ClipProject;
 use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
 use App\Models\MetaAccount;
 use App\Models\MetaTarget;
+use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
 use App\Models\User;
 use App\Models\VideoSource;
@@ -182,8 +182,8 @@ class InstagramThreadsTest extends TestCase
             'graph.threads.com/access_token*' => Http::response(['access_token' => 'long', 'token_type' => 'bearer', 'expires_in' => 5183944]),
             'graph.threads.com/v1.0/me*' => Http::response(['id' => '5005', 'username' => 'tokorina', 'name' => 'Rina', 'threads_profile_picture_url' => 'https://cdn.test/th.jpg']),
         ]);
-        $this->actingAs($user)->withSession(['threads_oauth_state' => 's'])->get('/threads/callback?state=nope&code=c')->assertRedirect('/settings/meta?threads=invalid_state');
-        $this->actingAs($user)->withSession(['threads_oauth_state' => 's'])->get('/threads/callback?state=s&code=the-code')->assertRedirect('/settings/meta?threads=connected');
+        $this->actingAs($user)->withSession(['threads_oauth_state' => 's'])->get('/threads/callback?state=nope&code=c')->assertRedirect('/settings/accounts?threads=invalid_state');
+        $this->actingAs($user)->withSession(['threads_oauth_state' => 's'])->get('/threads/callback?state=s&code=the-code')->assertRedirect('/settings/accounts?threads=connected');
 
         $account = MetaAccount::sole();
         $target = MetaTarget::sole();
@@ -380,9 +380,9 @@ class InstagramThreadsTest extends TestCase
         $this->runJob(new PublishToMetaJob($clip->id, 'threads', $th->id, 'x'));
         $this->assertStringContainsString('Hubungkan ulang Threads', ClipPublication::sole()->error);
         $this->actingAs($user)->getJson('/api/schedule?from=2026-11-01&to=2026-12-01')->assertOk()
-            ->assertJsonPath('posts.0.delivery', 'failed')->assertJsonPath('posts.0.reconnect_url', '/threads/connect');
+            ->assertJsonPath('posts.0.delivery', 'failed')->assertJsonPath('posts.0.reconnect_url', '/settings/accounts?reconnect=threads');
         $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()
-            ->assertJsonPath('data.0.threads.reconnect_url', '/threads/connect');
+            ->assertJsonPath('data.0.threads.reconnect_url', '/settings/accounts?reconnect=threads');
 
         $answer = Http::response($this->quota(250, 250));
         $this->runJob(new PublishToMetaJob($clip->id, 'threads', $th->id, 'x'));
@@ -445,7 +445,7 @@ class InstagramThreadsTest extends TestCase
     {
         config(['app.url' => 'http://localhost']);
         $user = User::factory()->create();
-        AutopostSetting::create([
+        PlatformSetting::create([
             'user_id' => $user->id, 'platform' => 'threads', 'account_id' => $this->threads($user)->id, 'enabled' => true,
             'max_per_day' => 3, 'slot_times' => ['09:00'], 'timezone' => 'Asia/Jakarta',
         ]);

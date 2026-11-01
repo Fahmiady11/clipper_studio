@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\AutopostSetting;
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +47,7 @@ class Autopost
 
     public function isOn(int $userId): bool
     {
-        return AutopostSetting::where('user_id', $userId)->where('enabled', true)
+        return PlatformSetting::where('user_id', $userId)->where('enabled', true)
             ->whereIn('platform', array_keys($this->platforms()))->exists();
     }
 
@@ -59,7 +59,7 @@ class Autopost
      */
     public function scheduleAll(GeneratedClip $clip): array
     {
-        $enabled = AutopostSetting::where('user_id', $clip->clipProject->user_id)->where('enabled', true)
+        $enabled = PlatformSetting::where('user_id', $clip->clipProject->user_id)->where('enabled', true)
             ->whereIn('platform', array_keys($this->platforms()))->get();
 
         $results = [];
@@ -83,7 +83,7 @@ class Autopost
      *
      * @throws RuntimeException with a message for the user when the clip can't go
      */
-    public function schedule(GeneratedClip $clip, AutopostSetting $settings): ScheduledPost
+    public function schedule(GeneratedClip $clip, PlatformSetting $settings): ScheduledPost
     {
         $platform = $this->platform($settings->platform);
         $account = $platform->account($settings) ?? throw new RuntimeException($platform->missingAccount());
@@ -104,7 +104,7 @@ class Autopost
 
         return DB::transaction(function () use ($settings, $account, $clip, $options) {
             // One approval at a time per user and platform, so two clips never take the same slot
-            AutopostSetting::whereKey($settings->id)->lockForUpdate()->first();
+            PlatformSetting::whereKey($settings->id)->lockForUpdate()->first();
 
             return ScheduledPost::create([
                 'user_id' => $settings->user_id,
@@ -132,7 +132,7 @@ class Autopost
      * The earliest slot time, in the user's timezone, on a day still under the
      * daily cap and not already taken on that account. Calendar posts count too.
      */
-    public function nextSlot(AutopostSetting $settings, int $accountId): CarbonImmutable
+    public function nextSlot(PlatformSetting $settings, int $accountId): CarbonImmutable
     {
         $tz = $settings->timezone;
         $slots = collect($settings->slot_times)->unique()->sort()->values();

@@ -92,23 +92,19 @@
     <div class="res-sec">
       <div class="res-sec-head">
         <span class="res-sec-title">Upload ke TikTok</span>
-        <a class="res-edit" href="/tiktok/connect" x-show="tiktokConfigured && tiktokAccounts.length > 0">+ Akun lain</a>
+        <a class="res-edit" href="/settings/accounts#tiktok" x-show="tiktokAccounts.length > 0">Ganti akun</a>
       </div>
 
       <div x-show="!tiktokConfigured" style="padding:8px 0;color:var(--text-dim);font-size:13px">
         Isi <code>TIKTOK_CLIENT_KEY</code>, <code>TIKTOK_CLIENT_SECRET</code>, dan <code>TIKTOK_REDIRECT_URI</code> di <code>.env</code> untuk mengaktifkan upload.
       </div>
 
-      <div x-show="tiktokConfigured && tiktokAccounts.length === 0" style="padding:8px 0">
-        <a class="btn btn-secondary" href="/tiktok/connect">Hubungkan akun TikTok</a>
+      <div x-show="tiktokConfigured && tiktokAccounts.length === 0" style="padding:8px 0;font-size:13px;color:var(--text-muted)">
+        Belum ada akun TikTok. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Hubungkan di Akun terhubung</a>.
       </div>
 
       <div x-show="tiktokConfigured && tiktokAccounts.length > 0">
-        <div class="seg" style="flex-wrap:wrap;margin-bottom:12px">
-          <template x-for="a in tiktokAccounts" :key="a.id">
-            <button :class="{ on: tiktokAccountId === a.id }" @click="tiktokAccountId = a.id" type="button" x-text="a.display_name || ('Akun #' + a.id)"></button>
-          </template>
-        </div>
+        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">Ke <b style="color:var(--text)" x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b></div>
         <div class="seg" style="margin-bottom:12px">
           <button :class="{ on: tiktokMode === 'inbox' }"  @click="tiktokMode = 'inbox'"  type="button">Draft (inbox)</button>
           <button :class="{ on: tiktokMode === 'direct' }" @click="tiktokMode = 'direct'" type="button">Posting langsung</button>
@@ -191,23 +187,19 @@
     <div class="res-sec">
       <div class="res-sec-head">
         <span class="res-sec-title">Upload ke YouTube Shorts</span>
-        <a class="res-edit" href="/youtube/connect" x-show="ytConfigured && ytAccounts.length > 0">+ Channel lain</a>
+        <a class="res-edit" href="/settings/accounts#youtube" x-show="ytAccounts.length > 0">Ganti channel</a>
       </div>
 
       <div x-show="!ytConfigured" style="padding:8px 0;color:var(--text-dim);font-size:13px">
         Isi <code>YOUTUBE_CLIENT_ID</code>, <code>YOUTUBE_CLIENT_SECRET</code>, dan <code>YOUTUBE_REDIRECT_URI</code> di <code>.env</code> untuk mengaktifkan upload.
       </div>
 
-      <div x-show="ytConfigured && ytAccounts.length === 0" style="padding:8px 0">
-        <a class="btn btn-secondary" href="/youtube/connect">Hubungkan channel YouTube</a>
+      <div x-show="ytConfigured && ytAccounts.length === 0" style="padding:8px 0;font-size:13px;color:var(--text-muted)">
+        Belum ada channel YouTube. <a href="/settings/accounts#youtube" style="color:var(--accent-ink)">Hubungkan di Akun terhubung</a>.
       </div>
 
       <div x-show="ytConfigured && ytAccounts.length > 0">
-        <div class="seg" style="flex-wrap:wrap;margin-bottom:12px">
-          <template x-for="a in ytAccounts" :key="a.id">
-            <button :class="{ on: ytAccountId === a.id }" @click="ytAccountId = a.id" type="button" x-text="a.title || ('Channel #' + a.id)"></button>
-          </template>
-        </div>
+        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">Ke <b style="color:var(--text)" x-text="accountLabel(ytAccounts, ytAccountId)"></b></div>
 
         <div class="fblock-title" style="margin-bottom:6px">Judul <span style="color:var(--text-dim);font-weight:400" x-text="`(${ytTitle.length}/100)`"></span></div>
         <input class="field" maxlength="100" x-model="ytTitle">
@@ -300,16 +292,10 @@
           {{-- Semua versi sudah jadi: pilih akun lalu jadwalkan --}}
           <div x-show="hookTest.status === 'draft' && hookTestAllDone" style="margin-top:16px">
             <div x-show="!tiktokAccounts.length">
-              <p class="ht-note">Hubungkan akun TikTok dulu untuk memposting dan membaca views-nya.</p>
-              <a class="btn btn-secondary" href="/tiktok/connect">Hubungkan akun TikTok</a>
+              <p class="ht-note">Hubungkan akun TikTok dulu untuk memposting dan membaca views-nya. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Buka Akun terhubung</a>.</p>
             </div>
             <div x-show="tiktokAccounts.length">
-              <div class="fblock-title" style="margin-bottom:6px">Akun TikTok untuk semua versi</div>
-              <div class="seg" role="group" aria-label="Akun TikTok" style="flex-wrap:wrap;margin-bottom:12px">
-                <template x-for="a in tiktokAccounts" :key="a.id">
-                  <button type="button" :class="{ on: tiktokAccountId === a.id }" :aria-pressed="tiktokAccountId === a.id" @click="tiktokAccountId = a.id" x-text="a.display_name || ('Akun #' + a.id)"></button>
-                </template>
-              </div>
+              <p class="ht-note" style="margin:0 0 12px">Semua versi diposting ke <b x-text="accountLabel(tiktokAccounts, tiktokAccountId)"></b>, akun TikTok utama. <a href="/settings/accounts#tiktok" style="color:var(--accent-ink)">Ganti</a></p>
               <div class="fblock-title" style="margin-bottom:6px">Jarak antar posting</div>
               <div class="seg" role="group" aria-label="Jarak antar posting" style="margin-bottom:10px">
                 <template x-for="h in [12, 24, 48]" :key="h">
