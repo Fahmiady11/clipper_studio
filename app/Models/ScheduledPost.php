@@ -7,10 +7,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ScheduledPost extends Model
 {
-    public const PLATFORMS = ['tiktok', 'youtube', 'facebook'];
+    public const PLATFORMS = ['tiktok', 'youtube', 'facebook', 'instagram', 'threads'];
 
     // Where a user whose token expired or was revoked connects again
-    private const CONNECT_URLS = ['tiktok' => '/tiktok/connect', 'youtube' => '/youtube/connect', 'facebook' => '/facebook/connect'];
+    private const CONNECT_URLS = [
+        'tiktok' => '/tiktok/connect',
+        'youtube' => '/youtube/connect',
+        'facebook' => '/facebook/connect',
+        'instagram' => '/facebook/connect', // Instagram rides on the Facebook login
+        'threads' => '/threads/connect',
+    ];
 
     // scheduled: waiting for its time. publishing: claimed by the scheduler. queued: handed to the
     // upload job, whose result lives on the clip. failed: could not be handed over (see error).

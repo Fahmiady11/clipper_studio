@@ -9,7 +9,7 @@ use RuntimeException;
 
 /**
  * Calls to the Facebook Graph API with the app's credentials, shared by
- * Facebook Pages now and Instagram (same graph.facebook.com) later. Errors
+ * Facebook Pages and Instagram (same graph.facebook.com, Page token). Errors
  * come back as RuntimeException with an Indonesian message; an expired or
  * revoked token says "Hubungkan ulang", which the UI turns into a reconnect link.
  */
@@ -39,14 +39,15 @@ class MetaGraph
         return self::HOST.'/'.$this->version().'/'.ltrim($path, '/');
     }
 
-    public function get(string $path, string $token, array $query = [], string $what = 'request'): array
+    /** $service names the platform in error messages: "Instagram buat container gagal (400): …" */
+    public function get(string $path, string $token, array $query = [], string $what = 'request', string $service = 'Facebook'): array
     {
-        return $this->send('get', $path, $token, $query, $what);
+        return $this->send('get', $path, $token, $query, $what, $service);
     }
 
-    public function post(string $path, string $token, array $params = [], string $what = 'request'): array
+    public function post(string $path, string $token, array $params = [], string $what = 'request', string $service = 'Facebook'): array
     {
-        return $this->send('post', $path, $token, $params, $what);
+        return $this->send('post', $path, $token, $params, $what, $service);
     }
 
     /** OAuth token endpoint: code exchange and the long-lived token swap. */
@@ -71,7 +72,7 @@ class MetaGraph
     }
 
     /** Throw the Indonesian reason when Meta answered with an error. */
-    public function check(Response $res, string $what): void
+    public function check(Response $res, string $what, string $service = 'Facebook'): void
     {
         $error = $res->json('error');
         if ($res->successful() && ! $error) {
@@ -86,19 +87,21 @@ class MetaGraph
             $code === 10 || ($code >= 200 && $code < 300) => "Izin Facebook kurang ({$detail}). Hubungkan ulang Facebook dan centang semua izin.",
             in_array($code, self::RATE_LIMITS, true) => 'Batas panggilan API Facebook tercapai. Coba lagi nanti.',
             $code === 368 => "Facebook memblokir sementara aksi ini: {$detail}",
+            // Instagram's daily publishing cap (subcode 2207042)
+            $code === 9 => "Batas posting {$service} lewat API untuk 24 jam terakhir sudah tercapai. Coba lagi besok.",
             default => $detail,
         };
 
-        throw new RuntimeException("Facebook {$what} gagal ({$res->status()}): {$message}");
+        throw new RuntimeException("{$service} {$what} gagal ({$res->status()}): {$message}");
     }
 
-    private function send(string $method, string $path, string $token, array $data, string $what): array
+    private function send(string $method, string $path, string $token, array $data, string $what, string $service): array
     {
         $data += ['access_token' => $token, 'appsecret_proof' => $this->proof($token)];
         $res = $method === 'get'
             ? $this->http()->get($this->url($path), $data)
             : $this->http()->asForm()->post($this->url($path), $data);
-        $this->check($res, $what);
+        $this->check($res, $what, $service);
 
         return $res->json() ?? [];
     }

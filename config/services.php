@@ -90,7 +90,7 @@ return [
         'redirect_uri' => env('YOUTUBE_REDIRECT_URI'),
     ],
 
-    // One Meta app for Facebook Pages now, Instagram and Threads later
+    // One Meta app: Facebook Pages and the Instagram accounts linked to them share the Facebook login
     'facebook' => [
         // developers.facebook.com → My Apps → the app → App settings → Basic
         'app_id' => env('FACEBOOK_APP_ID'),
@@ -100,8 +100,22 @@ return [
         // A Facebook Login for Business configuration (user access token) holds the permissions.
         // Without one the dialog asks for `scopes` the classic way.
         'config_id' => env('FACEBOOK_CONFIG_ID'),
-        'scopes' => env('FACEBOOK_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,publish_video'),
+        'scopes' => env('FACEBOOK_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish'),
         'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v26.0'),
+    ],
+
+    // Threads use case of the same Meta app: it has its own app id/secret and login
+    'threads' => [
+        // developers.facebook.com → the app → Use cases → Threads API → Settings: Threads app ID / secret
+        'app_id' => env('THREADS_APP_ID'),
+        'app_secret' => env('THREADS_APP_SECRET'),
+        // Must match a Redirect Callback URL of the Threads use case: <APP_URL>/threads/callback
+        'redirect_uri' => env('THREADS_REDIRECT_URI'),
+        'scopes' => env('THREADS_SCOPES', 'threads_basic,threads_content_publish'),
+        // Meta moved Threads to threads.com; the older threads.net hosts still answer
+        'authorize_url' => env('THREADS_AUTHORIZE_URL', 'https://threads.com/oauth/authorize'),
+        'graph_url' => env('THREADS_GRAPH_URL', 'https://graph.threads.com'),
+        'graph_version' => env('THREADS_GRAPH_VERSION', 'v1.0'),
     ],
 
     'clipper' => [

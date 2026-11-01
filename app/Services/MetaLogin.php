@@ -11,6 +11,8 @@ use RuntimeException;
  * Facebook Login for Business: the code becomes a long-lived user token
  * (about 60 days), and the Pages the user picks keep their own Page token,
  * which does not expire while the user stays an admin and keeps the app.
+ * The Instagram professional account linked to a Page is published to with
+ * that same Page token, so it comes from the same Pages call.
  */
 class MetaLogin
 {
@@ -18,6 +20,9 @@ class MetaLogin
     public const PUBLISH_TASK = 'CREATE_CONTENT';
 
     public const REQUIRED_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'];
+
+    // Instagram API with Facebook Login: content publishing
+    public const INSTAGRAM_SCOPES = ['instagram_basic', 'instagram_content_publish'];
 
     private const MAX_PAGE_REQUESTS = 5;
 
@@ -74,46 +79,88 @@ class MetaLogin
         return array_values(array_diff(self::REQUIRED_SCOPES, $account->grantedScopes()));
     }
 
+    /** @return list<string> Instagram permissions missing, only worth showing once an Instagram account is connected */
+    public function missingInstagramScopes(MetaAccount $account): array
+    {
+        return array_values(array_diff(self::INSTAGRAM_SCOPES, $account->grantedScopes()));
+    }
+
     /**
      * The Pages this login can see, fresh from Meta, with whether each is
      * already connected and whether a Reel can be published there.
      *
-     * @return list<array{id: string, name: ?string, picture_url: ?string, can_publish: bool, connected: bool}>
+     * instagram is the professional account linked to the Page, or null.
+     *
+     * @return list<array{id: string, name: ?string, picture_url: ?string, can_publish: bool, connected: bool, instagram: ?array}>
      */
     public function pages(MetaAccount $account): array
     {
-        $connected = MetaTarget::where('meta_account_id', $account->id)->where('platform', 'facebook')->pluck('external_id')->all();
+        $connected = MetaTarget::where('meta_account_id', $account->id)->get(['platform', 'external_id'])
+            ->groupBy('platform')->map(fn ($targets) => $targets->pluck('external_id')->all());
 
-        return array_map(fn (array $page) => [
-            'id' => (string) $page['id'],
-            'name' => $page['name'] ?? null,
-            'picture_url' => $page['picture']['data']['url'] ?? null,
-            'can_publish' => in_array(self::PUBLISH_TASK, $page['tasks'] ?? [], true),
-            'connected' => in_array((string) $page['id'], $connected, true),
-        ], $this->rawPages($account));
+        return array_map(function (array $page) use ($connected) {
+            $ig = $page['instagram_business_account'] ?? null;
+
+            return [
+                'id' => (string) $page['id'],
+                'name' => $page['name'] ?? null,
+                'picture_url' => $page['picture']['data']['url'] ?? null,
+                'can_publish' => in_array(self::PUBLISH_TASK, $page['tasks'] ?? [], true),
+                'connected' => in_array((string) $page['id'], $connected['facebook'] ?? [], true),
+                'instagram' => $ig ? [
+                    'id' => (string) $ig['id'],
+                    'username' => $ig['username'] ?? null,
+                    'picture_url' => $ig['profile_picture_url'] ?? null,
+                    'connected' => in_array((string) $ig['id'], $connected['instagram'] ?? [], true),
+                ] : null,
+            ];
+        }, $this->rawPages($account));
     }
 
     /**
-     * Keep exactly the chosen Pages of this login, each with its Page token.
-     * A Page connected through another login of the same user moves here.
+     * Keep exactly the chosen Pages and Instagram accounts of this login, each
+     * with its Page token. One connected through another login of the same
+     * user moves here.
      *
      * @param  list<string>  $pageIds
-     * @return int how many Pages are connected now
+     * @param  list<string>  $instagramIds
+     * @return int how many Pages and Instagram accounts are connected now
      */
-    public function savePages(MetaAccount $account, array $pageIds): int
+    public function savePages(MetaAccount $account, array $pageIds, array $instagramIds = []): int
     {
         $pages = collect($this->rawPages($account))->keyBy(fn ($p) => (string) $p['id']);
         $chosen = $pages->only($pageIds);
-        if ($chosen->count() !== count(array_unique($pageIds))) {
-            throw new RuntimeException('Ada Page yang tidak bisa diakses akun Facebook ini. Muat ulang daftar Page.');
+        // Instagram account id → the Page it is linked to
+        $igPages = $pages->filter(fn ($p) => isset($p['instagram_business_account']['id']))
+            ->keyBy(fn ($p) => (string) $p['instagram_business_account']['id'])->only($instagramIds);
+        if ($chosen->count() !== count(array_unique($pageIds)) || $igPages->count() !== count(array_unique($instagramIds))) {
+            throw new RuntimeException('Ada Page atau akun Instagram yang tidak bisa diakses akun Facebook ini. Muat ulang daftar Page.');
         }
-        if ($blocked = $chosen->first(fn ($p) => ! in_array(self::PUBLISH_TASK, $p['tasks'] ?? [], true))) {
+        if ($blocked = $chosen->merge($igPages)->first(fn ($p) => ! in_array(self::PUBLISH_TASK, $p['tasks'] ?? [], true))) {
             throw new RuntimeException("Kamu tidak punya izin membuat konten di Page {$blocked['name']}.");
         }
 
-        DB::transaction(function () use ($account, $chosen) {
+        DB::transaction(function () use ($account, $chosen, $igPages) {
             MetaTarget::where('meta_account_id', $account->id)->where('platform', 'facebook')
                 ->whereNotIn('external_id', $chosen->keys()->all())->delete();
+            MetaTarget::where('meta_account_id', $account->id)->where('platform', 'instagram')
+                ->whereNotIn('external_id', $igPages->keys()->all())->delete();
+
+            foreach ($igPages as $igId => $page) {
+                $ig = $page['instagram_business_account'];
+                MetaTarget::updateOrCreate(
+                    ['user_id' => $account->user_id, 'platform' => 'instagram', 'external_id' => $igId],
+                    [
+                        'meta_account_id' => $account->id,
+                        'name' => $ig['name'] ?? $ig['username'] ?? null,
+                        'username' => $ig['username'] ?? null,
+                        'picture_url' => $ig['profile_picture_url'] ?? null,
+                        // Instagram API with Facebook Login publishes with the linked Page's token
+                        'access_token' => $page['access_token'] ?? throw new RuntimeException('Facebook tidak mengirim token Page.'),
+                        'details' => ['page_id' => (string) $page['id'], 'page_name' => $page['name'] ?? null],
+                    ]
+                );
+            }
 
             foreach ($chosen as $id => $page) {
                 MetaTarget::updateOrCreate(
@@ -129,7 +176,7 @@ class MetaLogin
             }
         });
 
-        return $chosen->count();
+        return $chosen->count() + $igPages->count();
     }
 
     /** /me/accounts, following the cursor a few pages deep. */
@@ -139,7 +186,7 @@ class MetaLogin
         $after = null;
         for ($i = 0; $i < self::MAX_PAGE_REQUESTS; $i++) {
             $res = $this->graph->get('me/accounts', $account->access_token, array_filter([
-                'fields' => 'id,name,access_token,tasks,picture{url}',
+                'fields' => 'id,name,access_token,tasks,picture{url},instagram_business_account{id,username,name,profile_picture_url}',
                 'limit' => 100,
                 'after' => $after,
             ]), 'daftar Page');

@@ -12,6 +12,7 @@ use App\Services\LoadMonitor;
 use App\Services\MetaStatusPoller;
 use App\Services\ScheduledPublisher;
 use App\Services\StorageCleanup;
+use App\Services\ThreadsLogin;
 use App\Services\TikTokStatsService;
 use App\Services\YouTubeStatusPoller;
 use Illuminate\Support\Facades\Artisan;
@@ -43,7 +44,7 @@ Schedule::command('clipper:judge-hook-tests')->hourlyAt(20)->name('judge-hook-te
 // Calendar: hand posts whose time has come to the upload jobs
 Artisan::command('clipper:publish-scheduled', function (ScheduledPublisher $publisher) {
     $this->info('Picked up '.$publisher->publishDue().' scheduled posts');
-})->purpose('Send due scheduled posts to TikTok / YouTube / Facebook');
+})->purpose('Send due scheduled posts to TikTok / YouTube / Facebook / Instagram / Threads');
 
 Schedule::command('clipper:publish-scheduled')->everyMinute()->name('publish-scheduled')->withoutOverlapping();
 
@@ -55,13 +56,22 @@ Artisan::command('clipper:youtube-status', function (YouTubeStatusPoller $poller
 
 Schedule::command('clipper:youtube-status')->everyFiveMinutes()->name('youtube-status')->withoutOverlapping();
 
-// Published Facebook Reels: follow Meta's processing until published or failed
+// Meta uploads: follow Facebook Reels until published, publish Instagram / Threads containers once ready
 Artisan::command('clipper:meta-status', function (MetaStatusPoller $poller) {
     $r = $poller->run();
     $this->info("Checked {$r['checked']} Meta uploads, {$r['settled']} settled");
-})->purpose('Refresh the status of Facebook Reels still processing');
+})->purpose('Refresh Meta uploads still processing and publish finished containers');
 
-Schedule::command('clipper:meta-status')->everyFiveMinutes()->name('meta-status')->withoutOverlapping();
+// Every minute: Meta asks to check containers about once a minute
+Schedule::command('clipper:meta-status')->everyMinute()->name('meta-status')->withoutOverlapping();
+
+// Threads tokens last 60 days; renew them well before that
+Artisan::command('clipper:threads-refresh', function (ThreadsLogin $threads) {
+    $r = $threads->refreshDue();
+    $this->info("Refreshed {$r['refreshed']} Threads tokens, {$r['failed']} failed");
+})->purpose('Renew Threads tokens that expire within 30 days');
+
+Schedule::command('clipper:threads-refresh')->dailyAt('04:23')->name('threads-refresh')->withoutOverlapping();
 
 // Free disk from downloaded source videos; rendered clips are kept
 Artisan::command('clipper:cleanup {--hours= : Keep files touched within this many hours}', function (StorageCleanup $cleanup) {

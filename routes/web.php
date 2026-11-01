@@ -12,6 +12,7 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicMediaController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\StatusController;
+use App\Http\Controllers\ThreadsController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
 use App\Http\Controllers\YouTubeController;
@@ -84,4 +85,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/settings/meta', [MetaAccountController::class, 'page'])->middleware('cache.headers:no_store;private')->name('meta.page');
     Route::get('/facebook/connect', [FacebookController::class, 'connect'])->name('facebook.connect');
     Route::get('/facebook/callback', [FacebookController::class, 'callback'])->name('facebook.callback');
+
+    // Threads login (Redirect Callback URL of the Threads use case → /threads/callback)
+    Route::get('/threads/connect', [ThreadsController::class, 'connect'])->name('threads.connect');
+    Route::get('/threads/callback', [ThreadsController::class, 'callback'])->name('threads.callback');
 });

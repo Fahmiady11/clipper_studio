@@ -113,7 +113,7 @@
   <div class="cal-wrap">
     <div class="cal-head">
       <h1>Jadwal publish</h1>
-      <p>Tentukan tanggal, jam, dan platform untuk clip yang sudah dirender. Worker mengirimnya ke TikTok, YouTube Shorts, atau Reels Facebook saat waktunya tiba, jadi browser tidak perlu terbuka.
+      <p>Tentukan tanggal, jam, dan platform untuk clip yang sudah dirender. Worker mengirimnya ke TikTok, YouTube Shorts, Facebook, Instagram, atau Threads saat waktunya tiba, jadi browser tidak perlu terbuka.
         Jam mengikuti zona waktu browser kamu: <span class="cal-tz" x-text="tz"></span>.</p>
     </div>
 
@@ -195,25 +195,19 @@
             <div>
               <span class="cal-label" id="cal-platform-label">Platform</span>
               <div class="seg" role="group" aria-labelledby="cal-platform-label">
-                <button type="button" :class="{ on: form.platform === 'tiktok' }" :disabled="!tiktok.accounts.length" @click="pickPlatform('tiktok')">TikTok</button>
-                <button type="button" :class="{ on: form.platform === 'youtube' }" :disabled="!youtube.accounts.length" @click="pickPlatform('youtube')">YouTube Shorts</button>
-                <button type="button" :class="{ on: form.platform === 'facebook' }" :disabled="!facebook.accounts.length" @click="pickPlatform('facebook')">Reels Facebook</button>
+                <template x-for="(info, id) in PLATFORM" :key="id">
+                  <button type="button" :class="{ on: form.platform === id }" :disabled="!$data[id].accounts.length" @click="pickPlatform(id)" x-text="info.name"></button>
+                </template>
               </div>
-              <div class="cal-hint" style="margin-top:8px" x-show="!tiktok.accounts.length || !youtube.accounts.length || !facebook.accounts.length">
-                <template x-if="!tiktok.accounts.length">
-                  <span><template x-if="tiktok.configured"><a href="/tiktok/connect" style="color:var(--accent-ink)">Hubungkan akun TikTok</a></template><template x-if="!tiktok.configured"><span>TikTok belum dikonfigurasi di server.</span></template>. </span>
-                </template>
-                <template x-if="!youtube.accounts.length">
-                  <span><template x-if="youtube.configured"><a href="/youtube/connect" style="color:var(--accent-ink)">Hubungkan channel YouTube</a></template><template x-if="!youtube.configured"><span>YouTube belum dikonfigurasi di server.</span></template>. </span>
-                </template>
-                <template x-if="!facebook.accounts.length">
-                  <span><template x-if="facebook.configured"><a href="/settings/meta" style="color:var(--accent-ink)">Hubungkan Page Facebook</a></template><template x-if="!facebook.configured"><span>Facebook belum dikonfigurasi di server.</span></template>.</span>
+              <div class="cal-hint" style="margin-top:8px" x-show="missingPlatforms.length">
+                <template x-for="m in missingPlatforms" :key="m.id">
+                  <span><template x-if="m.configured"><a :href="m.connect" style="color:var(--accent-ink)" x-text="'Hubungkan ' + m.noun"></a></template><template x-if="!m.configured"><span x-text="m.site + ' belum dikonfigurasi di server'"></span></template>. </span>
                 </template>
               </div>
             </div>
 
             <div x-show="form.platform && currentAccounts.length > 1">
-              <label class="cal-label" for="cal-account" x-text="({ youtube: 'Channel', facebook: 'Page' })[form.platform] || 'Akun'"></label>
+              <label class="cal-label" for="cal-account" x-text="({ youtube: 'Channel', facebook: 'Page', threads: 'Profil' })[form.platform] || 'Akun'"></label>
               <select id="cal-account" class="select" x-model.number="form.accountId" style="min-height:44px">
                 <template x-for="a in currentAccounts" :key="a.id">
                   <option :value="a.id" x-text="accountName(a)" :selected="a.id === form.accountId"></option>
@@ -249,14 +243,19 @@
               </div>
             </template>
 
-            <template x-if="form.platform === 'facebook'">
+            {{-- Facebook, Instagram, Threads: one text field with the platform's own limit --}}
+            <template x-if="META[form.platform]">
               <div class="cal-form">
+                <div class="cal-error" x-show="$data[form.platform].blocked" role="alert" x-text="$data[form.platform].blocked"></div>
                 <div>
-                  <label class="cal-label" for="cal-fb-desc">Deskripsi</label>
-                  <textarea id="cal-fb-desc" class="field" maxlength="5000" x-model="form.fbDescription"></textarea>
+                  <label class="cal-label" for="cal-meta-text" x-text="META[form.platform].label"></label>
+                  <textarea id="cal-meta-text" class="field" x-model="form.metaText[form.platform]"></textarea>
+                  <div class="field-count" :style="metaProblem ? 'color:var(--danger)' : ''" x-text="metaCount"></div>
                 </div>
-                <div class="cal-hint">Reels di Page selalu publik. Syarat Facebook: video vertikal 9:16, 3 sampai 90 detik.</div>
-                <div class="cal-hint warn" x-show="selectedClip && selectedClip.seconds > 90" x-text="'Clip ini ' + selectedClip.seconds + ' detik, lebih dari batas 90 detik Reels Facebook.'"></div>
+                <div class="cal-hint" x-text="META[form.platform].hint"></div>
+                <div class="cal-hint warn" x-show="metaProblem" x-text="metaProblem"></div>
+                <div class="cal-hint warn" x-show="selectedClip && selectedClip.seconds > META[form.platform].maxSeconds"
+                     x-text="'Clip ini ' + (selectedClip && selectedClip.seconds) + ' detik, lebih dari batas ' + META[form.platform].maxSeconds + ' detik ' + PLATFORM[form.platform].name + '.'"></div>
               </div>
             </template>
 
@@ -309,6 +308,7 @@
                 </div>
               </div>
               <div class="cal-err" x-show="p.error" x-text="p.error"></div>
+              <div class="cal-hint" style="grid-column:1/-1" x-show="p.note" x-text="p.note"></div>
 
               <template x-if="editing && editing.id === p.id">
                 <div class="cal-edit">
@@ -369,6 +369,21 @@ function scheduleCalendar() {
       tiktok: { name: 'TikTok', short: 'TT', site: 'TikTok' },
       youtube: { name: 'YouTube Shorts', short: 'YT', site: 'YouTube' },
       facebook: { name: 'Reels Facebook', short: 'FB', site: 'Facebook' },
+      instagram: { name: 'Reels Instagram', short: 'IG', site: 'Instagram' },
+      threads: { name: 'Threads', short: 'TH', site: 'Threads' },
+    },
+    CONNECT: {
+      tiktok: { noun: 'akun TikTok', url: '/tiktok/connect' },
+      youtube: { noun: 'channel YouTube', url: '/youtube/connect' },
+      facebook: { noun: 'Page Facebook', url: '/settings/meta' },
+      instagram: { noun: 'Instagram', url: '/settings/meta' },
+      threads: { noun: 'Threads', url: '/settings/meta' },
+    },
+    // Text limits as each API states them; Threads counts emoji by their UTF-8 bytes
+    META: {
+      facebook: { label: 'Deskripsi', max: 5000, maxSeconds: 90, hint: 'Reels di Page selalu publik. Syarat Facebook: video vertikal 9:16, 3 sampai 90 detik.' },
+      instagram: { label: 'Caption', max: 2200, hashtags: 30, maxSeconds: 900, hint: 'Reels Instagram tampil di tab Reels dan feed. Maksimal 2200 karakter dan 30 hashtag.' },
+      threads: { label: 'Teks', max: 500, bytes: true, maxSeconds: 300, hint: 'Threads hanya menjadikan satu hashtag sebagai topik. Video maksimal 5 menit.' },
     },
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'lokal',
 
@@ -379,9 +394,11 @@ function scheduleCalendar() {
     clips: [], clipsLoaded: false,
     tiktok: { configured: false, accounts: [] },
     youtube: { configured: false, accounts: [] },
-    facebook: { configured: false, accounts: [] },
+    facebook: { configured: false, accounts: [], blocked: null },
+    instagram: { configured: false, accounts: [], blocked: null },
+    threads: { configured: false, accounts: [], blocked: null },
 
-    form: { open: false, clipId: '', platform: '', accountId: null, when: '', ytTitle: '', ytDescription: '', ytTags: [], ytPrivacy: 'private', fbDescription: '', ttMode: 'inbox', ttTitle: '', ttComment: false, ttDuet: false, ttStitch: false },
+    form: { open: false, clipId: '', platform: '', accountId: null, when: '', ytTitle: '', ytDescription: '', ytTags: [], ytPrivacy: 'private', metaText: { facebook: '', instagram: '', threads: '' }, ttMode: 'inbox', ttTitle: '', ttComment: false, ttDuet: false, ttStitch: false },
     formError: '', saving: false,
     editing: null, editError: '', confirmingId: null,
 
@@ -466,10 +483,11 @@ function scheduleCalendar() {
     },
     async loadAccounts() {
       const get = async url => { try { const r = await fetch(url, { headers: { 'Accept': 'application/json' } }); return r.ok ? await r.json() : null; } catch { return null; } };
-      const [tt, yt, fb] = await Promise.all([get('/api/tiktok/accounts'), get('/api/youtube/accounts'), get('/api/facebook/pages')]);
+      const meta = ['facebook', 'instagram', 'threads'];
+      const [tt, yt, ...rest] = await Promise.all([get('/api/tiktok/accounts'), get('/api/youtube/accounts'), ...meta.map(p => get('/api/meta/targets/' + p))]);
       if (tt) this.tiktok = { configured: tt.configured, accounts: tt.accounts || [] };
       if (yt) this.youtube = { configured: yt.configured, accounts: yt.accounts || [] };
-      if (fb) this.facebook = { configured: fb.configured, accounts: fb.accounts || [] };
+      meta.forEach((p, i) => { if (rest[i]) this[p] = { configured: rest[i].configured, accounts: rest[i].accounts || [], blocked: rest[i].blocked }; });
     },
 
     // ── status text (always words, never color alone) ──────────────────────
@@ -482,7 +500,7 @@ function scheduleCalendar() {
       return ({
         queued: 'Antre upload', uploading: 'Mengupload', processing: 'Diproses ' + name,
         inbox: 'Masuk draft TikTok', failed: 'Upload gagal',
-        published: ({ youtube: p.privacy === 'private' ? 'Di YouTube, privat' : 'Sudah di YouTube', facebook: 'Tayang di Facebook' })[p.platform] || 'Tayang di TikTok',
+        published: ({ youtube: p.privacy === 'private' ? 'Di YouTube, privat' : 'Sudah di YouTube' })[p.platform] || 'Tayang di ' + this.PLATFORM[p.platform].site,
       })[p.delivery] || 'Dikirim ke ' + name;
     },
     stateClass(p) {
@@ -493,12 +511,32 @@ function scheduleCalendar() {
     // ── create ─────────────────────────────────────────────────────────────
     get currentAccounts() { return (this[this.form.platform] || { accounts: [] }).accounts; },
     get selectedClip() { return this.clips.find(c => c.id === this.form.clipId) || null; },
-    accountName(a) { return a.display_name || a.title || a.name || ('Akun #' + a.id); },
+    accountName(a) { return a.display_name || a.title || (a.username ? (a.name || a.username) + ' (@' + a.username + ')' : a.name) || ('Akun #' + a.id); },
+    get missingPlatforms() {
+      return Object.keys(this.PLATFORM).filter(p => !this[p].accounts.length)
+        .map(p => ({ id: p, site: this.PLATFORM[p].site, configured: this[p].configured, noun: this.CONNECT[p].noun, connect: this.CONNECT[p].url }));
+    },
+    get metaCount() {
+      const rule = this.META[this.form.platform];
+      const text = this.form.metaText[this.form.platform] || '';
+      return (rule.bytes ? new TextEncoder().encode(text).length : text.length) + '/' + rule.max;
+    },
+    get metaProblem() {
+      const rule = this.META[this.form.platform];
+      if (!rule) return '';
+      const text = this.form.metaText[this.form.platform] || '';
+      const length = rule.bytes ? new TextEncoder().encode(text).length : text.length;
+      if (length > rule.max) return 'Terlalu panjang untuk ' + this.PLATFORM[this.form.platform].site + ', maksimal ' + rule.max + (rule.bytes ? ' (emoji dihitung lebih dari satu).' : ' karakter.');
+      const tags = (text.match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length;
+      if (rule.hashtags && tags > rule.hashtags) return 'Maksimal ' + rule.hashtags + ' hashtag, teks ini punya ' + tags + '.';
+      return '';
+    },
     clipOption(c) { return `${c.topic} · ${c.project_title || 'tanpa judul'} · ${c.seconds} dtk`; },
     get canSubmit() {
       const f = this.form;
       if (!f.clipId || !f.platform || !f.accountId || !f.when) return false;
       if (f.platform === 'youtube') return !!f.ytTitle.trim() && !/[<>]/.test(f.ytTitle);
+      if (this.META[f.platform]) return !this.metaProblem && !this[f.platform].blocked;
       return true;
     },
     defaultWhen() {
@@ -516,10 +554,21 @@ function scheduleCalendar() {
       const f = this.form;
       f.open = true;
       f.clipId = clipId || f.clipId || this.clips[0]?.id || '';
-      f.platform = f.platform || ['tiktok', 'youtube', 'facebook'].find(p => this[p].accounts.length) || '';
+      f.platform = f.platform || Object.keys(this.PLATFORM).find(p => this[p].accounts.length) || '';
       this.pickPlatform(f.platform);
       f.when = this.defaultWhen();
       this.fillFromClip();
+    },
+    // Cut to a byte budget at a word, like the server does for autopilot posts
+    fitBytes(text, max) {
+      const enc = new TextEncoder();
+      if (enc.encode(text).length <= max) return text;
+      let out = '';
+      for (const word of text.split(/(\s+)/)) {
+        if (enc.encode(out + word + '…').length > max) break;
+        out += word;
+      }
+      return out.trimEnd() + '…';
     },
     closeForm() { this.form.open = false; this.formError = ''; },
     pickPlatform(platform) {
@@ -537,7 +586,10 @@ function scheduleCalendar() {
       f.ytTitle = String(c.topic || '').replace(/[<>]/g, '').slice(0, 100);
       f.ytDescription = body.slice(0, 5000);
       f.ytTags = tags.slice(0, 30);
-      f.fbDescription = body.slice(0, 5000);
+      // Defaults within each platform's limit: Instagram keeps 30 hashtags, Threads one
+      f.metaText.facebook = body.slice(0, 5000);
+      f.metaText.instagram = ((c.caption || '') + '\n\n' + (c.hashtags || []).slice(0, 30).join(' ')).trim().slice(0, 2200);
+      f.metaText.threads = this.fitBytes(((c.caption || '') + '\n\n' + ((c.hashtags || [])[0] || '')).trim(), 500);
       f.ttTitle = body.slice(0, 2200);
     },
     async submit() {
@@ -548,7 +600,7 @@ function scheduleCalendar() {
 
       const body = { clip_id: f.clipId, platform: f.platform, account_id: f.accountId, scheduled_at: when.toISOString() };
       if (f.platform === 'youtube') Object.assign(body, { title: f.ytTitle.trim(), description: f.ytDescription, privacy: f.ytPrivacy, tags: f.ytTags });
-      else if (f.platform === 'facebook') Object.assign(body, { description: f.fbDescription });
+      else if (this.META[f.platform]) Object.assign(body, { description: f.metaText[f.platform] });
       else Object.assign(body, { mode: f.ttMode, title: f.ttMode === 'direct' ? f.ttTitle : '', allow_comment: f.ttComment, allow_duet: f.ttDuet, allow_stitch: f.ttStitch });
 
       this.saving = true;

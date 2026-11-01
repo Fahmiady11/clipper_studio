@@ -124,13 +124,14 @@ class GeneratedClip extends Model
     /**
      * What the upload job and the platform reported for this clip.
      * status: queued, uploading, processing, inbox (TikTok), published, failed; null when nothing was sent.
+     * note: something to know about a published post, e.g. Meta never confirmed it.
      *
-     * @return array{status: ?string, error: ?string, url: ?string, privacy: ?string}
+     * @return array{status: ?string, error: ?string, url: ?string, privacy: ?string, note: ?string}
      */
     public function delivery(string $platform): array
     {
         if ($platform === 'tiktok') {
-            return ['status' => $this->tiktok_status, 'error' => $this->tiktok_error, 'url' => null, 'privacy' => null];
+            return ['status' => $this->tiktok_status, 'error' => $this->tiktok_error, 'url' => null, 'privacy' => null, 'note' => null];
         }
         if ($platform === 'youtube') {
             return [
@@ -138,16 +139,19 @@ class GeneratedClip extends Model
                 'error' => $this->youtube_error,
                 'url' => $this->youtube_video_id ? 'https://youtube.com/shorts/'.$this->youtube_video_id : null,
                 'privacy' => $this->youtube_privacy, // private while the API project is unaudited
+                'note' => null,
             ];
         }
         $publication = $this->publication($platform);
         $sent = $publication && $publication->status !== ClipPublication::SKIPPED;
+        $published = $sent && $publication->status === 'published';
 
         return [
             'status' => $sent ? $publication->status : null,
-            'error' => $sent ? $publication->error : null,
+            'error' => $sent && ! $published ? $publication->error : null,
             'url' => $sent ? $publication->url : null,
             'privacy' => null,
+            'note' => $published ? $publication->error : null,
         ];
     }
 

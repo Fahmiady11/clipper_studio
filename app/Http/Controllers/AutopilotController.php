@@ -182,8 +182,10 @@ class AutopilotController extends Controller
                     'preview_url' => $c->status === 'done' ? url("/api/clips/{$c->id}/download?inline=1") : null,
                     'tiktok_status' => $c->tiktok_status,
                     'tiktok_error' => $c->tiktok_error,
-                    'youtube' => $this->autopostState($c, 'youtube', $posts["{$c->id}|youtube"] ?? null, $autopost),
-                    'facebook' => $this->autopostState($c, 'facebook', $posts["{$c->id}|facebook"] ?? null, $autopost),
+                    // youtube, facebook, instagram, threads: each autopilot platform's line on the card
+                    ...collect(array_keys($autopost->platforms()))->mapWithKeys(fn ($platform) => [
+                        $platform => $this->autopostState($c, $platform, $posts["{$c->id}|{$platform}"] ?? null, $autopost),
+                    ])->all(),
                     'music_credit' => $credit,
                     'views' => $totals['views'] ?? null,
                     'likes' => $totals['likes'] ?? null,
@@ -212,7 +214,7 @@ class AutopilotController extends Controller
         $clip = $this->ownedReviewClip($clipId);
         $account = isset($data['account_id']) ? TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id']) : null;
 
-        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Pilih akun TikTok atau nyalakan upload otomatis ke YouTube atau Facebook.');
+        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Pilih akun TikTok atau nyalakan upload otomatis ke salah satu platform di atas.');
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
         abort_if($clip->review_status === 'rejected', 422, 'Clip sudah ditolak dan filenya dihapus.');
         if ($account) {
@@ -234,7 +236,12 @@ class AutopilotController extends Controller
         // The approval stands either way; a platform that can't take the clip keeps the reason on its card
         $booked = $autopost->scheduleAll($clip);
 
-        return response()->json(['success' => true, 'youtube' => $booked['youtube'] ?? null, 'facebook' => $booked['facebook'] ?? null]);
+        $result = ['success' => true];
+        foreach (array_keys($autopost->platforms()) as $platform) {
+            $result[$platform] = $booked[$platform] ?? null; // {scheduled_at} or {error}; null when off
+        }
+
+        return response()->json($result);
     }
 
     /** Back to the queue, as long as nothing has gone out yet. Its waiting calendar slots are freed. */
@@ -245,7 +252,10 @@ class AutopilotController extends Controller
         abort_if($clip->tiktok_status !== null, 422, 'Clip sudah dikirim ke TikTok, approve tidak bisa dibatalkan.');
         $sent = $clip->scheduledPosts()->whereIn('status', [ScheduledPost::STATUS_PUBLISHING, ScheduledPost::STATUS_QUEUED])->first();
         abort_if($clip->youtube_status !== null || $sent?->platform === 'youtube', 422, 'Clip sudah dikirim ke YouTube, approve tidak bisa dibatalkan.');
-        abort_if($sent || $clip->publications()->where('status', '!=', ClipPublication::SKIPPED)->exists(), 422, 'Clip sudah dikirim ke Facebook, approve tidak bisa dibatalkan.');
+        $platform = $sent?->platform ?? $clip->publications()->where('status', '!=', ClipPublication::SKIPPED)->value('platform');
+        if ($platform !== null) {
+            abort(422, 'Clip sudah dikirim ke '.$autopost->platform($platform)->name().', approve tidak bisa dibatalkan.');
+        }
 
         $autopost->cancelWaiting($clip);
         $clip->update(['review_status' => 'pending']);
@@ -253,7 +263,7 @@ class AutopilotController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /** Autopost settings of one platform: GET /api/autopilot/{youtube|facebook} */
+    /** Autopost settings of one platform: GET /api/autopilot/{youtube|facebook|instagram|threads} */
     public function autopostSettings(string $platform, Autopost $autopost): JsonResponse
     {
         return response()->json($this->presentAutopost(AutopostSetting::for(Auth::id(), $platform), $autopost));
@@ -261,7 +271,7 @@ class AutopilotController extends Controller
 
     public function updateAutopostSettings(Request $request, string $platform, Autopost $autopost): JsonResponse
     {
-        $noun = $platform === 'youtube' ? 'channel YouTube' : 'Page Facebook';
+        $noun = ['youtube' => 'channel YouTube', 'facebook' => 'Page Facebook', 'instagram' => 'akun Instagram', 'threads' => 'profil Threads'][$platform];
         $data = $request->validate([
             'enabled' => ['required', 'boolean'],
             'account_id' => ['nullable', 'integer', 'required_if:enabled,true'],
@@ -315,7 +325,8 @@ class AutopilotController extends Controller
             ->where('review_status', 'approved')
             ->where(fn ($q) => $q->whereNull('tiktok_status')->orWhereNotIn('tiktok_status', ['queued', 'uploading', 'processing']))
             ->where(fn ($q) => $q->whereNull('youtube_status')->orWhereNotIn('youtube_status', ['queued', 'uploading']))
-            ->whereDoesntHave('publications', fn ($q) => $q->whereIn('status', ['queued', 'uploading']))
+            // A container still processing needs the file: Meta is downloading it
+            ->whereDoesntHave('publications', fn ($q) => $q->whereIn('status', ClipPublication::BUSY))
             ->whereDoesntHave('scheduledPosts', fn ($q) => $q->whereIn('status', [ScheduledPost::STATUS_SCHEDULED, ScheduledPost::STATUS_PUBLISHING]))
             ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
             ->get();
@@ -375,11 +386,11 @@ class AutopilotController extends Controller
 
             return $skipped
                 ? ['post_id' => null, 'status' => 'skipped', 'scheduled_at' => null, 'delivery' => null,
-                    'error' => $skipped, 'reconnect_url' => null, 'url' => null, 'privacy' => null]
+                    'error' => $skipped, 'reconnect_url' => null, 'url' => null, 'privacy' => null, 'note' => null]
                 : null;
         }
         $handedOff = $post->status === ScheduledPost::STATUS_QUEUED;
-        $delivery = $handedOff ? $clip->delivery($platform) : ['status' => null, 'error' => null, 'url' => null, 'privacy' => null];
+        $delivery = $handedOff ? $clip->delivery($platform) : ['status' => null, 'error' => null, 'url' => null, 'privacy' => null, 'note' => null];
         $error = $post->error ?? $delivery['error'];
 
         return [
@@ -392,6 +403,7 @@ class AutopilotController extends Controller
             'reconnect_url' => ScheduledPost::reconnectUrl($platform, $error),
             'url' => $delivery['url'],
             'privacy' => $delivery['privacy'],
+            'note' => $delivery['note'],
         ];
     }
 

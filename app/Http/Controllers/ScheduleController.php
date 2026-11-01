@@ -7,8 +7,10 @@ use App\Models\MetaTarget;
 use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\YoutubeAccount;
-use App\Services\FacebookReels;
 use App\Services\FFmpegService;
+use App\Services\InstagramReels;
+use App\Services\MetaPublishing;
+use App\Services\ThreadsPosts;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -99,7 +101,7 @@ class ScheduleController extends Controller
 
         $options = match ($data['platform']) {
             'youtube' => $this->youtubeOptions($data, $clip),
-            'facebook' => $this->facebookOptions($data, $clip),
+            'facebook', 'instagram', 'threads' => $this->metaOptions($data['platform'], $data, $clip),
             default => $this->tiktokOptions($data),
         };
         $accountId = $this->ownedAccountId($data['platform'], (int) $data['account_id'], $options['mode'] ?? null);
@@ -187,12 +189,22 @@ class ScheduleController extends Controller
         ];
     }
 
-    private function facebookOptions(array $data, GeneratedClip $clip): array
+    /** The post text arrives as `description` for every Meta platform and is checked against its limits. */
+    private function metaOptions(string $platform, array $data, GeneratedClip $clip): array
     {
-        $reason = app(FacebookReels::class)->refusal($clip);
+        $text = trim((string) ($data['description'] ?? ''));
+        $problem = match ($platform) {
+            'instagram' => InstagramReels::captionProblem($text),
+            'threads' => ThreadsPosts::textProblem($text),
+            default => null,
+        };
+        if ($problem) {
+            throw ValidationException::withMessages(['description' => $problem]);
+        }
+        $reason = app(MetaPublishing::class)->publisher($platform)->refusal($clip);
         abort_if($reason !== null, 422, (string) $reason);
 
-        return ['description' => (string) ($data['description'] ?? '')];
+        return [MetaPublishing::textOption($platform) => $text];
     }
 
     private function tiktokOptions(array $data): array
@@ -211,8 +223,8 @@ class ScheduleController extends Controller
         if ($platform === 'youtube') {
             return YoutubeAccount::where('user_id', Auth::id())->findOrFail($accountId)->id;
         }
-        if ($platform === 'facebook') {
-            return MetaTarget::ownedBy(Auth::id(), 'facebook')->findOrFail($accountId)->id;
+        if (in_array($platform, MetaPublishing::PLATFORMS, true)) {
+            return MetaTarget::ownedBy(Auth::id(), $platform)->findOrFail($accountId)->id;
         }
 
         $account = TiktokAccount::where('user_id', Auth::id())->findOrFail($accountId);
@@ -237,7 +249,7 @@ class ScheduleController extends Controller
         // Before hand-off the clip's status may belong to an earlier upload
         $delivery = $p->status === ScheduledPost::STATUS_QUEUED && $clip
             ? $clip->delivery($p->platform)
-            : ['status' => null, 'error' => null, 'url' => null, 'privacy' => null];
+            : ['status' => null, 'error' => null, 'url' => null, 'privacy' => null, 'note' => null];
         $error = $p->error ?? $delivery['error'];
 
         return [
@@ -257,6 +269,7 @@ class ScheduleController extends Controller
             // YouTube only: private while the API project is unaudited
             'privacy' => $delivery['privacy'],
             'url' => $delivery['url'],
+            'note' => $delivery['note'],
             'options' => $p->options,
         ];
     }

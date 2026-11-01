@@ -13,7 +13,7 @@ class ClipPublication extends Model
 
     public const BUSY = ['queued', 'uploading', 'processing'];
 
-    protected $fillable = ['generated_clip_id', 'platform', 'target_id', 'status', 'external_id', 'url', 'error', 'uploaded_at', 'checked_at'];
+    protected $fillable = ['generated_clip_id', 'platform', 'target_id', 'status', 'external_id', 'container_id', 'url', 'error', 'uploaded_at', 'checked_at'];
 
     protected function casts(): array
     {

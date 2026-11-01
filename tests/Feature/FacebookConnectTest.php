@@ -53,7 +53,8 @@ class FacebookConnectTest extends TestCase
         $this->assertStringStartsWith('https://www.facebook.com/v26.0/dialog/oauth?', $url);
         parse_str(parse_url($url, PHP_URL_QUERY), $q);
         $this->assertSame(['app-1', 'https://clip.test/facebook/callback', 'code'], [$q['client_id'], $q['redirect_uri'], $q['response_type']]);
-        $this->assertStringContainsString('pages_manage_posts', $q['scope']);
+        $this->assertSame(['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish'], explode(',', $q['scope']));
+        $this->assertStringNotContainsString('publish_video', $url);
         $this->assertSame(session('facebook_oauth_state'), $q['state']);
 
         config(['services.facebook.config_id' => 'cfg-9']);
@@ -110,7 +111,7 @@ class FacebookConnectTest extends TestCase
         $this->fakePages();
 
         $this->actingAs($user)->getJson("/api/meta/accounts/{$account->id}/pages")->assertOk()
-            ->assertJsonPath('pages.0', ['id' => '111', 'name' => 'Toko Rina', 'picture_url' => 'https://cdn.test/111.jpg', 'can_publish' => true, 'connected' => false])
+            ->assertJsonPath('pages.0', ['id' => '111', 'name' => 'Toko Rina', 'picture_url' => 'https://cdn.test/111.jpg', 'can_publish' => true, 'connected' => false, 'instagram' => null])
             ->assertJsonPath('pages.1.can_publish', false)
             ->assertJsonMissingPath('pages.0.access_token');
 

@@ -2,13 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
 use App\Models\MetaTarget;
+use App\Support\RenderedVideo;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
-use Throwable;
 
 /**
  * Page Reels through /{page-id}/video_reels in three phases: start (Meta
@@ -20,7 +21,7 @@ use Throwable;
  * this server by a public URL that lets facebookexternalhit in, while a direct
  * upload works from any host, tunnel or not.
  */
-class FacebookReels
+class FacebookReels implements MetaPublisher
 {
     // developers.facebook.com/docs/video-api/guides/reels-publishing → Video requirements
     public const MIN_SECONDS = 3;
@@ -37,33 +38,51 @@ class FacebookReels
 
     public function __construct(private MetaGraph $graph) {}
 
-    /**
-     * Why this rendered clip can't be a Facebook Reel, or null when it can.
-     * A file ffprobe can't read is judged by its clip length alone.
-     */
+    public function name(): string
+    {
+        return 'Facebook';
+    }
+
+    /** Why this rendered clip can't be a Facebook Reel, or null when it can. */
     public function refusal(GeneratedClip $clip): ?string
     {
-        $video = null;
-        try {
-            $video = app(FFmpegService::class)->probeVideo(Storage::path($clip->output_path));
-        } catch (Throwable) {
-        }
-        $seconds = $video['duration'] ?? $clip->durationSeconds();
+        $video = RenderedVideo::of($clip);
 
-        if ($seconds < self::MIN_SECONDS) {
-            return 'Reels Facebook minimal '.self::MIN_SECONDS.' detik, clip ini '.round($seconds, 1).' detik.';
+        if ($video->seconds < self::MIN_SECONDS) {
+            return 'Reels Facebook minimal '.self::MIN_SECONDS.' detik, clip ini '.round($video->seconds, 1).' detik.';
         }
-        if ($seconds > self::MAX_SECONDS + 0.5) {
-            return 'Reels Facebook maksimal '.self::MAX_SECONDS.' detik, clip ini '.round($seconds).' detik. Pendekkan clip dulu.';
+        if ($video->seconds > self::MAX_SECONDS + 0.5) {
+            return 'Reels Facebook maksimal '.self::MAX_SECONDS.' detik, clip ini '.round($video->seconds).' detik. Pendekkan clip dulu.';
         }
-        if ($video && abs($video['width'] / max(1, $video['height']) - 9 / 16) > self::ASPECT_TOLERANCE) {
-            return "Reels Facebook harus vertikal 9:16, clip ini {$video['width']}×{$video['height']}.";
+        if ($video->hasFrame() && abs($video->aspect() - 9 / 16) > self::ASPECT_TOLERANCE) {
+            return "Reels Facebook harus vertikal 9:16, clip ini {$video->frame()}.";
         }
-        if ($video && ($video['width'] < self::MIN_WIDTH || $video['height'] < self::MIN_HEIGHT)) {
-            return 'Resolusi Reels Facebook minimal '.self::MIN_WIDTH.'×'.self::MIN_HEIGHT.", clip ini {$video['width']}×{$video['height']}.";
+        if ($video->hasFrame() && ($video->width < self::MIN_WIDTH || $video->height < self::MIN_HEIGHT)) {
+            return 'Resolusi Reels Facebook minimal '.self::MIN_WIDTH.'×'.self::MIN_HEIGHT.", clip ini {$video->frame()}.";
         }
 
         return null;
+    }
+
+    public function start(MetaTarget $target, GeneratedClip $clip, string $text): array
+    {
+        return ['external_id' => $this->publish($target, Storage::path($clip->output_path), $text)];
+    }
+
+    public function advance(MetaTarget $target, ClipPublication $publication): array
+    {
+        return $this->status($target, $publication->external_id);
+    }
+
+    public function giveUpHours(): int
+    {
+        return 48;
+    }
+
+    /** Like YouTube: the Reel went up and finish succeeded, Meta just never said "published". */
+    public function givenUp(): array
+    {
+        return ['status' => 'published', 'reason' => 'Status akhir dari Facebook belum terkonfirmasi setelah 48 jam. Reel kemungkinan sudah tayang, cek di Page.'];
     }
 
     /** @return string the Reel's video id */

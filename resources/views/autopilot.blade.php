@@ -202,7 +202,7 @@
     <div class="ap-head">
       <h1>Autopilot</h1>
       <p>
-        Cari video baru dari channel atau keyword secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok atau dijadwalkan ke YouTube Shorts.
+        Cari video baru dari channel atau keyword secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok atau dijadwalkan ke YouTube, Facebook, Instagram, dan Threads.
         Tampilan klip (layout, subtitle, gaya hook, musik) diatur per sumber lewat <b>Atur tampilan</b>; hook-nya ditulis AI untuk tiap klip.
       </p>
     </div>
@@ -308,7 +308,7 @@
       </div>
     </section>
 
-    {{-- ── Autopost: one block per platform (YouTube Shorts, Reels Facebook) ── --}}
+    {{-- ── Autopost: one block per platform (YouTube Shorts, Facebook, Instagram, Threads) ── --}}
     <template x-for="pf in AUTOPOST" :key="pf.id">
     <section class="ap-section">
       <div class="ap-section-head">
@@ -493,6 +493,7 @@
                 <div class="ap-ytline" :class="{ 'is-fail': autopostFailed(c, pf.id) }" x-show="c.review_status === 'approved' && c[pf.id]">
                   <span><span x-text="pf.name + ': '"></span><b x-text="autopostLabel(c, pf.id)"></b></span>
                   <small x-show="c[pf.id]?.error" x-text="c[pf.id]?.error"></small>
+                  <small x-show="c[pf.id]?.note" x-text="c[pf.id]?.note"></small>
                   <div class="ap-row">
                     <a class="ap-link" x-show="c[pf.id]?.url" :href="c[pf.id]?.url" target="_blank" rel="noopener" x-text="'Buka di ' + pf.name"></a>
                     <a class="ap-link" x-show="c[pf.id]?.reconnect_url" :href="c[pf.id]?.reconnect_url" x-text="'Hubungkan ulang ' + pf.noun"></a>
@@ -857,8 +858,12 @@ function autopilot() {
         note: 'Video dikirim sebagai publik. Selama app ini belum lolos audit YouTube API, YouTube menguncinya jadi privat. Ubah ke publik dari YouTube Studio.' },
       { id: 'facebook', name: 'Facebook', title: 'Reels Facebook', noun: 'Page', connect: '/settings/meta',
         note: 'Reels di Page selalu publik. Facebook hanya menerima video vertikal 3 sampai 90 detik; clip yang lebih panjang tetap disetujui, alasannya tampil di kartunya.' },
+      { id: 'instagram', name: 'Instagram', title: 'Reels Instagram', noun: 'akun', connect: '/settings/meta',
+        note: 'Reels tampil di tab Reels dan feed. Instagram mengunduh video dari server ini, jadi APP_URL harus alamat HTTPS publik. Instagram membatasi 50 posting lewat API per 24 jam.' },
+      { id: 'threads', name: 'Threads', title: 'Threads', noun: 'profil', connect: '/settings/meta',
+        note: 'Teksnya caption plus satu hashtag, maksimal 500 karakter. Video maksimal 5 menit dan diunduh Threads lewat APP_URL yang sama.' },
     ],
-    ap: { youtube: autopostState(), facebook: autopostState() },
+    ap: { youtube: autopostState(), facebook: autopostState(), instagram: autopostState(), threads: autopostState() },
     REVIEW_FILTERS: [
       { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
       { id: 'approved', label: 'Disetujui' }, { id: 'rejected', label: 'Ditolak' },
@@ -876,7 +881,7 @@ function autopilot() {
 
     async init() {
       document.fonts?.ready.then(() => this.fontsTick++);
-      await Promise.all([this.loadSources(), this.loadClips(), this.loadAccounts(), this.loadDefaults(), this.loadAutopost('youtube'), this.loadAutopost('facebook'),
+      await Promise.all([this.loadSources(), this.loadClips(), this.loadAccounts(), this.loadDefaults(), ...['youtube', 'facebook', 'instagram', 'threads'].map(p => this.loadAutopost(p)),
         api('/api/music').then(d => { this.musicTotal = d.total; }).catch(() => {})]);
       // Rendering and uploads progress in the background; keep the page fresh
       this.timer = setInterval(() => { this.loadClips(); this.loadSources(); }, 10000);
@@ -1082,7 +1087,7 @@ function autopilot() {
         && this.AUTOPOST.every(p => !c[p.id] || ['scheduled', 'failed', 'skipped'].includes(c[p.id].status));
     },
 
-    // ── Autopost (YouTube, Facebook) ─────────────────────────────
+    // ── Autopost (YouTube, Facebook, Instagram, Threads) ─────────────────────────────
     autopostOn(platform) { return this.ap[platform].loaded && this.ap[platform].enabled; },
     anyAutopostOn() { return this.AUTOPOST.some(p => this.autopostOn(p.id)); },
     async loadAutopost(platform) {

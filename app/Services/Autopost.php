@@ -30,12 +30,14 @@ class Autopost
         private MusicService $music,
         private YouTubeAutopost $youtube,
         private FacebookAutopost $facebook,
+        private InstagramAutopost $instagram,
+        private ThreadsAutopost $threads,
     ) {}
 
     /** @return array<string, AutopostPlatform> */
     public function platforms(): array
     {
-        return ['youtube' => $this->youtube, 'facebook' => $this->facebook];
+        return ['youtube' => $this->youtube, 'facebook' => $this->facebook, 'instagram' => $this->instagram, 'threads' => $this->threads];
     }
 
     public function platform(string $platform): AutopostPlatform

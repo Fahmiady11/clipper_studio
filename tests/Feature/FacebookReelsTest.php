@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\PublishFacebookReelJob;
+use App\Jobs\PublishToMetaJob;
 use App\Jobs\UploadToYouTubeJob;
 use App\Models\AutopostSetting;
 use App\Models\ClipProject;
@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\VideoSource;
 use App\Models\YoutubeAccount;
 use App\Services\FacebookReels;
+use App\Services\MetaPublishing;
 use App\Services\MetaStatusPoller;
 use App\Services\PublicMediaUrl;
 use App\Services\ScheduledPublisher;
@@ -92,10 +93,10 @@ class FacebookReelsTest extends TestCase
         ]);
     }
 
-    private function runJob(PublishFacebookReelJob $job): void
+    private function runJob(PublishToMetaJob $job): void
     {
         try {
-            $job->handle(app(FacebookReels::class));
+            $job->handle(app(MetaPublishing::class));
         } catch (Throwable $e) {
             $job->failed($e);
         }
@@ -127,8 +128,8 @@ class FacebookReelsTest extends TestCase
         $this->travel(61)->minutes();
         $this->assertSame(1, app(ScheduledPublisher::class)->publishDue());
         $this->assertSame(ScheduledPost::STATUS_QUEUED, ScheduledPost::where('platform', 'facebook')->sole()->status);
-        Queue::assertPushed(PublishFacebookReelJob::class, fn ($job) => $job->clipId === $clip->id
-            && $job->targetId === $page->id && $job->description === 'Caption FB #bisnis');
+        Queue::assertPushed(PublishToMetaJob::class, fn ($job) => $job->clipId === $clip->id && $job->platform === 'facebook'
+            && $job->targetId === $page->id && $job->text === 'Caption FB #bisnis');
 
         $this->actingAs($user)->getJson('/api/schedule?from=2026-11-01&to=2026-12-01')->assertOk()
             ->assertJsonPath('posts.0.delivery', 'queued')
@@ -168,7 +169,7 @@ class FacebookReelsTest extends TestCase
         $post = ScheduledPost::sole();
         $this->assertSame('failed', $post->status);
         $this->assertSame('Page Facebook sudah diputus. Hubungkan lagi lalu jadwalkan ulang.', $post->error);
-        Queue::assertNotPushed(PublishFacebookReelJob::class);
+        Queue::assertNotPushed(PublishToMetaJob::class);
     }
 
     // ── upload job ──────────────────────────────────────────────────────
@@ -180,7 +181,7 @@ class FacebookReelsTest extends TestCase
         $clip = $this->clip($user);
         $this->fakeReelUpload();
 
-        $this->runJob(new PublishFacebookReelJob($clip->id, $page->id, "Caption\n\n#bisnis"));
+        $this->runJob(new PublishToMetaJob($clip->id, 'facebook', $page->id, "Caption\n\n#bisnis"));
 
         $pub = ClipPublication::sole();
         $this->assertSame(['facebook', 'processing', 'v-77', $page->id, null], [$pub->platform, $pub->status, $pub->external_id, $pub->target_id, $pub->error]);
@@ -211,7 +212,7 @@ class FacebookReelsTest extends TestCase
         ]);
         Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Error validating access token', 'type' => 'OAuthException', 'code' => 190]], 400)]);
 
-        $this->runJob(new PublishFacebookReelJob($clip->id, $page->id, 'x'));
+        $this->runJob(new PublishToMetaJob($clip->id, 'facebook', $page->id, 'x'));
 
         $pub = ClipPublication::sole();
         $this->assertSame('failed', $pub->status);
@@ -233,11 +234,11 @@ class FacebookReelsTest extends TestCase
         $clip = $this->clip($user);
         Http::fake();
 
-        $this->runJob(new PublishFacebookReelJob($clip->id, $foreign->id, 'x'));
+        $this->runJob(new PublishToMetaJob($clip->id, 'facebook', $foreign->id, 'x'));
         $this->assertSame('Page Facebook bukan milik pemilik clip.', ClipPublication::sole()->error);
 
         Storage::delete($clip->output_path);
-        $this->runJob(new PublishFacebookReelJob($clip->id, $this->page($user)->id, 'x'));
+        $this->runJob(new PublishToMetaJob($clip->id, 'facebook', $this->page($user)->id, 'x'));
         $this->assertStringStartsWith('File clip tidak tersedia', ClipPublication::sole()->error);
         Http::assertNothingSent();
     }
@@ -294,12 +295,23 @@ class FacebookReelsTest extends TestCase
         $pub->update(['checked_at' => now()->subMinutes(16)]);
         $this->assertTrue(app(MetaStatusPoller::class)->isDue($pub->fresh()));
 
-        // Still processing two days later: stop and say where to look
+        // Still processing two days later: taken as published, like YouTube, with a note that it is unconfirmed
         Http::fake(['graph.facebook.com/*' => Http::response(['status' => ['video_status' => 'processing']])]);
         $pub->update(['uploaded_at' => now()->subHours(49), 'checked_at' => null]);
         app(MetaStatusPoller::class)->run();
-        $this->assertSame('failed', $pub->fresh()->status);
-        $this->assertStringContainsString('Reel mungkin sudah tayang', $pub->fresh()->error);
+        $this->assertSame('published', $pub->fresh()->status);
+        $this->assertStringContainsString('belum terkonfirmasi', $pub->fresh()->error);
+
+        // Shown as a note on a published post, not as an error
+        $user->forceFill(['approved_at' => now()])->save();
+        ScheduledPost::create([
+            'user_id' => $user->id, 'generated_clip_id' => $pub->generated_clip_id, 'platform' => 'facebook', 'account_id' => $pub->target_id,
+            'scheduled_at' => now()->addMinutes(5), 'status' => 'queued', 'options' => [],
+        ]);
+        $this->actingAs($user)->getJson('/api/schedule?from=2026-11-01&to=2026-12-01')->assertOk()
+            ->assertJsonPath('posts.0.delivery', 'published')
+            ->assertJsonPath('posts.0.error', null)
+            ->assertJsonPath('posts.0.note', $pub->fresh()->error);
     }
 
     // ── autopilot ───────────────────────────────────────────────────────
@@ -334,7 +346,7 @@ class FacebookReelsTest extends TestCase
         $this->actingAs($user)->putJson('/api/autopilot/facebook', [
             'enabled' => true, 'account_id' => $foreign->id, 'max_per_day' => 2, 'slot_times' => ['07:00'], 'timezone' => 'Asia/Jakarta',
         ])->assertNotFound();
-        $this->actingAs($user)->getJson('/api/autopilot/instagram')->assertNotFound();
+        $this->actingAs($user)->getJson('/api/autopilot/tiktok')->assertNotFound();
     }
 
     public function test_approve_books_youtube_and_facebook_slots_independently(): void
@@ -364,7 +376,7 @@ class FacebookReelsTest extends TestCase
         // Both go out through the calendar at their own time
         $this->travelTo(CarbonImmutable::parse('2026-11-10 15:00', 'Asia/Jakarta'));
         $this->assertSame(2, app(ScheduledPublisher::class)->publishDue());
-        Queue::assertPushed(PublishFacebookReelJob::class, fn ($job) => $job->clipId === $clip->id && $job->targetId === $page->id);
+        Queue::assertPushed(PublishToMetaJob::class, fn ($job) => $job->clipId === $clip->id && $job->platform === 'facebook' && $job->targetId === $page->id);
         Queue::assertPushed(UploadToYouTubeJob::class);
 
         // Sent: the approval stays
