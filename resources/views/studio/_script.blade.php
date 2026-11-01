@@ -859,6 +859,8 @@ function studio() {
         inbox:      '✓ Terkirim ke inbox TikTok — buka app TikTok untuk menambah sound & posting.',
         published:  '✓ Sudah diposting di TikTok — cek profil kamu.',
         failed:     'Upload gagal.',
+        // Autopilot approved it while TikTok had no default account
+        skipped:    'Tidak dikirim ke TikTok: akun utama belum dipilih.',
       }[this.tiktokStatus] || '';
     },
     // ── YouTube Shorts upload ──────────────────────────────────────────────
@@ -1072,7 +1074,7 @@ function studio() {
       if (arm.post_status === 'scheduled') return 'Tayang ' + when;
       if (arm.post_status === 'publishing') return 'Diserahkan ke upload';
       if (arm.post_status === 'queued') {
-        const label = { queued: 'Mengantre', uploading: 'Mengupload', processing: 'Diproses TikTok', published: 'Sudah tayang ' + when, failed: 'Upload gagal', inbox: 'Ada di draft TikTok' }[arm.delivery];
+        const label = { queued: 'Mengantre', uploading: 'Mengupload', processing: 'Diproses TikTok', published: 'Sudah tayang ' + when, failed: 'Upload gagal', inbox: 'Ada di draft TikTok', skipped: 'Tidak dikirim ke TikTok' }[arm.delivery];
         return label || 'Diserahkan ke upload';
       }
       return 'Siap diposting';

@@ -247,6 +247,12 @@ class ConnectedAccountsTest extends TestCase
             ->assertJsonPath('data.0.tiktok_status', 'skipped')
             ->assertJsonPath('data.0.tiktok_error', 'Akun utama TikTok sudah diputus. Pilih akun utama di Akun terhubung.');
 
+        // Studio shows it with a label and the reason
+        $this->actingAs($user)->getJson("/api/clips/{$clip->id}/tiktok-status")->assertOk()
+            ->assertJson(['status' => 'skipped', 'error' => 'Akun utama TikTok sudah diputus. Pilih akun utama di Akun terhubung.']);
+        $user->forceFill(['approved_at' => now()])->save();
+        $this->actingAs($user)->get('/')->assertOk()->assertSee('Tidak dikirim ke TikTok: akun utama belum dipilih.');
+
         // Nothing went out, so the approval can be undone, and the skip goes with it
         $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/unapprove")->assertOk();
         $this->assertSame([null, null], [$clip->fresh()->tiktok_status, $clip->fresh()->tiktok_error]);

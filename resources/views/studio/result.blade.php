@@ -178,9 +178,10 @@
                 :style="!tiktokCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
                 x-text="tiktokBusy ? 'Mengupload…' : (tiktokMode === 'direct' ? 'Posting ke TikTok' : 'Kirim ke TikTok (draft)')"></button>
         <div x-show="tiktokStatus" style="margin-top:12px;font-size:13px"
-             :style="tiktokStatus === 'failed' ? 'color:var(--danger)' : 'color:var(--text-muted)'"
+             :style="tiktokStatus === 'failed' ? 'color:var(--danger)' : tiktokStatus === 'skipped' ? 'color:var(--warn)' : 'color:var(--text-muted)'"
              x-text="tiktokStatusLabel"></div>
-        <div x-show="tiktokStatus === 'failed' && tiktokError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="tiktokError"></div>
+        <div x-show="['failed', 'skipped'].includes(tiktokStatus) && tiktokError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="tiktokError"></div>
+        <a x-show="tiktokStatus === 'skipped'" href="/settings/accounts#tiktok" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--accent-ink)">Pilih akun utama TikTok</a>
       </div>
     </div>
 
