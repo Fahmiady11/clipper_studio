@@ -53,11 +53,11 @@
     <input id="tk-name" class="tk-input" type="text" maxlength="100" required x-model="name" placeholder="mis. Claude Code laptop" />
     <fieldset class="tk-abil">
       <legend class="fblock-title">Izin</legend>
-      <label><input type="checkbox" value="read" x-model="abilities" /><span>Baca<small>Lihat project, status, dan unduh klip</small></span></label>
+      <label><input type="checkbox" checked disabled /><span>Baca<small>Selalu aktif: lihat project, status, dan unduh klip</small></span></label>
       <label><input type="checkbox" value="render" x-model="abilities" /><span>Render<small>Buat project, render, batalkan (memakai kuota)</small></span></label>
       <label><input type="checkbox" value="publish" x-model="abilities" /><span>Publish<small>Upload ke YouTube / TikTok yang tersambung</small></span></label>
     </fieldset>
-    <button type="submit" class="btn" :disabled="busy || !abilities.length">Buat token</button>
+    <button type="submit" class="btn" :disabled="busy">Buat token</button>
   </form>
   <div class="tk-err" x-show="error" x-text="error" role="alert"></div>
 
@@ -109,7 +109,7 @@ function apiTokens() {
     async create() {
       this.busy = true; this.error = '';
       try {
-        this.created = await call('POST', '/api/tokens', { name: this.name, abilities: this.abilities });
+        this.created = await call('POST', '/api/tokens', { name: this.name, abilities: ['read', ...this.abilities.filter((a) => a !== 'read')] });
         this.copied = false; this.name = '';
         await this.load();
       } catch (e) { this.error = e.message; }

@@ -15,6 +15,7 @@ class ApiToken extends Model
     public const MAX_PER_USER = 10;
 
     // read: list/poll/download. render: create projects, render, cancel, captions. publish: YouTube/TikTok upload.
+    // render and publish imply read (a token that can start work must be able to poll it).
     public const ABILITIES = ['read', 'render', 'publish'];
 
     protected $fillable = ['user_id', 'name', 'token_hash', 'abilities', 'last_used_at'];
@@ -32,7 +33,7 @@ class ApiToken extends Model
             'user_id' => $user->id,
             'name' => $name,
             'token_hash' => self::hash($plain),
-            'abilities' => array_values(array_intersect(self::ABILITIES, $abilities ?? self::ABILITIES)),
+            'abilities' => self::normalize($abilities ?? self::ABILITIES),
         ]);
 
         return [$token, $plain];
@@ -52,9 +53,24 @@ class ApiToken extends Model
         });
     }
 
+    /** Known abilities only, in canonical order, with read added whenever render or publish is present. */
+    public static function normalize(array $abilities): array
+    {
+        if (array_intersect(['render', 'publish'], $abilities)) {
+            $abilities[] = 'read';
+        }
+
+        return array_values(array_intersect(self::ABILITIES, $abilities));
+    }
+
     public function can(string $ability): bool
     {
-        return in_array($ability, $this->abilities ?? [], true);
+        $have = $this->abilities ?? [];
+        if ($ability === 'read') {
+            return (bool) array_intersect(['read', 'render', 'publish'], $have);
+        }
+
+        return in_array($ability, $have, true);
     }
 
     public static function hash(string $plain): string

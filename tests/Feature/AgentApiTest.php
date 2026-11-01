@@ -290,12 +290,55 @@ class AgentApiTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_render_and_publish_tokens_do_not_imply_read(): void
+    public function test_render_and_publish_imply_read(): void
     {
-        [, $rp] = ApiToken::issue($this->user, 'rp', ['render', 'publish']);
+        [$renderOnly, $plain] = ApiToken::issue($this->user, 'r', ['render']);
+        $clip = $this->clip($this->user, 'done');
 
-        $this->api($rp)->getJson('/api/v1/projects')->assertForbidden()->assertJsonPath('required_ability', 'read');
-        $this->api($rp)->postJson('/api/v1/projects', ['youtube_url' => 'https://youtu.be/abcdefghijk'])->assertCreated();
+        $this->assertSame(['read', 'render'], $renderOnly->abilities);
+        $this->api($plain)->getJson("/api/v1/projects/{$clip->clip_project_id}/status")->assertOk();
+        $this->api($plain)->getJson("/api/v1/clips/{$clip->id}/render-status")->assertOk();
+        $this->api($plain)->postJson('/api/v1/projects', ['youtube_url' => 'https://youtu.be/abcdefghijk'])->assertCreated();
+        $this->api($plain)->postJson("/api/v1/clips/{$clip->id}/youtube", [])->assertForbidden()
+            ->assertJsonPath('required_ability', 'publish');
+
+        [$publishOnly] = ApiToken::issue($this->user, 'p', ['publish']);
+        $this->assertSame(['read', 'publish'], $publishOnly->abilities);
+    }
+
+    public function test_can_grants_read_to_render_or_publish_even_for_stored_data_without_it(): void
+    {
+        $legacy = fn (array $abilities) => (new ApiToken)->forceFill(['abilities' => $abilities]);
+
+        $this->assertTrue($legacy(['render'])->can('read'));
+        $this->assertTrue($legacy(['publish'])->can('read'));
+        $this->assertFalse($legacy([])->can('read'));
+        $this->assertFalse($legacy(['read'])->can('render'));
+        $this->assertFalse($legacy(['render'])->can('publish'));
+        $this->assertFalse($legacy(['read', 'render'])->can('publish'));
+    }
+
+    public function test_read_only_token_still_cannot_render(): void
+    {
+        [$ro, $plain] = ApiToken::issue($this->user, 'ro', ['read']);
+        $clip = $this->clip($this->user);
+
+        $this->assertSame(['read'], $ro->abilities);
+        $this->api($plain)->postJson("/api/v1/clips/{$clip->id}/render")->assertForbidden()
+            ->assertJsonPath('required_ability', 'render');
+        Queue::assertNothingPushed();
+    }
+
+    public function test_mcp_lists_read_tools_for_a_render_only_token(): void
+    {
+        [, $plain] = ApiToken::issue($this->user, 'r', ['render']);
+        $names = collect($this->api($plain)->postJson('/api/v1/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
+            ->json('result.tools'))->pluck('name')->all();
+
+        $this->assertEqualsCanonicalizing(
+            ['create_project', 'get_status', 'list_clips', 'render_clip', 'get_render_status', 'list_publish_accounts'],
+            $names,
+        );
     }
 
     public function test_publish_ability_gets_past_the_gate(): void
@@ -362,6 +405,21 @@ class AgentApiTest extends TestCase
         $this->postJson('/api/tokens', ['name' => 'a', 'abilities' => ['admin']])->assertUnprocessable();
     }
 
+    public function test_web_token_with_only_render_is_stored_with_read(): void
+    {
+        $this->actingAs($this->user);
+
+        $this->postJson('/api/tokens', ['name' => 'a', 'abilities' => ['render']])->assertCreated()
+            ->assertJsonPath('abilities', ['read', 'render']);
+    }
+
+    public function test_settings_form_pins_read_on(): void
+    {
+        $html = $this->actingAs($this->user)->get('/settings/api')->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('/<input type="checkbox" checked disabled \/>\s*<span>Baca/', $html);
+    }
+
     public function test_token_cap_is_enforced_for_web_and_cli(): void
     {
         $this->actingAs($this->user);
@@ -398,6 +456,9 @@ class AgentApiTest extends TestCase
 
         Artisan::call('clipper:token', ['email' => $this->user->email, 'name' => 'all', '--ability' => ['read', 'render', 'publish']]);
         $this->assertSame(['read', 'render', 'publish'], ApiToken::findByPlain(strtok(Artisan::output(), "\n"))->abilities);
+
+        Artisan::call('clipper:token', ['email' => $this->user->email, 'name' => 'pub', '--ability' => ['publish']]);
+        $this->assertSame(['read', 'publish'], ApiToken::findByPlain(strtok(Artisan::output(), "\n"))->abilities);
 
         $count = ApiToken::count();
         $this->assertSame(1, Artisan::call('clipper:token', ['email' => $this->user->email, '--ability' => ['root']]));

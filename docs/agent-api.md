@@ -18,11 +18,11 @@ Semua request memakai header `Authorization: Bearer clp_...`. Batas 120 request/
 
 | Izin | Mencakup |
 |---|---|
-| `read` | Semua `GET` kecuali caption: daftar project, status, klip, `render-status`, unduh MP4/ZIP, `publish/accounts`, `youtube-status`, `tiktok-status` |
+| `read` | Selalu ikut bila token punya `render` atau `publish`. Semua `GET` kecuali caption: daftar project, status, klip, `render-status`, unduh MP4/ZIP, `publish/accounts`, `youtube-status`, `tiktok-status` |
 | `render` | Buat project, batalkan/ulangi analisis, render klip, batalkan render, `caption` (memanggil AI bila belum ada) |
-| `publish` (publish) | Upload ke YouTube dan TikTok |
+| `publish` | Upload ke YouTube dan TikTok |
 
-Default di halaman web dan `clipper:token`: `read` + `render` (publish harus dicentang/diminta). Token yang dibuat sebelum ada izin mendapat ketiganya. Request tanpa izin yang dibutuhkan dijawab `403` dengan `required_ability`. MCP `tools/list` hanya menampilkan tool yang boleh dipakai token itu; memanggil tool lain tetap `403` (`isError`).
+`render` dan `publish` otomatis menyertakan `read` (agent yang memulai kerja harus bisa memantaunya): `--ability=render` menyimpan `read, render`. Di halaman web, `read` selalu tercentang dan tidak bisa dimatikan. Token read-only tetap tidak bisa render atau publish. Default di halaman web dan `clipper:token`: `read` + `render` (publish harus dicentang/diminta). Token yang dibuat sebelum ada izin mendapat ketiganya. Request tanpa izin yang dibutuhkan dijawab `403` dengan `required_ability`. MCP `tools/list` hanya menampilkan tool yang boleh dipakai token itu; memanggil tool lain tetap `403` (`isError`).
 
 ## REST (`/api/v1`)
 
