@@ -2,7 +2,6 @@
   <div class="wiz-head">
     <div class="wiz-kicker">Langkah 1 dari 7</div>
     <h1 class="wiz-title">Pilih sumber video</h1>
-    <p class="wiz-desc">Tempel link video dari channel YouTube milikmu (sudah diverifikasi), atau unggah file videonya langsung.</p>
   </div>
 
   <div class="yt-verify-note">

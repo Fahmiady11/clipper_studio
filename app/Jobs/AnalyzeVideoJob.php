@@ -8,6 +8,7 @@ use App\Models\GeneratedClip;
 use App\Models\Transcript;
 use App\Services\ClipPerformanceSummary;
 use App\Services\GeminiService;
+use App\Services\JobWatchdog;
 use App\Services\MusicService;
 use App\Services\RenderQuota;
 use App\Services\TranscriptService;
@@ -222,11 +223,14 @@ class AnalyzeVideoJob implements ShouldQueue
             'trace' => $e->getTraceAsString(),
         ]);
 
-        ClipProject::where('id', $this->projectId)->whereNull('cancelled_at')->update([
+        $failed = ClipProject::where('id', $this->projectId)->whereNull('cancelled_at')->update([
             'status' => 'failed',
             'error_msg' => $e->getMessage(),
             'progress_message' => mb_substr('Gagal: '.$e->getMessage(), 0, 119),
         ]);
+        if ($failed) {
+            app(JobWatchdog::class)->notifyProject(ClipProject::with('user')->find($this->projectId), $e->getMessage());
+        }
     }
 
     private function isCancelled(): bool

@@ -20,6 +20,7 @@
 .field{width:100%;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:10px;color:var(--text);font-family:inherit;font-size:15px;min-height:44px;padding:11px 14px;outline:none;transition:border-color .15s,box-shadow .15s}
 .field:focus{border-color:var(--accent-ink);box-shadow:0 0 0 3px var(--accent-soft)}
 .field.error{border-color:var(--danger)}
+.field.mono{font-family:var(--font-mono);letter-spacing:.06em;text-transform:uppercase}
 .err{font-size:12.5px;color:var(--danger);margin-top:6px}
 .btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:14px;font-size:14.5px;font-weight:600;letter-spacing:-.01em;cursor:pointer;font-family:inherit;transition:transform .12s,filter .15s;margin-top:24px}
 .btn:hover{filter:brightness(1.06)}
@@ -41,7 +42,7 @@
   </div>
   <div class="card">
     <h1 class="card-title">Buat akun baru</h1>
-    <p class="card-sub">Gratis. Tidak perlu kartu kredit.</p>
+    <p class="card-sub">{{ $needsInvite ? "Closed beta: daftar dengan kode undangan dari admin." : "Gratis. Tidak perlu kartu kredit." }}</p>
 
     @if (session('status'))
       <div class="notice" role="status">{{ session('status') }}</div>
@@ -49,6 +50,18 @@
 
     <form method="POST" action="{{ route('register') }}" onsubmit="this.querySelector('[type=submit]').disabled = true">
       @csrf
+
+      @if ($needsInvite)
+        <div class="fblock">
+          <label class="flabel" for="invite">Kode undangan</label>
+          <input class="field mono {{ $errors->has('invite') ? 'error' : '' }}"
+                 id="invite" name="invite" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                 value="{{ old('invite', $invite) }}" placeholder="ABCD-1234" required />
+          @error('invite')
+            <div class="err">{{ $message }}</div>
+          @enderror
+        </div>
+      @endif
 
       <div class="fblock">
         <label class="flabel" for="name">Nama lengkap</label>

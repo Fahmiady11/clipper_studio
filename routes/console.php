@@ -1,7 +1,10 @@
 <?php
 
 use App\Jobs\DiscoverVideosJob;
+use App\Models\InviteCode;
 use App\Models\VideoSource;
+use App\Services\JobWatchdog;
+use App\Services\LoadMonitor;
 use App\Services\StorageCleanup;
 use App\Services\TikTokStatsService;
 use Illuminate\Support\Facades\Artisan;
@@ -34,3 +37,25 @@ Artisan::command('clipper:cleanup {--hours= : Keep files touched within this man
 })->purpose('Delete old downloaded source videos');
 
 Schedule::command('clipper:cleanup')->dailyAt('03:17')->name('clipper-cleanup');
+
+// Closed beta: CPU load and render queue sampled every minute for /status and the logs
+Artisan::command('clipper:monitor', function (LoadMonitor $monitor) {
+    $s = $monitor->sample();
+    $this->info(sprintf('%s: load/core %.2f, %d queued, %d running, %d failed in 24h', $s['level'], $s['load_per_core'], $s['queued'], $s['running'], $s['failed_24h']));
+})->purpose('Sample CPU load and render queue depth');
+
+Schedule::command('clipper:monitor')->everyMinute()->name('clipper-monitor')->withoutOverlapping();
+
+// Work stuck in 'processing' after a worker died past its timeout: fail it and tell the user
+Artisan::command('clipper:watchdog', function (JobWatchdog $watchdog) {
+    $r = $watchdog->run();
+    $this->info("Failed {$r['projects']} stuck analyses, {$r['clips']} stuck renders");
+})->purpose('Fail jobs stuck in processing past their timeout');
+
+Schedule::command('clipper:watchdog')->everyFiveMinutes()->name('clipper-watchdog')->withoutOverlapping();
+
+Artisan::command('clipper:invite {--uses=1 : How many people can sign up with it} {--days= : Expire after this many days} {--note= : Who it is for}', function () {
+    $invite = InviteCode::generate((int) $this->option('uses'), $this->option('days') ? (int) $this->option('days') : null, $this->option('note'));
+    $this->info($invite->code);
+    $this->line(url('/register').'?invite='.$invite->code);
+})->purpose('Create a closed-beta invite code');

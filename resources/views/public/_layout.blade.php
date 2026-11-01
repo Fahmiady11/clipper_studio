@@ -60,6 +60,7 @@ a { color: var(--accent-ink); }
       <a href="{{ route('welcome') }}">Home</a>
       <a href="{{ route('terms') }}">Terms of Service</a>
       <a href="{{ route('privacy') }}">Privacy Policy</a>
+      <a href="{{ route('status') }}">Status</a>
     </nav>
   </footer>
 </body>
