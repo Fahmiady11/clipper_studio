@@ -12,11 +12,12 @@ use App\Support\YoutubeUrl;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Tests\Concerns\VerifiesYouTubeChannel;
 use Tests\TestCase;
 
 class SecurityHardeningTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, VerifiesYouTubeChannel;
 
     protected function setUp(): void
     {
@@ -180,7 +181,7 @@ class SecurityHardeningTest extends TestCase
     public function test_project_stores_the_canonical_url_only(): void
     {
         Queue::fake();
-        $this->actingAs(User::factory()->create());
+        $this->actingAs($this->verifiedUser());
 
         $this->postJson('/api/projects', [
             'youtube_url' => 'https://youtu.be/dQw4w9WgXcQ?si=tracking',

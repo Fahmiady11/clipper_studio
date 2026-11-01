@@ -12,6 +12,7 @@ use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
 use App\Models\User;
 use App\Models\VideoSource;
+use App\Models\YoutubeAccount;
 use App\Services\DiscoveryService;
 use App\Services\GeminiService;
 use App\Services\TranscriptService;
@@ -20,13 +21,16 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\VerifiesYouTubeChannel;
 use Tests\TestCase;
 
 class AutopilotTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, VerifiesYouTubeChannel;
 
     private string $fakeYtDlp;
+
+    private const CHANNEL = 'UCowned000000000000000';
 
     protected function setUp(): void
     {
@@ -46,6 +50,7 @@ class AutopilotTest extends TestCase
         file_put_contents($this->fakeYtDlp, "#!/bin/sh\necho \"\$@\" > {$this->fakeYtDlp}.args\ncat <<'JSON'\n{$out}\nJSON\n");
         chmod($this->fakeYtDlp, 0755);
         config(['services.ytdlp.path' => $this->fakeYtDlp, 'services.ytdlp.cookies_from_browser' => '', 'services.ytdlp.cookies_file' => '']);
+        $this->fakeChannelLookups(self::CHANNEL);
     }
 
     protected function tearDown(): void
@@ -57,6 +62,10 @@ class AutopilotTest extends TestCase
 
     private function source(User $user, array $attrs = []): VideoSource
     {
+        if (! YoutubeAccount::where('user_id', $user->id)->exists()) {
+            $this->ownChannel($user, self::CHANNEL);
+        }
+
         return VideoSource::create($attrs + [
             'user_id' => $user->id, 'type' => 'channel', 'value' => '@chan',
             'max_per_run' => 5, 'min_video_seconds' => 300, 'max_video_seconds' => 7200,
@@ -150,21 +159,22 @@ class AutopilotTest extends TestCase
     {
         Queue::fake();
         $user = User::factory()->create();
+        $this->ownChannel($user, self::CHANNEL);
         ClipProject::create([
             'user_id' => $user->id, 'youtube_url' => 'https://youtu.be/abcdefg', 'layout_type' => 'gaussian',
             'clip_count' => 5, 'duration_mode' => 'auto', 'status' => 'done', 'music_enabled' => true, 'music_volume' => 25,
         ]);
 
-        $this->actingAs($user)->postJson('/api/autopilot/sources', ['type' => 'keyword', 'value' => ' podcast ', 'min_minutes' => 10, 'max_minutes' => 60])
+        $this->actingAs($user)->postJson('/api/autopilot/sources', ['type' => 'channel', 'value' => ' @chan ', 'min_minutes' => 10, 'max_minutes' => 60])
             ->assertCreated();
         $source = VideoSource::firstOrFail();
-        $this->assertSame('podcast', $source->value);
+        $this->assertSame('https://www.youtube.com/@chan', $source->value);
         $this->assertSame(600, $source->min_video_seconds);
         $this->assertSame('gaussian', $source->settings['layout_type']);
         $this->assertSame(5, $source->settings['clip_count']);
         $this->assertSame(25, $source->settings['music']['volume']);
 
-        $this->actingAs($user)->getJson('/api/autopilot/sources')->assertOk()->assertJsonPath('0.value', 'podcast');
+        $this->actingAs($user)->getJson('/api/autopilot/sources')->assertOk()->assertJsonPath('0.value', 'https://www.youtube.com/@chan');
         $this->actingAs($user)->patchJson("/api/autopilot/sources/{$source->id}", ['enabled' => false])->assertOk();
         $this->assertFalse($source->fresh()->enabled);
 

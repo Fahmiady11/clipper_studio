@@ -249,7 +249,7 @@
         <ul>
           <li><strong>Login Kit</strong>: you connect your own TikTok account through TikTok's authorization screen. We use your display name and avatar only to show which account is connected.</li>
           <li><strong>Content Posting API</strong>: a clip is uploaded only when you click upload for that clip. Send it to your TikTok inbox as a draft to finish in TikTok, or post it directly with the caption, privacy and interaction settings you choose on that screen.</li>
-          <li><strong>YouTube Data API</strong>: you connect your own channel through Google's authorization screen. A clip is uploaded only when you click upload for that clip, with the title, description and visibility you set. Clipper Studio uses YouTube API Services; see the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a>.</li>
+          <li><strong>YouTube Data API</strong>: you connect your own channel through Google's authorization screen, and that verified channel is the only YouTube source the Service will process — links to other channels are refused, and your own file uploads work without a channel. A clip is uploaded only when you click upload for that clip, with the title, description and visibility you set. Clipper Studio uses YouTube API Services; see the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a>.</li>
           <li>Nothing is posted without your action for that clip, and you can disconnect your accounts at any time. See our <a href="{{ route('privacy') }}">Privacy Policy</a>.</li>
         </ul>
       </div>

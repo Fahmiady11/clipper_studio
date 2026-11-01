@@ -11,11 +11,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\VerifiesYouTubeChannel;
 use Tests\TestCase;
 
 class BrandKitTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, VerifiesYouTubeChannel;
 
     private User $user;
 
@@ -25,6 +26,8 @@ class BrandKitTest extends TestCase
         Queue::fake();
         Storage::fake('local');
         $this->user = User::factory()->create();
+        $this->fakeChannelLookups();
+        $this->ownChannel($this->user);
     }
 
     public function test_guest_cannot_open_brand_settings(): void

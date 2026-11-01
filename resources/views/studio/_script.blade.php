@@ -42,6 +42,7 @@ function studio() {
     sessionId: null, historyOpen: false, history: [], clearingHistory: false,
 
     url: '', meta: null, loadingMeta: false, metaError: null,
+    uploadFile: null, uploadError: null,
     layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: BRAND.font_family || 'Montserrat', subtitleSize: 56,
@@ -121,7 +122,7 @@ function studio() {
       return /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)[A-Za-z0-9_-]{6,}/.test(this.url);
     },
     get canNext() {
-      if (this.step === 1) return !!this.meta;
+      if (this.step === 1) return !!(this.meta || this.uploadFile);
       if (this.step === 2) return !!this.layout;
       if (this.step === 7) return !!this.selectedClip;
       return true;
@@ -364,6 +365,8 @@ function studio() {
     // ── step 1: metadata ───────────────────────────────────────────────────
     async processLink() {
       if (!this.isValidUrl) return;
+      this.uploadFile = null; // one source at a time
+      this.uploadError = null;
       this.loadingMeta = true;
       this.metaError = null;
       try {
@@ -386,6 +389,27 @@ function studio() {
       }
     },
 
+    // A directly uploaded file needs no channel ownership check
+    pickUploadFile(e) {
+      const f = e.target.files && e.target.files[0];
+      this.uploadError = null;
+      if (!f) { this.uploadFile = null; return; }
+      if (f.size > 2048 * 1024 * 1024) {
+        this.uploadFile = null;
+        e.target.value = '';
+        this.uploadError = 'Ukuran video melebihi batas unggah 2 GB.';
+        return;
+      }
+      this.uploadFile = f;
+      this.url = '';
+      this.meta = null;
+      this.metaError = null;
+    },
+    clearUploadFile() {
+      this.uploadFile = null;
+      this.uploadError = null;
+    },
+
     // ── step 6: generate + polling ─────────────────────────────────────────
     async startGenerate() {
       this.generateCancelled = false;
@@ -396,52 +420,78 @@ function studio() {
 
       let projectId;
       try {
-        const res = await fetch('/api/projects', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+        const settings = {
+          layout_type: this.layout,
+          edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll },
+          watermark: this.hasLogo && this.watermark,
+          clip_count: this.clipCount,
+          duration_mode: this.durationMode,
+          min_duration: this.durationMode === 'manual' ? this.minDuration : null,
+          max_duration: this.durationMode === 'manual' ? this.maxDuration : null,
+          subtitle: {
+            enabled: this.subtitleEnabled,
+            font_family: this.subtitleFont,
+            font_size: this.subtitleSize,
+            text_color: this.subtitleTextColor,
+            highlight_color: this.subtitleHighlight,
+            position: this.subtitlePos,
+            position_y: this.subtitleY,
+            background_style: this.subtitleBg,
+            style: this.subtitleStyle,
+            emoji: this.subtitleEmoji,
           },
-          body: JSON.stringify({
-            youtube_url: this.url,
-            layout_type: this.layout,
-            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll },
-            watermark: this.hasLogo && this.watermark,
-            clip_count: this.clipCount,
-            duration_mode: this.durationMode,
-            min_duration: this.durationMode === 'manual' ? this.minDuration : null,
-            max_duration: this.durationMode === 'manual' ? this.maxDuration : null,
-            subtitle: {
-              enabled: this.subtitleEnabled,
-              font_family: this.subtitleFont,
-              font_size: this.subtitleSize,
-              text_color: this.subtitleTextColor,
-              highlight_color: this.subtitleHighlight,
-              position: this.subtitlePos,
-              position_y: this.subtitleY,
-              background_style: this.subtitleBg,
-              style: this.subtitleStyle,
-              emoji: this.subtitleEmoji,
-            },
-            hook: {
-              enabled: this.hookEnabled,
-              hook_text: this.hookAi ? null : this.hookText,
-              is_ai_generated: this.hookAi,
-              duration_seconds: this.hookDuration,
-              position: this.hookPos,
-              text_color: this.hookTextColor,
-              background_style: this.hookBg,
-            },
-            music: {
-              enabled: this.musicEnabled,
-              mood: this.musicMood || null,
-              volume: this.musicVolume,
-            },
-          }),
-        });
+          hook: {
+            enabled: this.hookEnabled,
+            hook_text: this.hookAi ? null : this.hookText,
+            is_ai_generated: this.hookAi,
+            duration_seconds: this.hookDuration,
+            position: this.hookPos,
+            text_color: this.hookTextColor,
+            background_style: this.hookBg,
+          },
+          music: {
+            enabled: this.musicEnabled,
+            mood: this.musicMood || null,
+            volume: this.musicVolume,
+          },
+        };
+
+        const csrf = document.querySelector('meta[name=csrf-token]').content;
+        let res;
+        if (this.uploadFile) {
+          const form = new FormData();
+          form.append('video', this.uploadFile);
+          form.append('title', this.uploadFile.name.replace(/\.[^.]+$/, '').slice(0, 255));
+          // PHP only parses nested arrays from bracket keys (subtitle[font_family]),
+          // not from a JSON string in one field.
+          const flatten = (prefix, value) => {
+            if (value === null || value === undefined) return;
+            if (typeof value === 'object' && !Array.isArray(value)) {
+              Object.entries(value).forEach(([k, v]) => flatten(prefix + '[' + k + ']', v));
+              return;
+            }
+            form.append(prefix, String(value));
+          };
+          Object.entries(settings).forEach(([k, v]) => flatten(k, v));
+          res = await fetch('/api/projects/upload', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+            body: form,
+          });
+        } else {
+          res = await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+            body: JSON.stringify({ youtube_url: this.url, ...settings }),
+          });
+        }
         const data = await res.json();
-        if (!res.ok) { this.generateError = data.message || 'Gagal membuat project.'; this.generateStarted = false; return; }
+        if (!res.ok) {
+          this.generateError = data.message || 'Gagal membuat project.';
+          this.generateStarted = false;
+          this.locked = false;
+          return;
+        }
         projectId = data.project_id;
         this.projectId = projectId;
         this.locked = true;
@@ -1063,7 +1113,7 @@ function studio() {
       this.clearSession();
       Object.assign(this, {
         step:1, maxReached:1, done:false, locked:false,
-        url:'', meta:null, metaError:null,
+        url:'', meta:null, metaError:null, uploadFile:null, uploadError:null,
         layout:'reframe',
         clipCount:3, durationMode:'auto', minDuration:20, maxDuration:45,
         generateStarted:false, generateProgress:0, generateLogIdx:0, generateError:null, generateLogMsg:null, generateCancelled:false,

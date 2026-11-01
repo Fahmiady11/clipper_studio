@@ -1,7 +1,7 @@
 <div x-show="!done && step !== 6" class="wiz-nav-wrap">
   <div class="wiz-nav">
     <div class="wiz-nav-summary">
-      <span x-show="step === 1" x-text="meta ? 'Video siap · ' + fmtClock(meta.durationSeconds) : 'Proses link untuk lanjut'"></span>
+      <span x-show="step === 1" x-text="meta ? 'Video siap · ' + fmtClock(meta.durationSeconds) : (uploadFile ? 'File siap · ' + uploadFile.name : 'Pilih link atau file untuk lanjut')"></span>
       <span x-show="step === 2">Layout: <b x-text="currentLayout.title"></b></span>
       <span x-show="step === 3"><b x-text="clipCount"></b> clip · <span x-text="durationMode === 'auto' ? 'durasi otomatis' : minDuration + '–' + maxDuration + 's'"></span></span>
       <span x-show="step === 4">Subtitle <b x-text="subtitleEnabled ? 'aktif' : 'nonaktif'"></b><span x-show="subtitleEnabled"> · <span x-text="subtitleFont"></span></span></span>

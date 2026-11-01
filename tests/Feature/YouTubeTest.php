@@ -72,7 +72,7 @@ class YouTubeTest extends TestCase
             'www.googleapis.com/youtube/v3/channels*' => Http::response(['items' => [['id' => 'UCabc', 'snippet' => ['title' => 'Podcast Klip', 'thumbnails' => ['default' => ['url' => 'https://yt3.example/a.jpg']]]]]]),
         ]);
 
-        $this->actingAs($user)->get('/youtube/callback?state='.$q['state'].'&code=c1')->assertRedirect('/?youtube=connected');
+        $this->actingAs($user)->get('/youtube/callback?state='.$q['state'].'&code=c1')->assertRedirect('/settings/youtube');
 
         $account = YoutubeAccount::sole();
         $this->assertSame(['UCabc', 'Podcast Klip', 'rt'], [$account->channel_id, $account->title, $account->refresh_token]);
@@ -84,7 +84,9 @@ class YouTubeTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user)->get('/youtube/connect');
 
-        $this->actingAs($user)->get('/youtube/callback?state=nope&code=c1')->assertRedirect('/?youtube=invalid_state');
+        $this->actingAs($user)->get('/youtube/callback?state=nope&code=c1')
+            ->assertRedirect('/settings/youtube')
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'tidak cocok'));
         $this->assertSame(0, YoutubeAccount::count());
     }
 

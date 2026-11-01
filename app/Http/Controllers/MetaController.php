@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\YouTubeService;
 use App\Services\YtDlpService;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
@@ -10,13 +11,19 @@ use Illuminate\Support\Facades\Log;
 
 class MetaController extends Controller
 {
-    public function show(Request $request, YtDlpService $ytdlp): JsonResponse
+    public function show(Request $request, YtDlpService $ytdlp, YouTubeService $youtube): JsonResponse
     {
         $request->validate(['url' => ['required', 'string', 'max:500']]);
 
         $url = YoutubeUrl::canonical($request->string('url')->toString());
         if (! $url) {
             return response()->json(['error' => 'Link YouTube tidak valid.'], 422);
+        }
+
+        // Fail on step 1 instead of after the user picks a layout: only videos
+        // from a channel they proved with OAuth can be processed.
+        if (! $youtube->verifiedChannelIdForVideo($request->user()->id, $url)) {
+            return response()->json(['error' => 'Video ini bukan dari channel YouTube yang sudah kamu verifikasi. Buka /settings/youtube untuk menghubungkan channel, atau unggah file videonya langsung.'], 422);
         }
         $log = Log::channel('clipper_api');
 

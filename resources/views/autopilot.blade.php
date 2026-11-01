@@ -174,7 +174,8 @@
     <div class="ap-head">
       <h1>Autopilot</h1>
       <p>
-        Cari video baru dari channel atau keyword secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok.
+        Pantau channel YouTube milikmu yang sudah diverifikasi secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok.
+        Channel lain tidak bisa dipantau: Clipper hanya mengolah video milikmu sendiri.
         Tampilan klip (layout, subtitle, gaya hook, musik) diatur per sumber lewat <b>Atur tampilan</b>; hook-nya ditulis AI untuk tiap klip.
       </p>
     </div>
@@ -216,12 +217,15 @@
       <div class="ap-card ap-form" style="margin-bottom:16px">
         <div class="ap-form-top">
           <div class="seg">
-            <button :class="{ on: form.type === 'channel' }" @click="form.type = 'channel'" type="button">Channel</button>
-            <button :class="{ on: form.type === 'keyword' }" @click="form.type = 'keyword'" type="button">Keyword</button>
+            <button class="on" type="button">Channel</button>
           </div>
           <input class="field" x-model="form.value" @keydown.enter="form.value.trim() && addSource()"
-                 :placeholder="form.type === 'channel' ? '@namachannel atau https://youtube.com/@namachannel' : 'contoh: podcast bisnis indonesia'">
+                 placeholder="@namachannel atau https://youtube.com/@namachannel">
           <button class="btn" @click="addSource()" :disabled="!form.value.trim()" type="button">Tambah sumber</button>
+        </div>
+        <div class="ap-note" style="margin:8px 0 0">
+          Hanya channel milikmu yang sudah diverifikasi yang bisa dipantau.
+          <a href="{{ route('youtube.settings') }}" style="color:var(--accent-ink)">Verifikasi channel →</a>
         </div>
         <div class="ap-settings">
           <label>
@@ -249,12 +253,12 @@
         <div x-show="formError" class="ap-error" x-text="formError"></div>
       </div>
 
-      <div x-show="sources.length === 0" class="ap-empty">Belum ada sumber. Tambahkan channel atau keyword di atas.</div>
+      <div x-show="sources.length === 0" class="ap-empty">Belum ada sumber. Tambahkan channel terverifikasi di atas.</div>
       <div class="ap-grid">
         <template x-for="s in sources" :key="s.id">
           <div class="ap-card">
             <div class="ap-row" style="justify-content:space-between">
-              <span class="status-pill" x-text="s.type === 'channel' ? 'Channel' : 'Keyword'"></span>
+              <span class="status-pill">Channel</span>
               <button class="tgl" :class="{ on: s.enabled }" @click="toggleSource(s)" type="button">
                 <span class="tgl-text" x-text="s.enabled ? 'Aktif' : 'Nonaktif'"></span><span class="tgl-track"></span>
               </button>

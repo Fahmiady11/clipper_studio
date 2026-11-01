@@ -1,8 +1,13 @@
 <div class="wizard narrow fade-in" x-show="!done && step === 1">
   <div class="wiz-head">
     <div class="wiz-kicker">Langkah 1 dari 7</div>
-    <h1 class="wiz-title">Tempel link YouTube</h1>
-    <p class="wiz-desc">Masukkan URL video yang ingin kamu jadikan konten clipper.</p>
+    <h1 class="wiz-title">Pilih sumber video</h1>
+    <p class="wiz-desc">Tempel link video dari channel YouTube milikmu (sudah diverifikasi), atau unggah file videonya langsung.</p>
+  </div>
+
+  <div class="yt-verify-note">
+    <span>Clipper hanya memproses video milikmu sendiri.</span>
+    <a href="{{ route('youtube.settings') }}">Verifikasi channel YouTube →</a>
   </div>
 
   <div class="url-card" :class="{ valid: url && isValidUrl, invalid: url && !isValidUrl }">
@@ -22,6 +27,18 @@
   <div class="url-hint">
     <span>Didukung:</span>
     <code>youtube.com/watch?v=…</code><code>youtu.be/…</code><code>youtube.com/shorts/…</code>
+  </div>
+
+  <div class="upload-box">
+    <div class="upload-title">Atau unggah file video (tanpa verifikasi channel)</div>
+    <div class="upload-row">
+      <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm"
+             @change="pickUploadFile($event)" />
+      <span class="upload-name" x-show="uploadFile" x-text="uploadFile?.name || ''"></span>
+      <button class="btn btn-ghost btn-sm" type="button" x-show="uploadFile" @click="clearUploadFile()">Batal</button>
+    </div>
+    <div class="upload-hint">MP4, MOV, MKV, atau WebM · maks 2 GB</div>
+    <div class="upload-error" x-show="uploadError" x-text="uploadError"></div>
   </div>
 
   <div x-show="metaError" style="margin-top:14px;padding:12px 16px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:10px;font-size:13.5px;color:var(--danger)" x-text="metaError"></div>

@@ -15,6 +15,12 @@ class TranscriptService
         $videoId = $this->extractVideoId($youtubeUrl);
 
         if (! $videoId) {
+            // A directly uploaded file has no YouTube captions; its local audio is
+            // the only transcript source and does not depend on channel ownership.
+            if ($videoPath && file_exists($videoPath)) {
+                return $this->fallbackGroq($videoPath);
+            }
+
             throw new RuntimeException("Cannot extract video ID from: {$youtubeUrl}");
         }
 

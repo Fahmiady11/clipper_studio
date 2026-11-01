@@ -9,11 +9,12 @@ use App\Services\ProjectCreator;
 use App\Support\ClipSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Tests\Concerns\VerifiesYouTubeChannel;
 use Tests\TestCase;
 
 class AutopilotSettingsTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, VerifiesYouTubeChannel;
 
     private User $user;
 
@@ -23,6 +24,8 @@ class AutopilotSettingsTest extends TestCase
         config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         Queue::fake();
         $this->user = User::factory()->create();
+        $this->fakeChannelLookups();
+        $this->ownChannel($this->user);
     }
 
     private function source(array $settings = []): VideoSource
@@ -56,7 +59,7 @@ class AutopilotSettingsTest extends TestCase
 
     public function test_new_source_without_look_copies_latest_manual_project_but_keeps_ai_hook(): void
     {
-        app(ProjectCreator::class)->create($this->user->id, 'https://youtu.be/abcdefg', [
+        app(ProjectCreator::class)->create($this->user->id, 'https://youtu.be/abcdefghijk', [
             'layout_type' => 'gaussian', 'clip_count' => 1,
             'hook' => ['hook_text' => 'Hook manual', 'is_ai_generated' => false, 'background_style' => 'semi'],
         ]);
@@ -68,7 +71,7 @@ class AutopilotSettingsTest extends TestCase
             ->assertJsonPath('hook.is_ai_generated', true)
             ->assertJsonPath('hook.hook_text', null);
 
-        $this->actingAs($this->user)->postJson('/api/autopilot/sources', ['type' => 'keyword', 'value' => 'podcast'])->assertCreated();
+        $this->actingAs($this->user)->postJson('/api/autopilot/sources', ['type' => 'channel', 'value' => '@chan'])->assertCreated();
         $this->assertSame('gaussian', VideoSource::first()->settings['layout_type']);
     }
 
@@ -102,7 +105,7 @@ class AutopilotSettingsTest extends TestCase
     {
         // Older sources may still hold a fixed hook text copied from a manual project
         $source = $this->source(['layout_type' => 'gaussian', 'hook' => ['hook_text' => 'Lama', 'is_ai_generated' => false, 'background_style' => 'none']]);
-        $project = app(ProjectCreator::class)->create($this->user->id, 'https://youtu.be/abcdefg', ClipSettings::forAutopilot($source->settings), $source->id);
+        $project = app(ProjectCreator::class)->create($this->user->id, 'https://youtu.be/abcdefghijk', ClipSettings::forAutopilot($source->settings), $source->id);
 
         $this->assertSame('gaussian', $project->layout_type);
         $hook = HookSetting::where('clip_project_id', $project->id)->first();

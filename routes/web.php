@@ -8,6 +8,7 @@ use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
 use App\Http\Controllers\YouTubeController;
+use App\Http\Controllers\YouTubeSettingsController;
 use Illuminate\Support\Facades\Route;
 
 // Public pages: what the app is, terms and privacy (linked from the TikTok app listing)
@@ -53,6 +54,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::put('/settings/brand', [BrandKitController::class, 'update'])->name('brand.update');
     Route::get('/settings/brand/logo', [BrandKitController::class, 'logo'])->name('brand.logo');
     Route::delete('/settings/brand/logo', [BrandKitController::class, 'destroyLogo'])->name('brand.logo.destroy');
+
+    // YouTube channel verification: why it is required and which channels are proven
+    Route::get('/settings/youtube', [YouTubeSettingsController::class, 'show'])->name('youtube.settings');
+    Route::post('/settings/youtube/{accountId}/disconnect', [YouTubeSettingsController::class, 'disconnect'])->name('youtube.settings.disconnect');
 
     Route::get('/tiktok/connect', [TikTokController::class, 'connect'])->name('tiktok.connect');
     Route::get('/tiktok/callback', [TikTokController::class, 'callback'])->name('tiktok.callback');

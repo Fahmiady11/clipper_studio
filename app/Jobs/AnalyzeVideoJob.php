@@ -20,6 +20,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class AnalyzeVideoJob implements ShouldQueue
@@ -102,9 +103,15 @@ class AnalyzeVideoJob implements ShouldQueue
         @mkdir($tempDir, 0755, true);
         $videoPath = $tempDir.'/video.mp4';
 
-        $log->info('Downloading video', ['dest' => $videoPath]);
-        $ytdlp->download($project->youtube_url, $videoPath);
-        $log->info('Download complete', ['size_mb' => round(filesize($videoPath) / 1048576, 1)]);
+        if ($project->source_file_path && Storage::disk('local')->exists($project->source_file_path)) {
+            $log->info('Copying uploaded source video', ['dest' => $videoPath]);
+            @unlink($videoPath);
+            copy(Storage::disk('local')->path($project->source_file_path), $videoPath);
+        } else {
+            $log->info('Downloading video', ['dest' => $videoPath]);
+            $ytdlp->download($project->youtube_url, $videoPath);
+        }
+        $log->info('Source video ready', ['size_mb' => round(filesize($videoPath) / 1048576, 1)]);
 
         // Stage 3 — transcript (skip re-fetch if already cached from a prior attempt)
         $this->stage($project, 3);
