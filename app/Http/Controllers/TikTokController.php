@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\UploadToTikTokJob;
 use App\Models\GeneratedClip;
 use App\Models\TiktokAccount;
+use App\Services\Social\TikTokPublisher;
 use App\Services\TikTokService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,7 +21,7 @@ class TikTokController extends Controller
 {
     use EnsuresQueueWorker;
 
-    public function __construct(private TikTokService $tiktok) {}
+    public function __construct(private TikTokService $tiktok, private TikTokPublisher $publisher) {}
 
     public function connect(Request $request): RedirectResponse
     {
@@ -122,12 +123,6 @@ class TikTokController extends Controller
             return $this->statusResponse($clip);
         }
 
-        $clip->update([
-            'tiktok_account_id' => $account->id,
-            'tiktok_publish_id' => null,
-            'tiktok_status' => 'queued',
-            'tiktok_error' => null,
-        ]);
         $postInfo = $mode === 'direct' ? [
             'title' => $data['title'] ?? '',
             'privacy_level' => $data['privacy_level'],
@@ -137,7 +132,7 @@ class TikTokController extends Controller
             'brand_organic_toggle' => (bool) ($data['brand_organic_toggle'] ?? false),
             'brand_content_toggle' => (bool) ($data['brand_content_toggle'] ?? false),
         ] : [];
-        UploadToTikTokJob::dispatch($clip->id, $account->id, $mode, $postInfo);
+        $this->publisher->publish($clip, $account->id, $mode, $postInfo);
         $this->ensureQueueWorkerRunning();
 
         return $this->statusResponse($clip);

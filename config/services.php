@@ -90,6 +90,14 @@ return [
         'redirect_uri' => env('YOUTUBE_REDIRECT_URI'),
     ],
 
+    'instagram' => [
+        // developers.facebook.com → your app → Instagram → API setup with Instagram login
+        'app_id' => env('INSTAGRAM_APP_ID'),
+        'app_secret' => env('INSTAGRAM_APP_SECRET'),
+        // Must match a valid OAuth redirect URI on the Meta app: <APP_URL>/instagram/callback
+        'redirect_uri' => env('INSTAGRAM_REDIRECT_URI'),
+    ],
+
     'clipper' => [
         // Downloaded source videos (temp/, video_cache/) older than this are deleted daily
         'temp_retention_hours' => (int) env('CLIPPER_TEMP_RETENTION_HOURS', 72),

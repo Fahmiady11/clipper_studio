@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
-use App\Jobs\UploadToYouTubeJob;
 use App\Models\GeneratedClip;
 use App\Models\YoutubeAccount;
 use App\Services\FFmpegService;
+use App\Services\Social\YouTubePublisher;
 use App\Services\YouTubeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -24,7 +24,7 @@ class YouTubeController extends Controller
     // Longer than this is a normal video, not a Short
     public const MAX_SHORT_SECONDS = 180;
 
-    public function __construct(private YouTubeService $youtube) {}
+    public function __construct(private YouTubeService $youtube, private YouTubePublisher $publisher) {}
 
     public function connect(Request $request): RedirectResponse
     {
@@ -111,13 +111,7 @@ class YouTubeController extends Controller
             return $this->statusResponse($clip);
         }
 
-        $clip->update([
-            'youtube_account_id' => $account->id,
-            'youtube_video_id' => null,
-            'youtube_status' => 'queued',
-            'youtube_error' => null,
-        ]);
-        UploadToYouTubeJob::dispatch($clip->id, $account->id, [
+        $this->publisher->publish($clip, $account->id, 'default', [
             'title' => $data['title'],
             'description' => $data['description'] ?? '',
             'privacy' => $data['privacy'],

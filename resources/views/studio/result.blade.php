@@ -241,6 +241,52 @@
       </div>
     </div>
 
+    {{-- Kirim ke Instagram Reels --}}
+    <div class="res-sec">
+      <div class="res-sec-head">
+        <span class="res-sec-title">Kirim ke Instagram Reels</span>
+        <a class="res-edit" href="/instagram/connect" x-show="igConfigured && igAccounts.length > 0">+ Akun lain</a>
+      </div>
+
+      <div x-show="!igConfigured" style="padding:8px 0;color:var(--text-dim);font-size:13px">
+        Isi <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code>, dan <code>INSTAGRAM_REDIRECT_URI</code> di <code>.env</code> untuk mengaktifkan upload.
+      </div>
+
+      <div x-show="igConfigured && igAccounts.length === 0" style="padding:8px 0">
+        <a class="btn btn-secondary" href="/instagram/connect">Hubungkan akun Instagram</a>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Harus akun Business atau Creator.</div>
+      </div>
+
+      <div x-show="igConfigured && igAccounts.length > 0">
+        <div class="seg" style="flex-wrap:wrap;margin-bottom:12px">
+          <template x-for="a in igAccounts" :key="a.id">
+            <button :class="{ on: igAccountId === a.id }" @click="igAccountId = a.id" type="button" x-text="a.name"></button>
+          </template>
+        </div>
+
+        <div class="fblock-title" style="margin-bottom:6px">Caption <span style="color:var(--text-dim);font-weight:400" x-text="`(${igCaption.length}/2200)`"></span></div>
+        <textarea class="field" maxlength="2200" x-model="igCaption" style="min-height:90px"></textarea>
+
+        <label style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:13px;min-height:44px">
+          <input type="checkbox" x-model="igShareToFeed"> Tampilkan juga di feed profil
+        </label>
+        <div style="margin:0 0 14px;font-size:12px;color:var(--text-dim);line-height:1.5">
+          Reel tayang langsung di akun yang dipilih. Instagram membatasi 100 posting per 24 jam per akun.
+        </div>
+
+        <button class="btn" @click="publishToInstagram()"
+                :disabled="!igCanSubmit"
+                :style="!igCanSubmit ? 'opacity:.5;pointer-events:none' : ''"
+                x-text="igBusy ? 'Mengupload…' : 'Kirim ke Instagram'"></button>
+        <div x-show="igStatus" style="margin-top:12px;font-size:13px"
+             :style="{ color: igStatus === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }">
+          <span x-text="igStatusLabel"></span>
+          <a x-show="igUrl && igStatus === 'published'" :href="igUrl" target="_blank" rel="noopener" style="color:var(--accent-ink);margin-left:6px">Buka di Instagram</a>
+        </div>
+        <div x-show="igStatus === 'failed' && igError" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="igError"></div>
+      </div>
+    </div>
+
     <div class="dl-row">
       <button class="btn btn-ghost" @click="restart()">← Buat project baru</button>
     </div>

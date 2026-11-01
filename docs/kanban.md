@@ -37,6 +37,7 @@
 ### 🃏 Card 3 — Publish Multi-Platform (Reels + YouTube Shorts)
 - **Priority:** P1
 - **Labels:** `integrasi` `publishing` `phase-1`
+- **Status:** Dikerjakan 2026-11-02. Lihat `docs/social-publishing.md`.
 - **Prompt:**
   > Generalisasi pola `TikTokService` ke Instagram Reels (Instagram Graph API) dan YouTube Shorts (YouTube Data API v3). 1) Abstraksi `SocialPublisher` interface: `isConfigured()`, `authorizeUrl()`, `callback()`, `publish($clip, $mode)`. 2) Migration `social_accounts` (user_id, platform, token, expires_at) menggantikan tabel khusus TikTok. 3) Alur connect OAuth per platform di halaman pengaturan. 4) Di hasil render: tombol publish per platform + status per platform (`queued/published/failed`). 5) Rate-limit & retry dengan backoff ala TikTok. 6) Test feature untuk callback dan status.
 

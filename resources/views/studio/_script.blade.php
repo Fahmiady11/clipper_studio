@@ -71,6 +71,9 @@ function studio() {
     ytConfigured: false, ytAccounts: [], ytAccountId: null,
     ytTitle: '', ytDescription: '', ytPrivacy: 'public', ytTags: [], ytFilledFor: null,
     ytStatus: null, ytError: null, ytUrl: null, ytPrivacyNow: null, ytTimer: null,
+    igConfigured: false, igAccounts: [], igAccountId: null,
+    igCaption: '', igShareToFeed: true, igFilledFor: null,
+    igStatus: null, igError: null, igUrl: null, igTimer: null,
     PRIVACY_LABELS: {
       PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya',
     },
@@ -980,6 +983,76 @@ function studio() {
       clearTimeout(this.ytTimer);
       if (this.ytBusy || this.ytStatus === 'processing') this.ytTimer = setTimeout(() => this.fetchYoutubeStatus(), 5000);
     },
+    // ── Instagram Reels upload ─────────────────────────────────────────────
+    get igBusy() { return ['queued', 'uploading', 'processing'].includes(this.igStatus); },
+    get igStatusLabel() {
+      return {
+        queued:     'Menunggu antrian…',
+        uploading:  'Mengupload video ke Instagram…',
+        processing: 'Instagram sedang memproses video. Ini bisa makan beberapa menit.',
+        published:  'Sudah tayang sebagai Reel.',
+        failed:     'Upload gagal.',
+      }[this.igStatus] || '';
+    },
+    get igCanSubmit() { return !this.igBusy && !!this.igAccountId; },
+    async loadInstagramAccounts() {
+      try {
+        const res = await fetch('/api/instagram/accounts', { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return;
+        const data = await res.json();
+        this.igConfigured = data.configured;
+        this.igAccounts = data.accounts || [];
+        if (!this.igAccounts.some(a => a.id === this.igAccountId)) {
+          this.igAccountId = this.igAccounts[0]?.id ?? null;
+        }
+      } catch (e) { console.error('loadInstagramAccounts', e); }
+    },
+    // Caption from the AI caption and hashtags; filled once per clip so edits are kept
+    fillInstagramCaption() {
+      const c = this.selectedClipObj;
+      if (!c) return;
+      if (this.igFilledFor !== c.id) { this.igFilledFor = c.id; this.igCaption = ''; }
+      if (!this.igCaption && this.clipCaption) {
+        this.igCaption = (this.clipCaption + '\n\n' + this.clipHashtags.join(' ')).trim().slice(0, 2200);
+      }
+    },
+    async publishToInstagram() {
+      const clipId = this.selectedClipObj?.id;
+      if (!clipId || !this.igCanSubmit) return;
+      this.igError = null;
+      try {
+        const res = await fetch(`/api/clips/${clipId}/instagram`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+          body: JSON.stringify({ account_id: this.igAccountId, caption: this.igCaption, share_to_feed: this.igShareToFeed }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.igStatus = 'failed';
+          this.igError = data.message || 'Gagal memulai upload.';
+          return;
+        }
+        this.applyInstagramStatus(data);
+      } catch (e) {
+        this.igStatus = 'failed'; this.igError = 'Koneksi gagal.';
+      }
+    },
+    async fetchInstagramStatus() {
+      const clipId = this.selectedClipObj?.id;
+      if (!clipId) return;
+      try {
+        const res = await fetch(`/api/clips/${clipId}/instagram-status`, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) this.applyInstagramStatus(await res.json());
+      } catch (e) { console.error('fetchInstagramStatus', e); }
+    },
+    applyInstagramStatus(data) {
+      if (data.clip_id !== this.selectedClipObj?.id) return;
+      this.igStatus = data.status;
+      this.igError = data.error;
+      this.igUrl = data.url;
+      clearTimeout(this.igTimer);
+      if (this.igBusy) this.igTimer = setTimeout(() => this.fetchInstagramStatus(), 5000);
+    },
     async loadMusicLibrary() {
       try {
         const res = await fetch('/api/music', { headers: { 'Accept': 'application/json' } });
@@ -1099,6 +1172,7 @@ function studio() {
         this.clipCaption  = data.caption  || '';
         this.clipHashtags = data.hashtags || [];
         this.fillYoutubeFields(true);
+        this.fillInstagramCaption();
       } catch (e) {
         console.error('fetchCaption exception', e);
       }
@@ -1172,9 +1246,10 @@ function studio() {
         this.clipCaption = ''; this.clipHashtags = [];
         this.tiktokStatus = null; this.tiktokError = null;
         this.ytStatus = null; this.ytError = null; this.ytUrl = null; this.ytPrivacyNow = null; clearTimeout(this.ytTimer);
-        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); }
+        this.igStatus = null; this.igError = null; this.igUrl = null; clearTimeout(this.igTimer);
+        if (this.done && this.selectedClipObj) { this.fetchCaption(); this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.fillInstagramCaption(); this.fetchInstagramStatus(); }
       });
-      this.$watch('done', val => { if (val && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); } });
+      this.$watch('done', val => { if (val && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.fillInstagramCaption(); this.fetchInstagramStatus(); } });
       this.$watch('tiktokMode', () => this.loadTiktokCreator());
       this.$watch('tiktokAccountId', () => this.loadTiktokCreator());
 
@@ -1190,8 +1265,8 @@ function studio() {
         history.replaceState(null, '', location.pathname);
         if (youtubeResult !== 'connected') alert('Gagal menghubungkan YouTube (' + youtubeResult + ').');
       }
-      await Promise.all([this.loadTiktokAccounts(), this.loadYoutubeAccounts(), this.loadMusicLibrary()]);
-      if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); }
+      await Promise.all([this.loadTiktokAccounts(), this.loadYoutubeAccounts(), this.loadInstagramAccounts(), this.loadMusicLibrary()]);
+      if (this.done && this.selectedClipObj) { this.fetchTiktokStatus(); this.fillYoutubeFields(); this.fetchYoutubeStatus(); this.fillInstagramCaption(); this.fetchInstagramStatus(); }
       // If restored from session and already done
       if (this.done && this.selectedClipObj && !this.clipCaption) this.fetchCaption();
     },

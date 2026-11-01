@@ -4,6 +4,8 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BrandKitController;
+use App\Http\Controllers\ConnectionsController;
+use App\Http\Controllers\InstagramController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\TikTokController;
@@ -61,6 +63,14 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // YouTube channel verification: why it is required and which channels are proven
     Route::get('/settings/youtube', [YouTubeSettingsController::class, 'show'])->name('youtube.settings');
     Route::post('/settings/youtube/{accountId}/disconnect', [YouTubeSettingsController::class, 'disconnect'])->name('youtube.settings.disconnect');
+
+    // Every platform clips can be sent to, in one place
+    Route::get('/settings/connections', [ConnectionsController::class, 'show'])->name('connections.index');
+    Route::delete('/settings/connections/{platform}/{accountId}', [ConnectionsController::class, 'disconnect'])->name('connections.disconnect');
+
+    // Instagram OAuth (Instagram Login; redirect URI registered on the Meta app → /instagram/callback)
+    Route::get('/instagram/connect', [InstagramController::class, 'connect'])->name('instagram.connect');
+    Route::get('/instagram/callback', [InstagramController::class, 'callback'])->name('instagram.callback');
 
     Route::get('/tiktok/connect', [TikTokController::class, 'connect'])->name('tiktok.connect');
     Route::get('/tiktok/callback', [TikTokController::class, 'callback'])->name('tiktok.callback');

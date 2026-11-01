@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
+use App\Http\Controllers\InstagramController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
 use App\Http\Controllers\ProjectController;
@@ -43,6 +44,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::delete('/youtube/accounts/{accountId}', [YouTubeController::class, 'disconnect']);
     Route::post('/clips/{clipId}/youtube', [YouTubeController::class, 'upload'])->middleware('throttle:10,1');
     Route::get('/clips/{clipId}/youtube-status', [YouTubeController::class, 'status']);
+
+    Route::get('/instagram/accounts', [InstagramController::class, 'accounts']);
+    Route::delete('/instagram/accounts/{accountId}', [InstagramController::class, 'disconnect']);
+    Route::post('/clips/{clipId}/instagram', [InstagramController::class, 'publish'])->middleware('throttle:10,1');
+    Route::get('/clips/{clipId}/instagram-status', [InstagramController::class, 'status']);
 
     Route::get('/music', [MusicController::class, 'index']);
     Route::post('/music', [MusicController::class, 'store']);
