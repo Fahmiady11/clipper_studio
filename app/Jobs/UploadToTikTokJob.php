@@ -38,7 +38,12 @@ class UploadToTikTokJob implements ShouldQueue
     public function handle(TikTokService $tiktok): void
     {
         $log = Log::channel('clipper_jobs');
-        $clip = GeneratedClip::with('clipProject')->findOrFail($this->clipId);
+        $clip = GeneratedClip::with('clipProject')->find($this->clipId);
+        if (! $clip) {
+            $log->info('TikTok upload dropped: clip deleted', ['clip_id' => $this->clipId]);
+
+            return; // deleted from history, or its account was deleted, while waiting in the queue
+        }
         $account = TiktokAccount::findOrFail($this->accountId);
 
         // Re-check at run time: the clip may have been rejected/re-rendered/deleted since

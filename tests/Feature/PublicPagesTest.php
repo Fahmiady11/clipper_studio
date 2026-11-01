@@ -15,7 +15,8 @@ class PublicPagesTest extends TestCase
         $this->get('/welcome')->assertOk()->assertSee('Content Posting API')->assertSee(route('privacy'));
         $this->get('/terms')->assertOk()->assertSee('Terms of Service');
         $this->get('/privacy')->assertOk()->assertSee('Privacy Policy')->assertSee('TikTok')
-            ->assertSee('Limited Use')->assertSee('video.list')->assertSee('instagram_content_publish')->assertSee('threads_content_publish');
+            ->assertSee('Limited Use')->assertSee('video.list')->assertSee('instagram_content_publish')->assertSee('threads_content_publish')
+            ->assertSee('Delete your account yourself')->assertSee('data deletion request')->assertDontSee('no self-service delete button');
         $this->get('/login')->assertOk()->assertSee(route('terms'))->assertSee(route('privacy'));
     }
 

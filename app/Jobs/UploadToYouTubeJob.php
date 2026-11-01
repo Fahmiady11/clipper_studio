@@ -31,7 +31,12 @@ class UploadToYouTubeJob implements ShouldQueue
     public function handle(YouTubeService $youtube): void
     {
         $log = Log::channel('clipper_jobs');
-        $clip = GeneratedClip::with('clipProject')->findOrFail($this->clipId);
+        $clip = GeneratedClip::with('clipProject')->find($this->clipId);
+        if (! $clip) {
+            $log->info('YouTube upload dropped: clip deleted', ['clip_id' => $this->clipId]);
+
+            return; // deleted from history, or its account was deleted, while waiting in the queue
+        }
         $account = YoutubeAccount::findOrFail($this->accountId);
 
         // Re-check at run time: the clip may have been rejected/re-rendered/deleted since

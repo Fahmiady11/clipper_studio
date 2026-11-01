@@ -33,7 +33,12 @@ class PublishToMetaJob implements ShouldQueue
     {
         $publisher = $publishing->publisher($this->platform);
         $noun = MetaPublishing::targetNoun($this->platform);
-        $clip = GeneratedClip::with('clipProject')->findOrFail($this->clipId);
+        $clip = GeneratedClip::with('clipProject')->find($this->clipId);
+        if (! $clip) {
+            Log::channel('clipper_jobs')->info('Meta upload dropped: clip deleted', ['clip_id' => $this->clipId, 'platform' => $this->platform]);
+
+            return; // deleted from history, or its account was deleted, while waiting in the queue
+        }
         $target = MetaTarget::with('account')->where('platform', $this->platform)->find($this->targetId)
             ?? throw new RuntimeException("{$noun} sudah diputus. Hubungkan lagi lalu jadwalkan ulang.");
 

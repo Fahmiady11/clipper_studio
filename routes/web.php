@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountsController;
+use App\Http\Controllers\AccountSettingsController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BrandKitController;
 use App\Http\Controllers\FacebookController;
 use App\Http\Controllers\GameplayClipController;
+use App\Http\Controllers\MetaDataDeletionController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicMediaController;
 use App\Http\Controllers\PublicPageController;
@@ -16,6 +18,7 @@ use App\Http\Controllers\ThreadsController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
 use App\Http\Controllers\YouTubeController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 // Public pages: what the app is, terms and privacy (linked from the TikTok app listing)
@@ -28,6 +31,18 @@ Route::get('/status', [StatusController::class, 'show'])->name('status');
 // the expiring signature is the access check. Relative, so a proxy's host/scheme can't break it.
 Route::get('/media/clips/{clipId}', [PublicMediaController::class, 'clip'])
     ->middleware(['signed:relative', 'throttle:60,1'])->name('media.clip');
+
+// Meta calls these when someone removes the app or asks for their data to be deleted
+// (Facebook Login settings, and the Threads use case settings). No session, no CSRF:
+// the signed_request, checked with the app secret, is the access check.
+Route::middleware('throttle:60,1')->withoutMiddleware(ValidateCsrfToken::class)->group(function () {
+    Route::post('/meta/data-deletion', [MetaDataDeletionController::class, 'facebookDelete'])->name('meta.data-deletion');
+    Route::post('/meta/deauthorize', [MetaDataDeletionController::class, 'facebookDeauthorize'])->name('meta.deauthorize');
+    Route::post('/threads/delete', [MetaDataDeletionController::class, 'threadsDelete'])->name('threads.data-deletion');
+    Route::post('/threads/uninstall', [MetaDataDeletionController::class, 'threadsUninstall'])->name('threads.uninstall');
+});
+Route::get('/data-deletion/{code}', [MetaDataDeletionController::class, 'status'])
+    ->where('code', '[A-Za-z0-9]{8,32}')->middleware('throttle:30,1')->name('data-deletion.status');
 
 // Auth routes (public). Signed-in users hitting /login or /register go to the studio.
 Route::middleware('guest')->group(function () {
@@ -66,6 +81,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     });
 
     // TikTok OAuth (redirect URI registered on the TikTok app → /tiktok/callback)
+    // Settings → Akun: deleting the account is immediate, so the password and a typed word are asked again
+    Route::get('/settings/account', [AccountSettingsController::class, 'page'])->middleware('cache.headers:no_store;private')->name('account.settings');
+    Route::delete('/settings/account', [AccountSettingsController::class, 'destroy'])->middleware('throttle:5,1')->name('account.destroy');
+
     Route::get('/settings/api', [ApiTokenController::class, 'page'])->middleware('cache.headers:no_store;private')->name('api.tokens');
     Route::get('/settings/gameplay', [GameplayClipController::class, 'page'])->middleware('cache.headers:no_store;private')->name('gameplay.page');
     Route::get('/settings/gameplay/{clipId}/thumb', [GameplayClipController::class, 'thumb'])->whereNumber('clipId')->name('gameplay.thumb');
