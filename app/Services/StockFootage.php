@@ -24,21 +24,28 @@ class StockFootage
     }
 
     /**
-     * A local MP4 for $query, or null when nothing fits or the provider is unreachable.
+     * A local MP4 for $query (then $alt, then the $must words alone), or null when
+     * nothing fits or the provider is unreachable. Results are ranked by the query
+     * words their tags (Pixabay) or page slug (Pexels) share; a result missing
+     * every $must word (the subject: "boxing", "trophy") is never used, since no
+     * B-roll beats unrelated B-roll. Green-screen shots are skipped too.
      * $skip: ids already used in this clip (no repeats).
      *
-     * @return array{id: string, path: string}|null
+     * @param  list<string>  $must
+     * @return array{id: string, path: string, offset: float}|null
      */
-    public function clip(string $query, array $skip = []): ?array
+    public function clip(string $query, array $skip = [], string $alt = '', array $must = []): ?array
     {
         $provider = $this->provider();
         if (! $provider || trim($query) === '') {
             return null;
         }
+        $must = self::terms(implode(' ', $must));
 
         try {
-            foreach ($this->search($provider, $query) as $video) {
-                if (in_array($video['id'], $skip, true)) {
+            foreach (array_unique(array_filter([trim($query), trim($alt), implode(' ', $must)])) as $q) {
+                $video = $this->best($this->search($provider, $q), $q, $must, $skip);
+                if (! $video) {
                     continue;
                 }
                 $path = $this->dir().'/'.$video['id'].'.mp4';
@@ -50,13 +57,67 @@ class StockFootage
                     rename($tmp, $path);
                 }
 
-                return ['id' => $video['id'], 'path' => $path];
+                // Stock clips often open on a fade or a still frame: start a second in when there is room
+                return ['id' => $video['id'], 'path' => $path, 'offset' => ($video['duration'] ?? 0) >= 6 ? 1.0 : 0.0];
             }
         } catch (Throwable $e) {
             Log::channel('clipper_jobs')->warning('Stock footage unavailable', ['provider' => $provider, 'query' => $query, 'error' => $e->getMessage()]);
         }
 
         return null;
+    }
+
+    /**
+     * Words that tell results apart; "boxer" and "boxing" both count as "box".
+     * Words found on half of all stock clips ("people", "man", "work") are dropped.
+     */
+    public static function terms(string $text): array
+    {
+        $stop = ['a', 'an', 'the', 'in', 'on', 'of', 'with', 'at', 'and', 'to', 'for', 'by', 'from', 'into', 'video', 'stock', 'footage',
+            'people', 'person', 'man', 'men', 'woman', 'women', 'two', 'one', 'group', 'young', 'work', 'day', 'life', 'close', 'view', 'slow', 'motion'];
+        $out = [];
+        foreach (preg_split('/[^a-z0-9]+/', mb_strtolower($text), -1, PREG_SPLIT_NO_EMPTY) as $w) {
+            if (in_array($w, $stop, true)) {
+                continue;
+            }
+            foreach (['ing', 'ers', 'er', 'es', 'ed', 's'] as $suffix) {
+                if (str_ends_with($w, $suffix) && strlen($w) - strlen($suffix) >= 3) {
+                    $w = substr($w, 0, -strlen($suffix));
+                    break;
+                }
+            }
+            $out[] = $w;
+        }
+
+        return array_values(array_unique(array_filter($out, fn ($w) => strlen($w) >= 3 || is_numeric($w))));
+    }
+
+    /**
+     * The most relevant result not in $skip; ties keep the provider's order.
+     * Without $must words a query of 3+ words needs two of them matched: one
+     * shared word ("hands") is how a tap washing hands turns up for "couple holding hands".
+     */
+    private function best(array $results, string $query, array $must, array $skip): ?array
+    {
+        $want = self::terms($query);
+        $best = null;
+        $bestScore = ! $must && count($want) >= 3 ? 1 : 0;
+        foreach ($results as $video) {
+            $tags = (string) ($video['tags'] ?? '');
+            if (in_array($video['id'], $skip, true) || preg_match('/green ?(screen|box)|chroma/i', $tags)) {
+                continue;
+            }
+            $have = self::terms($tags);
+            if ($must && ! array_intersect($must, $have)) {
+                continue;
+            }
+            $score = count(array_intersect($want, $have)) + count(array_intersect($must, $have));
+            if ($score > $bestScore) {
+                [$best, $bestScore] = [$video, $score];
+            }
+        }
+
+        return $best;
     }
 
     private function provider(): ?string
@@ -68,10 +129,10 @@ class StockFootage
         };
     }
 
-    /** @return list<array{id: string, url: string}> best first */
+    /** @return list<array{id: string, url: string, tags: string, duration: float}> in the provider's order */
     private function search(string $provider, string $query): array
     {
-        $cache = $this->dir().'/q_'.$provider.'_'.md5(mb_strtolower(trim($query))).'.json';
+        $cache = $this->dir().'/q2_'.$provider.'_'.md5(mb_strtolower(trim($query))).'.json';
         if (is_file($cache)) {
             touch($cache);
 
@@ -104,7 +165,9 @@ class StockFootage
             usort($files, fn ($a, $b) => [($a['width'] < 1080), $a['width']] <=> [($b['width'] < 1080), $b['width']]);
             $best = $files ? (($files[0]['width'] >= 1080) ? $files[0] : end($files)) : null;
             if ($best) {
-                $out[] = ['id' => 'px'.$v['id'], 'url' => (string) $best['link']];
+                // Pexels has no tags; its page slug names the shot ("man-boxing-in-a-gym-854982")
+                $slug = basename(parse_url((string) ($v['url'] ?? ''), PHP_URL_PATH) ?: '');
+                $out[] = ['id' => 'px'.$v['id'], 'url' => (string) $best['link'], 'tags' => str_replace('-', ' ', $slug), 'duration' => (float) $v['duration']];
             }
         }
 
@@ -114,18 +177,19 @@ class StockFootage
     /**
      * Pixabay has no orientation filter and is mostly landscape: the render
      * crops the middle 9:16, so a file needs 1080 of height (portrait ones first).
+     * Real footage only: its animations (3D renders, green screen) look like stock.
      */
     private function searchPixabay(string $query): array
     {
         $res = Http::timeout(20)
-            ->get(self::PIXABAY, ['key' => (string) config('services.pixabay.key'), 'q' => $query, 'per_page' => 20, 'safesearch' => 'true'])
+            ->get(self::PIXABAY, ['key' => (string) config('services.pixabay.key'), 'q' => $query, 'video_type' => 'film', 'per_page' => 20, 'safesearch' => 'true'])
             ->throw()
             ->json();
 
         $portrait = [];
         $landscape = [];
         foreach ($res['hits'] ?? [] as $v) {
-            if (($v['duration'] ?? 0) < 3) {
+            if (($v['duration'] ?? 0) < 3 || ($v['type'] ?? 'film') !== 'film') {
                 continue;
             }
             // the smallest rendition with enough height for a 1920-high frame crop
@@ -134,7 +198,7 @@ class StockFootage
             if (! $fits) {
                 continue;
             }
-            $hit = ['id' => 'pb'.$v['id'], 'url' => (string) $fits[0]['url']];
+            $hit = ['id' => 'pb'.$v['id'], 'url' => (string) $fits[0]['url'], 'tags' => (string) ($v['tags'] ?? ''), 'duration' => (float) $v['duration']];
             if ($fits[0]['height'] > $fits[0]['width']) {
                 $portrait[] = $hit;
             } else {

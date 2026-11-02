@@ -367,6 +367,7 @@ class HookTestService
             'caption' => $clip->caption,
             'hashtags_json' => $clip->hashtags_json,
             'broll_json' => $clip->broll_json,
+            'edit_plan' => $clip->edit_plan,
             'music_mood' => $clip->music_mood,
             'status' => 'pending',
         ]);

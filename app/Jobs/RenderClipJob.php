@@ -4,10 +4,10 @@ namespace App\Jobs;
 
 use App\Models\BrandKit;
 use App\Models\GeneratedClip;
+use App\Services\EditPlanner;
 use App\Services\FaceTracker;
 use App\Services\FFmpegService;
 use App\Services\GameplayFootage;
-use App\Services\GeminiService;
 use App\Services\HookRenderer;
 use App\Services\JobWatchdog;
 use App\Services\MusicService;
@@ -17,6 +17,7 @@ use App\Services\StockFootage;
 use App\Services\YtDlpService;
 use App\Support\BrollCues;
 use App\Support\Cancellation;
+use App\Support\EditPlan;
 use App\Support\JobCancelled;
 use App\Support\SfxCues;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,8 +32,6 @@ class RenderClipJob implements ShouldQueue
     use Queueable;
 
     public int $tries = 2;
-
-    private const BROLL_SECONDS = 2.2; // length of one stock-footage cut-in
 
     public int $timeout = 1800; // two libx264 "slow" passes on long clips can take >10 min
 
@@ -130,6 +129,7 @@ class RenderClipJob implements ShouldQueue
         ));
 
         // Jump cuts drop pauses and filler words; punch-ins change at cuts and sentence ends
+        $sourceSegments = $clipSegments;
         $pieces = [[0.0, (float) $clip->end_seconds - $clipStart]];
         if ($project->jump_cut) {
             $words = array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments));
@@ -204,10 +204,23 @@ class RenderClipJob implements ShouldQueue
             $log->debug('Subtitles skipped', ['enabled' => $subtitle?->enabled]);
         }
 
-        // Emoji pop in over keywords of the subtitle words just built
-        $emojis = $assPath && $subtitle->emoji
-            ? $ffmpeg->emojiOverlays($clipDuration)
-            : [];
+        // One AI edit plan places B-roll, emoji and punchlines together; without it each falls back on its own
+        $stock = app(StockFootage::class);
+        $wantsBroll = $project->broll && ! $gameplay && $stock->configured();
+        $wantsEmoji = $assPath && $subtitle->emoji;
+        $moments = ['broll' => null, 'emoji' => null, 'punch' => []];
+        if ($wantsBroll || $wantsEmoji || $project->sfx) {
+            [$plan, $asked] = app(EditPlanner::class)->plan($clip, $sourceSegments, $hookDuration);
+            if ($asked) {
+                $aiCostUsd += config('billing.gemini_usd_per_call');
+            }
+            if ($plan) {
+                $moments = EditPlan::onTimeline($plan, $pieces, $clipStart, $clipDuration, $hookDuration + 1.0);
+            }
+        }
+
+        // Emoji pop in where the plan put them, else over keywords of the subtitle words just built
+        $emojis = $wantsEmoji ? $ffmpeg->emojiOverlays($clipDuration, $moments['emoji']) : [];
 
         // 5. One pass from the source: cut + layout + jump cuts + zoom, with the
         // subtitles, hook and emoji drawn on top (a single encode, audio kept)
@@ -223,27 +236,19 @@ class RenderClipJob implements ShouldQueue
 
         // B-roll: stock footage over concrete things being talked about, after the hook
         $broll = [];
-        $stock = app(StockFootage::class);
-        if ($project->broll && ! $gameplay && $stock->configured()) {
-            if (is_array($clip->broll_json)) {
-                // Picked during analysis (source time): onto the cut timeline
-                $cues = BrollCues::fromAnalysis($clip->broll_json, $pieces, $clipStart, $clipDuration, $hookDuration + 1.0);
-            } else {
-                // Clip analysed before that: ask now
-                $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
-                    array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
-                $cues = app(GeminiService::class)->brollCues($words, $clipDuration, $hookDuration + 1.0);
-                $aiCostUsd += config('billing.gemini_usd_per_call');
-            }
+        if ($wantsBroll) {
+            // The plan's moments, else those picked during analysis (source time, moved onto the cut timeline)
+            $cues = $moments['broll']
+                ?? (is_array($clip->broll_json) ? BrollCues::fromAnalysis($clip->broll_json, $pieces, $clipStart, $clipDuration, $hookDuration + 1.0) : []);
             $used = [];
             foreach ($cues as $cue) {
-                $footage = $stock->clip($cue['query'], $used);
+                $footage = $stock->clip($cue['query'], $used, $cue['alt'], $cue['must']);
                 if ($footage) {
                     $used[] = $footage['id'];
-                    $broll[] = ['path' => $footage['path'], 'start' => $cue['time'], 'duration' => min(self::BROLL_SECONDS, $clipDuration - $cue['time'] - 0.5)];
+                    $broll[] = ['path' => $footage['path'], 'start' => $cue['time'], 'duration' => $cue['duration'], 'offset' => $footage['offset']];
                 }
             }
-            $log->info('B-roll', ['cues' => array_map(fn ($b) => round($b['start'], 1), $broll)]);
+            $log->info('B-roll', ['cues' => array_map(fn ($b) => round($b['start'], 1), $broll), 'asked' => array_column($cues, 'query')]);
         }
 
         $logo = $project->watermark ? BrandKit::where('user_id', $project->user_id)->value('logo_path') : null;
@@ -282,9 +287,9 @@ class RenderClipJob implements ShouldQueue
 
         // 7. Move to output
         if ($project->sfx) {
-            $words = array_map(fn ($w) => ['text' => $w['text'] ?? '', 'start' => $w['start'] - $clipStart],
-                array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
-            $cues = SfxCues::plan(SfxCues::cutTimes($pieces), $zoom, array_column($emojis, 'start'), $assPath ? $words : [], $clipDuration, $hookDuration);
+            // Sounds mark what the viewer sees: B-roll cutting in, emoji popping, a punchline landing
+            $cues = SfxCues::plan(array_column($broll, 'start'), array_column($emojis, 'start'), $moments['punch'],
+                $clipDuration, $hookOverlay ? $hookDuration : null);
             if ($cues) {
                 $log->info('Mixing sfx', ['cues' => count($cues)]);
                 $withSfx = $tempDir.'/sfx_'.$this->clipId.'.mp4';

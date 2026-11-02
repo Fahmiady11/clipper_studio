@@ -13,91 +13,67 @@ class SfxCuesTest extends TestCase
         return array_column($cues, 'sound');
     }
 
-    public function test_cuts_and_zoom_punches_get_a_whoosh_that_peaks_on_the_cut(): void
+    public function test_broll_cut_ins_get_a_whoosh_that_peaks_on_the_cut(): void
     {
-        $cues = SfxCues::plan([4.0], [[10.0, 13.0]], [], [], 30.0);
+        $cues = SfxCues::plan([10.0], [], [], 30.0);
 
-        $this->assertSame(['whoosh', 'whoosh'], $this->sounds($cues));
-        // The whoosh swells for 0.3s first, so it starts before the cut
-        $this->assertSame([3.7, 9.7], array_column($cues, 'at'));
+        $this->assertSame(['whoosh'], $this->sounds($cues));
+        // The whoosh swells first, so it starts before the cut-in
+        $this->assertSame([10.0 - SfxCues::WHOOSH_LEAD], array_column($cues, 'at'));
     }
 
     public function test_emoji_get_a_pop_on_the_frame_they_appear(): void
     {
-        $cues = SfxCues::plan([], [], [6.0], [], 30.0);
+        $cues = SfxCues::plan([], [6.0], [], 30.0);
 
-        $this->assertSame([['sound' => 'pop', 'at' => 6.0, 'gain' => SfxCues::GAIN['pop']]], $cues);
+        $this->assertSame([['sound' => 'pop', 'at' => 6.0, 'gain' => SfxCues::GAIN['subtle']['pop']]], $cues);
     }
 
-    public function test_numbers_and_long_words_get_a_ding_but_short_words_do_not(): void
+    public function test_cuts_zooms_and_plain_speech_stay_silent(): void
     {
-        $words = [
-            ['text' => 'aku', 'start' => 2.0],
-            ['text' => '1000', 'start' => 4.0],
-            ['text' => 'berhasil,', 'start' => 9.0],
-        ];
-
-        $cues = SfxCues::plan([], [], [], $words, 30.0);
-
-        $this->assertSame(['ding', 'ding'], $this->sounds($cues));
-        $this->assertSame([4.0, 9.0], array_column($cues, 'at'));
+        // Nothing seen and no punchline: no sound at all (jump cuts and zooms are not inputs any more)
+        $this->assertSame([], SfxCues::plan([], [], [], 60.0, 3.0));
     }
 
-    public function test_dense_cuts_do_not_become_noise(): void
+    public function test_punchlines_get_a_ding_one_when_subtle_two_when_energetic(): void
     {
-        // A cut every 0.5s for 10 seconds
-        $cuts = array_map(fn ($i) => 1.0 + $i * 0.5, range(0, 18));
+        $this->assertSame([5.0], array_column(SfxCues::plan([], [], [5.0, 15.0, 25.0], 30.0), 'at'));
+        $this->assertSame([5.0, 15.0], array_column(SfxCues::plan([], [], [5.0, 15.0, 25.0], 30.0, null, 'energetic'), 'at'));
+    }
 
-        $cues = SfxCues::plan($cuts, [], [], [], 12.0);
+    public function test_a_clip_full_of_moments_stays_within_its_budget(): void
+    {
+        $emoji = array_map(fn ($i) => 1.0 + $i, range(0, 50));
 
-        $times = array_column($cues, 'at');
-        $this->assertLessThan(count($cuts) / 3, count($cues));
-        foreach ($times as $i => $t) {
-            if ($i > 0) {
-                $this->assertGreaterThanOrEqual(1.8 - 0.001, $t - $times[$i - 1], 'two whooshes closer than the per-sound gap');
+        foreach (['subtle' => [4, 4.0], 'energetic' => [7, 2.5]] as $style => [$max, $gap]) {
+            $times = array_column(SfxCues::plan([], $emoji, [], 60.0, null, $style), 'at');
+            $this->assertCount($max, $times, $style);
+            foreach ($times as $i => $t) {
+                if ($i > 0) {
+                    $this->assertGreaterThanOrEqual($gap - 0.001, $t - $times[$i - 1], $style);
+                }
             }
         }
     }
 
-    public function test_different_sounds_keep_a_minimum_gap_and_the_pop_wins_a_clash(): void
+    public function test_the_broll_whoosh_wins_a_clash_with_a_pop_or_ding(): void
     {
-        // Whoosh at 5.0, emoji at 5.4, ding word at 5.6: all within 0.8s of the pop
-        $cues = SfxCues::plan([5.0], [], [5.4], [['text' => '2025', 'start' => 5.6]], 20.0);
+        $cues = SfxCues::plan([5.0], [5.5], [6.0], 20.0);
 
-        $this->assertSame(['pop'], $this->sounds($cues));
+        $this->assertSame(['whoosh'], $this->sounds($cues));
     }
 
-    public function test_every_cue_pair_respects_the_global_gap(): void
+    public function test_only_the_energetic_style_marks_the_hook_leaving(): void
     {
-        $cues = SfxCues::plan(
-            [2.0, 3.0, 5.0, 7.0],
-            [[3.5, 5.5], [8.0, 9.0]],
-            [4.0, 8.2],
-            array_map(fn ($i) => ['text' => 'luar biasa'.$i, 'start' => 1.0 + $i * 0.3], range(0, 30)),
-            12.0,
-        );
-
-        // "at" of a whoosh is 0.3s early, so compare the planned moments
-        $moments = array_map(fn ($c) => $c['at'] + ($c['sound'] === 'whoosh' ? 0.3 : 0.0), $cues);
-        sort($moments);
-        foreach ($moments as $i => $t) {
-            if ($i > 0) {
-                $this->assertGreaterThanOrEqual(0.8 - 0.001, $t - $moments[$i - 1]);
-            }
-        }
+        $this->assertSame([], SfxCues::plan([], [], [], 20.0, 3.0));
+        $this->assertSame(['whoosh'], $this->sounds(SfxCues::plan([], [], [], 20.0, 3.0, 'energetic')));
+        $this->assertSame(SfxCues::GAIN['energetic']['whoosh'], SfxCues::plan([], [], [], 20.0, 3.0, 'energetic')[0]['gain']);
     }
 
-    public function test_nothing_plays_in_the_clip_edges_or_before_the_hook_ends(): void
+    public function test_nothing_plays_in_the_clip_edges_and_unknown_styles_are_subtle(): void
     {
-        $cues = SfxCues::plan([0.1, 2.0, 11.9], [], [], [], 12.0, 3.0);
-
-        $this->assertSame([], $cues);
-    }
-
-    public function test_cut_times_are_where_pieces_are_joined_on_the_output_timeline(): void
-    {
-        $this->assertSame([], SfxCues::cutTimes([[0.0, 10.0]]));
-        $this->assertEqualsWithDelta([3.0, 8.0], SfxCues::cutTimes([[1.0, 4.0], [6.0, 11.0], [15.0, 16.0]]), 0.0001);
+        $this->assertSame([], SfxCues::plan([0.1], [11.9], [], 12.0));
+        $this->assertSame(SfxCues::GAIN['subtle']['pop'], SfxCues::plan([], [4.0], [], 12.0, null, 'loud')[0]['gain']);
     }
 
     public function test_bundled_effects_exist_and_are_short(): void

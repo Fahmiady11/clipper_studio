@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Support\BrollCues;
 use App\Support\HookText;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -199,53 +198,59 @@ class GeminiService
     }
 
     /**
-     * Moments of a clip that stock footage could illustrate, each with an
-     * English search query. Empty when nothing concrete is said or the AI is
-     * unavailable (B-roll is a nice-to-have, never a reason to fail a render).
+     * The edit plan of one clip: which phrases get B-roll (with a stock search
+     * query), which get an emoji, and which are punchlines. Phrases are named by
+     * their number in $phrases (EditPlan::transcript()). Zero of everything is a
+     * valid answer.
      *
-     * @param  array<int, array{text: string, start: float}>  $words  clip-relative
-     * @return list<array{time: float, query: string}>
+     * @param  list<string>  $emoji  the emoji the model may choose from
+     * @return array{broll: array, emoji: array, punchlines: array}
+     *
+     * @throws RuntimeException when no AI answers
      */
-    public function brollCues(array $words, float $duration, float $notBefore): array
+    public function editPlan(string $topic, string $phrases, float $notBefore, int $maxBroll, int $maxEmoji, array $emoji): array
     {
-        // Transcript as short timestamped lines the model can point into
-        $lines = [];
-        foreach ($words as $w) {
-            $slot = (int) floor($w['start'] / 3);
-            $lines[$slot] ??= sprintf('[%.1f] ', $w['start']);
-            $lines[$slot] .= $w['text'].' ';
-        }
-        if (! $lines) {
-            return [];
-        }
-        $transcript = mb_substr(implode("\n", $lines), 0, 6000);
-        $max = BrollCues::max($duration);
+        $phrases = mb_substr($phrases, 0, 8000);
         $from = round($notBefore, 1);
-        $until = round($duration - 3, 1);
+        $choices = implode(' ', $emoji);
 
         $prompt = <<<PROMPT
-        Kamu editor video TikTok. Dari transkrip clip di bawah (format: [detik] teks), pilih paling banyak {$max} momen
-        yang bisa diperkuat dengan B-roll (cuplikan video stok 2 detik) yang menggambarkan BENDA, TEMPAT, atau AKSI
-        konkret yang sedang dibicarakan (mis. uang, kota, olahraga, makanan, jalan macet, kantor).
+        Kamu editor video pendek (TikTok/Reels). Rencanakan efek untuk SATU clip: B-roll, emoji, dan punchline.
+        Sedikit tapi tepat jauh lebih baik daripada banyak. Clip tanpa B-roll atau tanpa emoji itu wajar.
 
-        Aturan:
-        - time = detik saat kata itu diucapkan, antara {$from} dan {$until}, antar momen minimal 8 detik
-        - query = kata kunci pencarian video stok dalam BAHASA INGGRIS, 1-3 kata, visual dan umum (mis. "city traffic", "counting money", "boxing gym")
-        - JANGAN pilih momen abstrak (perasaan, opini, percakapan biasa) atau nama orang; lebih baik kosong daripada tidak cocok
+        Topik clip: {$topic}
+        Transkrip per frasa (format: #nomor [detik] teks). Frasa sebelum detik {$from} tertutup judul pembuka: jangan dipilih.
+        {$phrases}
 
-        Transkrip:
-        {$transcript}
+        == BROLL: cuplikan video stok yang menutupi pembicara ±2 detik ==
+        Paling banyak {$maxBroll}. Hanya untuk frasa yang menyebut BENDA, TEMPAT, atau AKSI fisik yang bisa direkam kamera
+        dan memang membantu penonton membayangkan ceritanya.
+        - Pahami maksud kalimat, bukan kata per kata: "banting tulang" = kerja keras (kiasan, bukan tulang), "kursi" di DPR = jabatan
+          (bukan kursi), "cuci tangan" dari masalah = kiasan. Kiasan tidak dapat B-roll; sesuatu yang benar-benar terjadi boleh.
+        - JANGAN untuk: perasaan, opini, candaan, nama orang/merek/acara/penghargaan, istilah abstrak, kiasan, atau frasa punchline.
+        - query: BAHASA INGGRIS, 2–5 kata, subjek + aksi + tempat yang bisa ditemukan apa adanya di Pexels/Pixabay,
+          mis. "chef chopping vegetables in kitchen", "couple walking on beach at sunset". Tanpa kata abstrak (concept, success, emotion) dan tanpa animasi/3D.
+        - alt: query cadangan lebih umum, 1–3 kata ("cooking", "beach couple").
+        - must: 1–2 kata Inggris untuk SUBJEK utama yang wajib terlihat ("chef", "beach"); bukan kata umum (person, people, man, woman).
+        - word: kata dalam frasa itu, saat B-roll muncul.
 
-        Kembalikan JSON: {"broll": [{"time": 12.3, "query": "city traffic"}]}
+        == EMOJI: muncul 1 detik di atas subtitle ==
+        Paling banyak {$maxEmoji}. Pilih dari MAKNA atau emosi frasa (reaksi, punchline, momen penting), bukan dari satu kata kunci.
+        Frasa biasa tidak perlu emoji. Emoji HARUS salah satu dari: {$choices}
+        - word: kata dalam frasa itu, saat emoji muncul.
+
+        == PUNCHLINES ==
+        0–2 nomor frasa yang jadi puncak: bagian paling lucu, kejutan, atau jawaban yang ditunggu. Di sana pembicara harus terlihat.
+
+        Kembalikan JSON:
+        {"broll": [{"phrase": 4, "word": "masak", "query": "chef chopping vegetables in kitchen", "alt": "cooking", "must": ["chef", "kitchen"]}],
+         "emoji": [{"phrase": 9, "word": "ngakak", "emoji": "😂"}],
+         "punchlines": [9]}
         PROMPT;
 
-        try {
-            $data = $this->generate($prompt, 'broll', 0.4, 30, fn ($d) => is_array($d['broll'] ?? null) ? $d['broll'] : null);
-        } catch (RuntimeException) {
-            return [];
-        }
-
-        return BrollCues::filter($data, $duration, $notBefore);
+        return $this->generate($prompt, 'editPlan', 0.3, 60, fn ($d) => is_array($d) && (isset($d['broll']) || isset($d['emoji']) || isset($d['punchlines']))
+            ? ['broll' => (array) ($d['broll'] ?? []), 'emoji' => (array) ($d['emoji'] ?? []), 'punchlines' => (array) ($d['punchlines'] ?? [])]
+            : null);
     }
 
     /**

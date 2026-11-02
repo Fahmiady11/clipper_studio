@@ -13,31 +13,56 @@ class EmojiCuesTest extends TestCase
         return array_map(fn ($w, $i) => ['text' => $w, 'start' => $i * $step], explode(' ', $text), array_keys(explode(' ', $text)));
     }
 
-    public function test_keywords_pick_emoji_with_a_gap_between_them(): void
+    public function test_keyword_fallback_keeps_six_seconds_between_emoji(): void
     {
-        // sukses @0.5, uangnya @1.5 (too close), takut @4.0, keren @4.5 (too close)
-        $picks = EmojiCues::pick($this->words('mau sukses itu uangnya harus dikelola baik tapi takut keren'), 30);
+        // sukses @0.5, uangnya @1.5 and takut @4.0 too close, keren @7.0
+        $words = [['text' => 'sukses', 'start' => 0.5], ['text' => 'uangnya', 'start' => 1.5], ['text' => 'takut', 'start' => 4.0], ['text' => 'keren', 'start' => 7.0]];
 
         $this->assertSame([
             ['code' => '1f680', 'start' => 0.5],
-            ['code' => '1f631', 'start' => 4.0],
-        ], $picks);
+            ['code' => '1f525', 'start' => 7.0],
+        ], EmojiCues::pick($words, 30));
     }
 
-    public function test_stems_and_punctuation_match_but_lookalikes_do_not(): void
+    public function test_stems_and_punctuation_match_but_lookalikes_and_everyday_words_do_not(): void
     {
-        $codes = fn (string $text) => array_column(EmojiCues::pick($this->words($text, 4), 60), 'code');
+        $codes = fn (string $text) => array_column(EmojiCues::pick($this->words($text, 8), 60), 'code');
 
         $this->assertSame(['1f4b0', '1f9e0'], $codes('Uangnya, belajarnya!'));
         $this->assertSame([], $codes('ideal kayak sayangi')); // not a keyword plus a known ending
+        $this->assertSame([], $codes('kenapa waktu serius lihat')); // said all the time, so no emoji
     }
 
-    public function test_nothing_starts_too_late_to_finish_and_at_most_six(): void
+    public function test_one_emoji_per_twelve_seconds_at_most_four_never_repeated(): void
     {
         $many = implode(' ', array_fill(0, 20, 'uang keren lucu kaget'));
-        $this->assertCount(6, EmojiCues::pick($this->words($many, 3), 600));
+        $this->assertCount(4, EmojiCues::pick($this->words($many, 7), 600));
+        $this->assertCount(2, EmojiCues::pick($this->words('uang keren lucu kaget', 7), 30));
+        $this->assertCount(1, EmojiCues::pick($this->words('uang uang uang', 7), 60));
 
         $this->assertSame([], EmojiCues::pick([['text' => 'uang', 'start' => 9.5]], 10));
+    }
+
+    public function test_spacing_skips_the_hook_and_moments_covered_by_broll(): void
+    {
+        $emoji = [['code' => '1f602', 'start' => 2.0], ['code' => '1f525', 'start' => 10.0], ['code' => '1f4b0', 'start' => 20.0]];
+
+        $this->assertSame([['code' => '1f4b0', 'start' => 20.0]], EmojiCues::space($emoji, 60, 4.0, [[9.5, 12.0]]));
+    }
+
+    public function test_ai_emoji_map_to_images_we_have(): void
+    {
+        $this->assertSame('1f602', EmojiCues::codeFor('😂'));
+        $this->assertSame('2764', EmojiCues::codeFor("\u{2764}\u{FE0F}")); // with the emoji presentation selector
+        $this->assertNull(EmojiCues::codeFor('🦩'));                      // no image
+        $this->assertNull(EmojiCues::codeFor('😂😂'));
+        $this->assertNull(EmojiCues::codeFor('lol'));
+
+        $choices = EmojiCues::choices();
+        $this->assertContains('🥊', $choices);
+        foreach ($choices as $c) {
+            $this->assertNotNull(EmojiCues::codeFor($c), $c);
+        }
     }
 
     public function test_emoji_sit_above_a_low_subtitle_and_below_a_high_one(): void
@@ -53,6 +78,7 @@ class EmojiCuesTest extends TestCase
         $this->assertSame(1.0, $low['start']);
         $this->assertFileExists($low['image']);
         $this->assertLessThan(1920 - 200 - 28, $low['y'] + $low['size']); // ends above the subtitle
+        $this->assertSame(179, $low['size']);                            // sized with the 56px font
         $this->assertGreaterThan(60 + 56, $high['y']);                   // starts below the subtitle
     }
 

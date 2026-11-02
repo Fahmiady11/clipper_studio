@@ -87,9 +87,9 @@ class FFmpegService
      * @param  array|null  $track  FaceTracker plan: the reframe crop follows faces
      * @param  array|null  $pieces  SmartCut pieces to keep (clip-relative); the rest is cut out
      * @param  array  $zoom  SmartCut spans (on the cut timeline) shown punched in
-     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array, broll?: list<array{path: string, start: float, duration: float}>, logo?: ?string}|null  $overlay
-     *                                                                                                                                                                                                                          Subtitles, hook and emoji drawn in the same pass,
-     *                                                                                                                                                                                                                          which then is the final encode (one generation, no second pass)
+     * @param  array{ass?: ?string, hook?: ?array, hook_duration?: float, emojis?: array, title?: ?string, progress?: ?array, broll?: list<array{path: string, start: float, duration: float, offset?: float}>, logo?: ?string}|null  $overlay
+     *                                                                                                                                                                                                                                          Subtitles, hook and emoji drawn in the same pass,
+     *                                                                                                                                                                                                                                          which then is the final encode (one generation, no second pass)
      */
     public function applyLayout(string $input, string $layoutType, string $output, ?float $start = null, ?float $end = null, ?array $track = null, ?array $pieces = null, array $zoom = [], ?array $overlay = null): void
     {
@@ -131,7 +131,7 @@ class FFmpegService
         foreach (array_values($overlay['broll'] ?? []) as $i => $b) {
             $s = (float) $b['start'];
             $d = (float) $b['duration'];
-            $extraInputs .= sprintf(' -t %.3f -i %s', $d, escapeshellarg($b['path']));
+            $extraInputs .= sprintf(' -ss %.3f -t %.3f -i %s', (float) ($b['offset'] ?? 0), $d, escapeshellarg($b['path']));
             $filterGraph .= sprintf(
                 ';[%d:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,format=yuva420p,'
                 .'setpts=PTS-STARTPTS+%.3f/TB,fade=t=in:st=%.3f:d=0.12:alpha=1,fade=t=out:st=%.3f:d=0.12:alpha=1[br%d];'
@@ -392,14 +392,16 @@ class FFmpegService
     }
 
     /**
-     * Emoji to pop in over the clip, from the words of the last buildAssFile():
-     * centred, just above the subtitle (below it when the subtitle sits high).
+     * Emoji to pop in over the clip: $picks from the edit plan, or (null) keyword
+     * picks from the words of the last buildAssFile(). Centred just above the
+     * subtitle (below it when the subtitle sits high), sized with its font.
      *
+     * @param  list<array{code: string, start: float}>|null  $picks
      * @return list<array{image: string, start: float, x: int, y: int, size: int}>
      */
-    public function emojiOverlays(float $clipDuration): array
+    public function emojiOverlays(float $clipDuration, ?array $picks = null): array
     {
-        $size = 210;
+        $size = (int) max(140, min(230, round($this->font['size'] * 3.2)));
         $gap = $this->font['size'] * 0.75 + 40 + $size / 2;
         $cy = $this->subtitleY > 1100 ? $this->subtitleY - $gap : $this->subtitleY + $gap;
 
@@ -409,7 +411,7 @@ class FFmpegService
             'x' => 540 - intdiv($size, 2),
             'y' => (int) round($cy - $size / 2),
             'size' => $size,
-        ], EmojiCues::pick($this->cueWordList, $clipDuration));
+        ], $picks ?? EmojiCues::pick($this->cueWordList, $clipDuration));
     }
 
     private function dialogue(float $start, float $end, string $text, int $layer = 1): string
@@ -631,18 +633,21 @@ class FFmpegService
             );
         }
 
-        // Emoji: each image is shifted to its moment, pops in (50% -> 105% -> 100%) and fades out
+        // Emoji: each image is shifted to its moment, springs in (40% -> 112% -> 96% -> 100%),
+        // drifts up a little while it holds, then shrinks away as it fades
         foreach ($emojis as $e) {
             $s = (float) $e['start'];
+            $end = $s + EmojiCues::SHOW_FOR;
             $inputs .= sprintf(' -loop 1 -framerate 30 -t %.3f -i %s', EmojiCues::SHOW_FOR, escapeshellarg($e['image']));
             $n++;
-            $pop = sprintf('if(lt(t-%1$.3f,0.12),0.5+(t-%1$.3f)*4.583,if(lt(t-%1$.3f,0.22),1.05-(t-%1$.3f-0.12)*0.5,1))', $s);
+            $pop = sprintf('if(lt(t-%1$.3f,0.12),0.4+(t-%1$.3f)*6,if(lt(t-%1$.3f,0.2),1.12-(t-%1$.3f-0.12)*2,if(lt(t-%1$.3f,0.28),0.96+(t-%1$.3f-0.2)*0.5,'
+                .'if(gt(t,%2$.3f),1-(t-%2$.3f)*2,1))))', $s, $end - 0.15);
             $parts[] = sprintf(
                 "[%d:v]setpts=PTS+%.3f/TB,format=rgba,scale=w='trunc(%d*%s)':h=-1:eval=frame,"
-                .'fade=t=in:st=%.3f:d=0.1:alpha=1,fade=t=out:st=%.3f:d=0.15:alpha=1[e%d];'
-                ."[b%d][e%d]overlay=x='%d-overlay_w/2':y='%d-overlay_h/2':eof_action=pass[b%d]",
-                $in++, $s, $e['size'], $pop, $s, $s + EmojiCues::SHOW_FOR - 0.15, $n,
-                $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $n
+                .'fade=t=in:st=%.3f:d=0.08:alpha=1,fade=t=out:st=%.3f:d=0.15:alpha=1[e%d];'
+                ."[b%d][e%d]overlay=x='%d-overlay_w/2':y='%d-overlay_h/2-min(1,max(0,t-%.3f)/%.3f)*18':eof_action=pass[b%d]",
+                $in++, $s, $e['size'], $pop, $s, $end - 0.15, $n,
+                $n - 1, $n, $e['x'] + intdiv($e['size'], 2), $e['y'] + intdiv($e['size'], 2), $s, EmojiCues::SHOW_FOR, $n
             );
         }
 

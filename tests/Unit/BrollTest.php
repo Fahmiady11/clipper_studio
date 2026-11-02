@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use App\Services\FFmpegService;
-use App\Services\GeminiService;
 use App\Services\StockFootage;
 use App\Support\BrollCues;
 use Illuminate\Support\Facades\Http;
@@ -35,9 +34,9 @@ class BrollTest extends TestCase
         parent::tearDown();
     }
 
-    private function video(int $id, array $files, int $duration = 10): array
+    private function video(int $id, array $files, int $duration = 10, string $slug = 'cars-in-city-traffic'): array
     {
-        return ['id' => $id, 'duration' => $duration, 'video_files' => array_map(fn ($f) => [
+        return ['id' => $id, 'duration' => $duration, 'url' => "https://www.pexels.com/video/{$slug}-{$id}/", 'video_files' => array_map(fn ($f) => [
             'file_type' => 'video/mp4', 'width' => $f[0], 'height' => $f[1], 'link' => "https://cdn.test/{$id}-{$f[0]}.mp4",
         ], $files)];
     }
@@ -56,6 +55,7 @@ class BrollTest extends TestCase
 
         $first = $pexels->clip('city traffic');
         $this->assertSame('px2', $first['id']);
+        $this->assertSame(1.0, $first['offset']); // 10s long: skip its first second
         $this->assertSame('MP4DATA', file_get_contents($first['path']));
         Http::assertSent(fn ($r) => $r->url() === 'https://cdn.test/2-1080.mp4');
         Http::assertSent(fn ($r) => str_contains($r->url(), 'orientation=portrait') && $r->hasHeader('Authorization', 'px'));
@@ -70,9 +70,10 @@ class BrollTest extends TestCase
         $rendition = fn ($id, $w, $h) => ['url' => "https://cdn.pixabay.test/{$id}-{$w}.mp4", 'width' => $w, 'height' => $h, 'size' => 1];
         Http::fake([
             'pixabay.com/api/*' => Http::response(['hits' => [
-                ['id' => 10, 'duration' => 12, 'videos' => ['large' => $rendition(10, 3840, 2160), 'medium' => $rendition(10, 1920, 1080), 'small' => $rendition(10, 1280, 720)]],
-                ['id' => 11, 'duration' => 9, 'videos' => ['large' => $rendition(11, 1080, 1920), 'small' => $rendition(11, 720, 1280)]],
-                ['id' => 12, 'duration' => 9, 'videos' => ['medium' => $rendition(12, 1280, 720)]], // too small for a 1920 frame
+                ['id' => 10, 'type' => 'film', 'tags' => 'money, cash', 'duration' => 12, 'videos' => ['large' => $rendition(10, 3840, 2160), 'medium' => $rendition(10, 1920, 1080), 'small' => $rendition(10, 1280, 720)]],
+                ['id' => 11, 'type' => 'film', 'tags' => 'money, dollar', 'duration' => 9, 'videos' => ['large' => $rendition(11, 1080, 1920), 'small' => $rendition(11, 720, 1280)]],
+                ['id' => 12, 'type' => 'film', 'tags' => 'money', 'duration' => 9, 'videos' => ['medium' => $rendition(12, 1280, 720)]], // too small for a 1920 frame
+                ['id' => 13, 'type' => 'animation', 'tags' => 'money, 3d', 'duration' => 9, 'videos' => ['large' => $rendition(13, 1080, 1920)]], // a render, not footage
             ]]),
             'cdn.pixabay.test/*' => Http::response('MP4'),
         ]);
@@ -82,7 +83,58 @@ class BrollTest extends TestCase
         $this->assertSame('pb11', $stock->clip('money')['id']);              // portrait first
         $this->assertSame('pb10', $stock->clip('money', ['pb11'])['id']);    // then landscape, cropped by the render
         Http::assertSent(fn ($r) => $r->url() === 'https://cdn.pixabay.test/10-1920.mp4'); // smallest that fits
-        $this->assertNull($stock->clip('money', ['pb11', 'pb10']));
+        $this->assertNull($stock->clip('money', ['pb11', 'pb10'])); // the animation is never used
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'video_type=film'));
+    }
+
+    public function test_results_are_ranked_by_shared_words_and_unrelated_ones_are_never_used(): void
+    {
+        Http::fake([
+            'api.pexels.com/*' => Http::response(['videos' => [
+                $this->video(1, [[1080, 1920]], 10, 'water-running-over-hands'),
+                $this->video(2, [[1080, 1920]], 10, 'couple-holding-hands-on-a-street'),
+                $this->video(3, [[1080, 1920]], 4, 'woman-drinking-coffee'),
+            ]]),
+            'cdn.test/*' => Http::response('MP4'),
+        ]);
+        $stock = new StockFootage;
+
+        // "hands" alone is not enough for a 4-word query: the couple wins over the tap
+        $this->assertSame('px2', $stock->clip('couple holding hands street')['id']);
+        $this->assertNull($stock->clip('couple holding hands street', ['px2']));
+        // the fallback query is tried when the first finds nothing related
+        $pick = $stock->clip('boxer punching heavy bag', [], 'coffee');
+        $this->assertSame('px3', $pick['id']);
+        $this->assertSame(0.0, $pick['offset']); // too short to skip into
+    }
+
+    public function test_a_result_without_the_subject_or_on_green_screen_is_never_used(): void
+    {
+        config(['services.pexels.key' => '', 'services.pixabay.key' => 'pb']);
+        $hit = fn ($id, $tags) => ['id' => $id, 'type' => 'film', 'tags' => $tags, 'duration' => 9,
+            'videos' => ['large' => ['url' => "https://cdn.pixabay.test/{$id}.mp4", 'width' => 1080, 'height' => 1920]]];
+        Http::fake([
+            'pixabay.com/api/*' => Http::response(['hits' => [
+                $hit(1, 'work, office, people, pad, team'),          // two query words, no boxing
+                $hit(2, 'punch, boxing, green screen, chroma key'),
+                $hit(3, 'boxing, sports, fitness'),
+            ]]),
+            'cdn.pixabay.test/*' => Http::response('MP4'),
+        ]);
+        $stock = new StockFootage;
+
+        $this->assertSame('pb3', $stock->clip('two people boxing pad work', [], '', ['boxing'])['id']);
+        $this->assertNull($stock->clip('two people boxing pad work', ['pb3'], '', ['boxing']));
+    }
+
+    public function test_query_terms_drop_filler_and_share_a_stem(): void
+    {
+        $this->assertSame(['boxer' => 'box', 'boxing' => 'box', 'bus' => 'bus', 'hands' => 'hand'], [
+            'boxer' => StockFootage::terms('boxer')[0], 'boxing' => StockFootage::terms('boxing')[0],
+            'bus' => StockFootage::terms('bus')[0], 'hands' => StockFootage::terms('hands')[0],
+        ]);
+        $this->assertSame(['couple', 'walk', 'beach'], StockFootage::terms('A couple walking on the beach'));
+        $this->assertSame(['box', 'pad'], StockFootage::terms('two people boxing pad work'));
     }
 
     public function test_pexels_off_without_key_or_on_errors(): void
@@ -95,22 +147,24 @@ class BrollTest extends TestCase
         $this->assertNull((new StockFootage)->clip('money'));
     }
 
-    public function test_ai_cues_are_sorted_spaced_and_kept_inside_the_clip(): void
+    public function test_cues_are_sorted_spaced_sized_and_kept_off_the_hook_and_punchlines(): void
     {
-        Http::fake(['*model-a:*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => json_encode(['broll' => [
-            ['time' => 30.0, 'query' => 'boxing gym'],
-            ['time' => 2.0, 'query' => 'too early'],    // under the hook
-            ['time' => 12.0, 'query' => 'counting money'],
-            ['time' => 15.0, 'query' => 'too close'],   // 3s after the previous
-            ['time' => 59.0, 'query' => 'too late'],    // no room left
+        $cues = [
+            ['time' => 30.0, 'duration' => 3.0, 'query' => 'boxing gym', 'alt' => 'gym', 'must' => ['boxing']], // longer than allowed
+            ['time' => 2.0, 'query' => 'too early'],                // under the hook
+            ['time' => 12.0, 'duration' => 0.4, 'query' => 'counting money'], // too short: stretched
+            ['time' => 15.0, 'query' => 'too close'],               // 3s after the previous
+            ['time' => 44.0, 'query' => 'over the punchline'],
+            ['time' => 59.0, 'query' => 'too late'],                // no room left
             ['time' => 40.0, 'query' => ''],
-        ]])]]]]]])]);
-        $words = [['text' => 'uang', 'start' => 12.0], ['text' => 'boxing', 'start' => 30.0]];
+        ];
 
-        $this->assertSame(
-            [['time' => 12.0, 'query' => 'counting money'], ['time' => 30.0, 'query' => 'boxing gym']],
-            app(GeminiService::class)->brollCues($words, 60.0, 4.0)
-        );
+        $this->assertSame([
+            ['time' => 12.0, 'duration' => BrollCues::MIN_DURATION, 'query' => 'counting money', 'alt' => '', 'must' => []],
+            ['time' => 30.0, 'duration' => BrollCues::MAX_DURATION, 'query' => 'boxing gym', 'alt' => 'gym', 'must' => ['boxing']],
+        ], BrollCues::filter($cues, 60.0, 4.0, [[45.0, 47.0]]));
+        $this->assertSame(3, BrollCues::max(60.0));
+        $this->assertSame(1, BrollCues::max(30.0));
     }
 
     public function test_broll_is_cut_in_full_frame_for_its_moment(): void
@@ -149,7 +203,7 @@ class BrollTest extends TestCase
         ];
 
         $this->assertSame(
-            [['time' => 10.0, 'query' => 'counting money'], ['time' => 26.0, 'query' => 'city traffic']],
+            [['time' => 10.0, 'duration' => 1.8, 'query' => 'counting money', 'alt' => '', 'must' => []], ['time' => 26.0, 'duration' => 1.8, 'query' => 'city traffic', 'alt' => '', 'must' => []]],
             BrollCues::fromAnalysis($broll, $pieces, 100.0, 56.0, 4.0)
         );
     }
