@@ -7,8 +7,9 @@ use App\Services\MusicService;
 
 /**
  * The look of generated clips (layout, clip count/length, subtitle, hook,
- * music) in the shape ProjectCreator consumes. Shared by the studio's
- * project request and autopilot sources so both validate the same way.
+ * music) plus the user's instruction for the AI, in the shape ProjectCreator
+ * consumes. Shared by the studio's project request and autopilot sources so
+ * both validate the same way.
  */
 final class ClipSettings
 {
@@ -42,7 +43,12 @@ final class ClipSettings
             'position' => 'center', 'text_color' => '#ffffff', 'background_style' => 'full',
         ],
         'music' => ['enabled' => false, 'mood' => null, 'volume' => 25],
+        'watermark' => null, // null = logo when the brand kit has one
+        'instruction' => null,
     ];
+
+    /** Longest instruction for the AI ("ambil bagian tentang modal usaha"). */
+    public const INSTRUCTION_MAX = 300;
 
     /**
      * Validation rules, optionally nested under $prefix (e.g. "settings.").
@@ -93,12 +99,14 @@ final class ClipSettings
             'hook.text_color' => $color,
             'hook.background_style' => ['sometimes', 'in:none,semi,full'],
 
-            'watermark' => ['sometimes', 'boolean'],
+            'watermark' => ['sometimes', 'nullable', 'boolean'],
 
             'music' => ['sometimes', 'array'],
             'music.enabled' => ['sometimes', 'boolean'],
             'music.mood' => ['sometimes', 'nullable', 'in:'.implode(',', MusicService::MOODS)],
             'music.volume' => ['sometimes', 'integer', 'min:0', 'max:100'],
+
+            'instruction' => ['sometimes', 'nullable', 'string', 'max:'.self::INSTRUCTION_MAX],
         ];
 
         if ($prefix === '') {
@@ -126,6 +134,14 @@ final class ClipSettings
         }
 
         return $out;
+    }
+
+    /** One clean line, or null when nothing was asked. */
+    public static function instruction(mixed $text): ?string
+    {
+        $text = is_string($text) ? trim(preg_replace('/\s+/u', ' ', $text)) : '';
+
+        return $text === '' ? null : mb_substr($text, 0, self::INSTRUCTION_MAX);
     }
 
     /**

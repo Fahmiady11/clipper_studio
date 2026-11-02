@@ -17,6 +17,7 @@ class AgentClipController extends Controller
         return response()->json([
             'project_id' => $project->id,
             'status' => $project->status,
+            'instruction' => $project->instruction,
             'clips' => $project->generatedClips->map(fn ($c) => [
                 'id' => $c->id,
                 'ranking' => $c->ranking,
@@ -26,6 +27,7 @@ class AgentClipController extends Controller
                 'reason' => $c->reason,
                 'viral_score' => $c->viral_score,
                 'hook_text' => $c->hook_text_override ?? $c->hook_text,
+                'manual' => $c->manual,
                 'status' => $c->status,
                 'error_msg' => $c->status === 'failed' ? $c->error_msg : null,
                 'download_url' => $c->status === 'done' ? url("/api/v1/clips/{$c->id}/download") : null,

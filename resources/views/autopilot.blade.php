@@ -38,6 +38,12 @@
   .ap-range { display: flex; align-items: center; gap: 6px; }
   .ap-range .field { min-width: 0; }
   .ap-range em { font-style: normal; color: var(--text-dim); }
+  .ap-look select { width: auto; min-width: 180px; max-width: 100%; min-height: 38px; padding-top: 7px; padding-bottom: 7px; }
+  .ap-instr { display: block; }
+  .ap-instr .field { min-height: 40px; }
+  .ap-src-instr { margin: 10px 0 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.45; overflow-wrap: anywhere; }
+  .ap-src-instr span { color: var(--text); }
+  .ap-ed-locked { opacity: .45; }
   .ap-error { font-size: 13px; color: var(--danger); background: var(--danger-soft); border: 1px solid var(--danger); border-radius: var(--radius-sm); padding: 8px 12px; word-break: break-word; }
 
   /* Compact buttons for dense cards */
@@ -196,7 +202,7 @@
       <h1>Autopilot</h1>
       <p>
         Cari video baru dari channel atau keyword secara berkala, potong jadi klip otomatis, lalu review sebelum dikirim ke TikTok atau dijadwalkan ke YouTube, Facebook, Instagram, dan Threads.
-        Tampilan klip (layout, subtitle, gaya hook, musik) diatur per sumber lewat <b>Atur tampilan</b>; hook-nya ditulis AI untuk tiap klip.
+        Tampilan klip (layout, subtitle, gaya hook, musik) diatur per sumber: pilih <b>preset</b> atau <b>Atur tampilan</b> sendiri. Hook-nya ditulis AI untuk tiap klip.
       </p>
     </div>
 
@@ -262,10 +268,18 @@
             </div>
           </div>
         </div>
+        <label class="ap-instr">
+          <span class="ap-label">Cari bagian tertentu? (opsional)</span>
+          <input class="field" maxlength="300" x-model="formInstruction" placeholder="mis. ambil bagian tentang modal usaha">
+        </label>
         <div class="ap-look">
-          <span>Tampilan clip:</span>
-          <div class="ap-chips"><template x-for="c in lookChips(form.settings)" :key="c"><span class="ap-chip" x-html="c"></span></template></div>
-          <button class="ap-link" type="button" @click="openEditor(null)">Atur tampilan</button>
+          <label for="ap-form-preset">Tampilan clip:</label>
+          <select id="ap-form-preset" class="select" :value="form.style_preset_id ?? ''" @change="pickFormPreset($event.target.value)">
+            <option value="">Atur sendiri</option>
+            <template x-for="p in presets" :key="p.id"><option :value="p.id" x-text="'Preset ' + p.name" :selected="form.style_preset_id === p.id"></option></template>
+          </select>
+          <div class="ap-chips"><template x-for="c in lookChips(form.settings, presetName(form.style_preset_id))" :key="c"><span class="ap-chip" x-html="c"></span></template></div>
+          <button class="ap-link" type="button" x-show="!form.style_preset_id" @click="openEditor(null)">Atur tampilan</button>
         </div>
         <div x-show="formError" class="ap-error" x-text="formError"></div>
       </div>
@@ -288,11 +302,12 @@
               <div><dt>Diproses</dt><dd x-text="s.videos_found + ' video'"></dd></div>
               <div style="grid-column:1/-1"><dt>Cek terakhir</dt><dd x-text="s.last_run_at ? new Date(s.last_run_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'belum pernah'"></dd></div>
             </dl>
-            <div class="ap-chips" style="margin-top:12px"><template x-for="c in lookChips(s.settings)" :key="c"><span class="ap-chip" x-html="c"></span></template></div>
+            <div class="ap-chips" style="margin-top:12px"><template x-for="c in lookChips(s.settings, s.style_preset_name)" :key="c"><span class="ap-chip" x-html="c"></span></template></div>
+            <p class="ap-src-instr" x-show="s.settings.instruction">Instruksi: <span x-text="'“' + s.settings.instruction + '”'"></span></p>
             <div x-show="s.last_error" class="ap-error" style="margin-top:12px;font-size:12px" x-text="s.last_error"></div>
             <div class="ap-card-foot">
               <button class="btn btn-secondary ap-btn" @click="runSource(s)" type="button">Cek sekarang</button>
-              <button class="btn btn-ghost ap-btn" @click="openEditor(s)" type="button">Atur tampilan</button>
+              <button class="btn btn-ghost ap-btn" @click="openEditor(s)" type="button" x-text="s.style_preset_id ? 'Atur' : 'Atur tampilan'"></button>
               <span class="ap-spacer"></span>
               <button class="btn btn-ghost ap-btn btn-danger" @click="deleteSource(s)" type="button">Hapus</button>
             </div>
@@ -475,7 +490,25 @@
       <div class="ap-ed-body">
         <div>
           <section class="ap-ed-sec">
+            <h4>Preset &amp; instruksi</h4>
+            <div class="fblock">
+              <label class="fblock-title" for="ap-ed-preset" style="display:block;margin-bottom:10px">Preset tampilan</label>
+              <select id="ap-ed-preset" class="select" :value="ed.presetId ?? ''" @change="pickEditorPreset($event.target.value)">
+                <option value="">Atur sendiri</option>
+                <template x-for="p in presets" :key="p.id"><option :value="p.id" x-text="p.name" :selected="ed.presetId === p.id"></option></template>
+              </select>
+              <div class="ap-ed-note" x-show="ed.presetId">Layout, efek, hook, subtitle dan musik ikut preset ini, termasuk kalau preset-nya diubah nanti. Pilih <b>Atur sendiri</b> untuk mengubahnya di sini. <a href="{{ route('presets.page') }}">Kelola preset</a></div>
+            </div>
+            <div class="fblock">
+              <label class="fblock-title" for="ap-ed-instr" style="display:block;margin-bottom:10px">Cari bagian tertentu? <span style="color:var(--text-dim);font-weight:400;font-size:12px">· opsional</span></label>
+              <textarea id="ap-ed-instr" class="field" rows="2" maxlength="300" x-model="ed.s.instruction" placeholder="mis. yang lucu-lucu, maks 30 detik"></textarea>
+              <div class="ap-ed-note">AI memilih clip yang sesuai dari tiap video baru. Kosongkan untuk momen paling berpotensi viral.</div>
+            </div>
+          </section>
+
+          <section class="ap-ed-sec">
             <h4>Video</h4>
+            <div :inert="!!ed.presetId" :class="{ 'ap-ed-locked': !!ed.presetId }">
             <div class="fblock">
               <div class="fblock-title" style="margin-bottom:10px">Layout</div>
               <div class="seg">
@@ -528,6 +561,7 @@
               <div class="ap-ed-note">Cuplikan video stok 2 detik di momen yang membahas benda/tempat/aksi.
                 @unless (config('services.pexels.key') || config('services.pixabay.key'))<b>Belum aktif:</b> isi <code>PIXABAY_API_KEY</code> atau <code>PEXELS_API_KEY</code> di .env.@endunless</div>
             </div>
+            </div>
             <div class="fblock">
               <div class="fblock-title" style="margin-bottom:10px">Clip per video</div>
               <div class="seg">
@@ -549,7 +583,7 @@
             </div>
           </section>
 
-          <section class="ap-ed-sec">
+          <section class="ap-ed-sec" :inert="!!ed.presetId" :class="{ 'ap-ed-locked': !!ed.presetId }">
             <h4>Hook pembuka
               <button class="tgl" :class="{ on: ed.s.hook.enabled }" @click="ed.s.hook.enabled = !ed.s.hook.enabled; pvTab = 'hook'" type="button"><span class="tgl-track"></span></button>
             </h4>
@@ -595,7 +629,7 @@
             </div>
           </section>
 
-          <section class="ap-ed-sec">
+          <section class="ap-ed-sec" :inert="!!ed.presetId" :class="{ 'ap-ed-locked': !!ed.presetId }">
             <h4>Subtitle
               <button class="tgl" :class="{ on: ed.s.subtitle.enabled }" @click="ed.s.subtitle.enabled = !ed.s.subtitle.enabled; pvTab = 'sub'" type="button"><span class="tgl-track"></span></button>
             </h4>
@@ -686,7 +720,7 @@
             </div>
           </section>
 
-          <section class="ap-ed-sec">
+          <section class="ap-ed-sec" :inert="!!ed.presetId" :class="{ 'ap-ed-locked': !!ed.presetId }">
             <h4>Musik latar
               <button class="tgl" :class="{ on: ed.s.music.enabled }" @click="ed.s.music.enabled = !ed.s.music.enabled" type="button"><span class="tgl-track"></span></button>
             </h4>
@@ -783,7 +817,8 @@ function autopilot() {
   return {
     sources: [], clips: [],
     destinations: [], destLoaded: false, destError: '',
-    form: { type: 'channel', value: '', interval_hours: 6, max_per_run: 1, min_minutes: 5, max_minutes: 120, settings: null },
+    form: { type: 'channel', value: '', interval_hours: 6, max_per_run: 1, min_minutes: 5, max_minutes: 120, settings: null, style_preset_id: null },
+    formInstruction: '', presets: [],
     formError: null, timer: null, copied: '', captionState: {}, captionBusy: false,
     reviewPage: 1, reviewLastPage: 1, reviewTotal: 0, pendingCount: 0,
     reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
@@ -800,7 +835,7 @@ function autopilot() {
       { id: '', label: 'Semua' }, { id: 'pending', label: 'Belum direview' },
       { id: 'approved', label: 'Disetujui' }, { id: 'rejected', label: 'Ditolak' },
     ],
-    ed: { open: false, source: null, s: null, saving: false, error: null },
+    ed: { open: false, source: null, s: null, presetId: null, saving: false, error: null },
     pvTab: 'hook', fontsTick: 0, subDragging: false, musicTotal: null,
     SAMPLE_HOOK: 'Rahasia nikah *60 tahun*',
     FONTS: ['Arial', 'Roboto', 'Montserrat', 'Oswald', 'Bebas Neue'],
@@ -814,6 +849,7 @@ function autopilot() {
     async init() {
       document.fonts?.ready.then(() => this.fontsTick++);
       await Promise.all([this.loadSources(), this.loadClips(), this.loadDestinations(), this.loadDefaults(),
+        api('/api/presets').then(d => { this.presets = d.presets; }).catch(() => {}),
         api('/api/music').then(d => { this.musicTotal = d.total; }).catch(() => {})]);
       // Rendering and uploads progress in the background; keep the page fresh
       this.timer = setInterval(() => { this.loadClips(); this.loadSources(); }, 10000);
@@ -822,12 +858,13 @@ function autopilot() {
       try { this.form.settings = await api('/api/autopilot/defaults'); } catch (e) { console.error(e); }
     },
     // Short summary of a source's clip look, shown as chips
-    lookChips(s) {
+    lookChips(s, presetName = null) {
       if (!s) return [];
       // Rendered with x-html (for the <b>): escape the values, never trust stored data
       const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       const hook = { full: 'Label', semi: 'Kotak', none: 'Outline' }[s.hook.background_style] || '';
       return [
+        ...(presetName ? [`Preset <b>${esc(presetName)}</b>`] : []),
         `<b>${LAYOUT_NAMES[s.layout_type] || 'Reframe'}</b>`,
         `${esc(s.clip_count)} clip`,
         s.hook.enabled ? `Hook <b>${esc(hook)}</b>` : 'Tanpa hook',
@@ -836,10 +873,29 @@ function autopilot() {
         ...(s.edit?.sfx ? ['Efek suara'] : []),
       ];
     },
+    presetName(id) { return this.presets.find(p => p.id === id)?.name || null; },
+    // A preset's look into a settings object; count, length and instruction stay
+    applyLook(target, id) {
+      const p = this.presets.find(x => x.id === id);
+      if (!p || !target) return;
+      const look = JSON.parse(JSON.stringify(p.settings));
+      Object.assign(target, { layout_type: look.layout_type, edit: look.edit, subtitle: look.subtitle, music: look.music, watermark: look.watermark,
+        hook: { ...target.hook, ...look.hook, hook_text: null, is_ai_generated: true } });
+    },
+    pickFormPreset(value) {
+      this.form.style_preset_id = value ? +value : null;
+      this.applyLook(this.form.settings, this.form.style_preset_id);
+    },
+    pickEditorPreset(value) {
+      this.ed.presetId = value ? +value : null;
+      this.applyLook(this.ed.s, this.ed.presetId);
+    },
     openEditor(source) {
       const base = source ? source.settings : this.form.settings;
       if (!base) return;
-      this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), saving: false, error: null };
+      this.ed = { open: true, source, s: JSON.parse(JSON.stringify(base)), presetId: source ? source.style_preset_id : this.form.style_preset_id, saving: false, error: null };
+      if (!source) this.ed.s.instruction = this.formInstruction;
+      this.ed.s.instruction ??= '';
       this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles / emoji existed
       this.ed.s.subtitle.emoji ??= true;
       this.ed.s.edit = { jump_cut: true, zoom: true, progress: true, title: false, broll: true, sfx: false, ...(this.ed.s.edit || {}) }; // saved before these existed
@@ -851,10 +907,15 @@ function autopilot() {
         this.ed.error = 'Durasi maksimal harus lebih besar dari minimal (min. 5 detik).';
         return;
       }
-      if (!this.ed.source) { this.form.settings = s; this.ed.open = false; return; }
+      if (!this.ed.source) {
+        Object.assign(this.form, { settings: s, style_preset_id: this.ed.presetId });
+        this.formInstruction = s.instruction || '';
+        this.ed.open = false;
+        return;
+      }
       this.ed.saving = true; this.ed.error = null;
       try {
-        await api(`/api/autopilot/sources/${this.ed.source.id}`, { method: 'PATCH', body: JSON.stringify({ settings: s }) });
+        await api(`/api/autopilot/sources/${this.ed.source.id}`, { method: 'PATCH', body: JSON.stringify({ settings: s, style_preset_id: this.ed.presetId }) });
         await this.loadSources();
         this.ed.open = false;
       } catch (e) {
@@ -968,8 +1029,10 @@ function autopilot() {
       this.formError = null;
       try {
         const { settings, ...body } = this.form;
-        await api('/api/autopilot/sources', { method: 'POST', body: JSON.stringify(settings ? { ...body, settings } : body) });
+        const instruction = this.formInstruction.trim() || null;
+        await api('/api/autopilot/sources', { method: 'POST', body: JSON.stringify(settings ? { ...body, settings: { ...settings, instruction } } : body) });
         this.form.value = '';
+        this.formInstruction = '';
         await this.loadSources();
       } catch (e) { this.formError = e.message; }
     },

@@ -6,6 +6,7 @@ use App\Http\Controllers\AutopilotController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\GameplayClipController;
 use App\Http\Controllers\HookTestController;
+use App\Http\Controllers\ManualClipController;
 use App\Http\Controllers\MetaAccountController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MusicController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\PublishController;
 use App\Http\Controllers\RenderController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\StylePresetController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\YouTubeController;
 use App\Services\ConnectedAccounts;
@@ -35,6 +37,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::delete('/projects/{projectId}', [ProjectController::class, 'destroy']);
     Route::post('/projects/{projectId}/cancel', [ProjectController::class, 'cancel']);
     Route::post('/projects/{projectId}/retry', [ProjectController::class, 'retry'])->middleware('throttle:10,1');
+    // A clip cut by hand from the transcript, next to the AI's picks
+    Route::get('/projects/{projectId}/transcript', [ManualClipController::class, 'transcript']);
+    Route::post('/projects/{projectId}/clips', [ManualClipController::class, 'store'])->middleware('throttle:20,1');
 
     Route::post('/clips/{clipId}/render', [RenderController::class, 'render'])->middleware('throttle:20,1');
     Route::post('/clips/{clipId}/cancel', [RenderController::class, 'cancel']);
@@ -84,6 +89,13 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/schedule', [ScheduleController::class, 'store'])->middleware('throttle:30,1');
     Route::patch('/schedule/{postId}', [ScheduleController::class, 'update'])->middleware('throttle:30,1');
     Route::delete('/schedule/{postId}', [ScheduleController::class, 'destroy']);
+
+    // Named clip looks (built-in and own) and the default new projects start from
+    Route::get('/presets', [StylePresetController::class, 'index']);
+    Route::post('/presets', [StylePresetController::class, 'store'])->middleware('throttle:30,1');
+    Route::put('/presets/default', [StylePresetController::class, 'setDefault']);
+    Route::patch('/presets/{presetId}', [StylePresetController::class, 'update'])->whereNumber('presetId');
+    Route::delete('/presets/{presetId}', [StylePresetController::class, 'destroy'])->whereNumber('presetId');
 
     Route::get('/gameplay', [GameplayClipController::class, 'index']);
     Route::post('/gameplay', [GameplayClipController::class, 'store'])->middleware('throttle:20,1');

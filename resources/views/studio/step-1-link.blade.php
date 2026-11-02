@@ -51,4 +51,21 @@
       <span class="meta-ok">✓ METADATA BERHASIL DIAMBIL</span>
     </div>
   </div>
+
+  {{-- Optional brief for the AI: which moments to look for --}}
+  <div class="instr" x-show="meta">
+    <label class="fblock-title" for="instr-input">Cari bagian tertentu? <span class="instr-opt">opsional</span></label>
+    <p class="fblock-hint">Tulis apa yang kamu cari, AI memilih clip yang sesuai. Kosongkan untuk momen paling berpotensi viral.</p>
+    <textarea id="instr-input" class="field" rows="2" maxlength="300" x-model="instruction"
+              placeholder="mis. ambil bagian tentang modal usaha"></textarea>
+    <div class="instr-foot">
+      <div class="instr-eg">
+        <span>Contoh:</span>
+        <template x-for="ex in INSTRUCTION_EXAMPLES" :key="ex">
+          <button type="button" class="instr-chip" @click="instruction = ex" x-text="ex"></button>
+        </template>
+      </div>
+      <span class="field-count" x-text="instruction.length + '/300'"></span>
+    </div>
+  </div>
 </div>

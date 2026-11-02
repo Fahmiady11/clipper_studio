@@ -9,6 +9,7 @@
       Gemini akan membaca transcript dan memilih <b style="color:var(--text)" x-text="clipCount"></b> momen paling
       berpotensi viral, lalu menyusun subtitle dan hook otomatis.
     </p>
+    <p class="proc-sub proc-instr" x-show="instruction.trim()">Sesuai instruksimu: <b x-text="'“' + instruction.trim() + '”'"></b></p>
     <button class="btn" style="margin-top:28px;font-size:15px;padding:16px 28px" @click="startGenerate()">
       Generate Clip dengan AI
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 3l4 9-4 9 14-9z"/></svg>
@@ -31,7 +32,7 @@
   <div class="processing" x-show="generateStarted && !generateError">
     <div class="proc-status" x-text="'analyzing · ' + generateProgress + '%'"></div>
     <h2 class="proc-title">AI sedang menganalisis video…</h2>
-    <p class="proc-sub" x-text="'Memilih ' + clipCount + ' momen terbaik.'"></p>
+    <p class="proc-sub" x-text="instruction.trim() ? 'Memilih ' + clipCount + ' momen sesuai instruksi: “' + instruction.trim() + '”' : 'Memilih ' + clipCount + ' momen terbaik.'"></p>
     <div class="proc-bar-wrap"><div class="proc-bar" :style="'width:' + generateProgress + '%'"></div></div>
     <button class="btn btn-secondary proc-cancel" type="button" @click="cancelGenerate()" :disabled="cancelling || !projectId"
             x-text="cancelling ? 'Membatalkan…' : 'Batalkan analisis'"></button>

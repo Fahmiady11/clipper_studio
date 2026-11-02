@@ -98,7 +98,7 @@ class RenderController extends Controller
             'end_seconds' => ['required', 'numeric', 'gt:start_seconds'],
         ]);
         $duration = $data['end_seconds'] - $data['start_seconds'];
-        abort_if($duration < 3 || $duration > 300, 422, 'Durasi clip harus 3 detik sampai 5 menit.');
+        abort_if($duration < GeneratedClip::MIN_SECONDS || $duration > GeneratedClip::MAX_SECONDS, 422, 'Durasi clip harus 3 detik sampai 5 menit.');
         $videoLength = $clip->clipProject->duration_seconds;
         abort_if($videoLength && $data['end_seconds'] > $videoLength + 1, 422, 'Akhir clip melewati durasi video.');
 

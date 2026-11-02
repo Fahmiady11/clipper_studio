@@ -102,6 +102,22 @@
           </div>
         </div>
       </div>
+
+      {{-- Keep this look for next time --}}
+      <div class="preset-save">
+        <label class="fblock-title" for="preset-name">Simpan tampilan ini sebagai preset</label>
+        <p class="fblock-hint">Layout, efek, subtitle, gaya hook dan musik dari langkah 2 sampai 5. Teks hook, jumlah clip dan instruksi tidak ikut.</p>
+        <div class="preset-save-row">
+          <input id="preset-name" class="field" maxlength="60" x-model="presetName" placeholder="mis. Podcast mingguan"
+                 @input="presetSaved = ''; presetError = ''" @keydown.enter.prevent="savePreset()">
+          <button class="btn btn-secondary" type="button" @click="savePreset()" :disabled="!presetName.trim() || presetSaving"
+                  x-text="presetSaving ? 'Menyimpan…' : 'Simpan preset'"></button>
+        </div>
+        <label class="preset-check"><input type="checkbox" x-model="presetMakeDefault"> Jadikan default untuk project baru</label>
+        <label class="preset-check" x-show="hasBrand"><input type="checkbox" x-model="presetBrand"> Ikuti brand kit: font dan warna ikut berubah saat brand kit diubah</label>
+        <p class="trim-err" x-show="presetError" role="alert" x-text="presetError"></p>
+        <p class="preset-ok" x-show="presetSaved" role="status" x-text="presetSaved"></p>
+      </div>
     </div>
     <div class="wiz-preview">
       <div class="preview-label"><span>Live preview · 9:16</span><span x-text="currentLayout.title"></span></div>

@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\ClipProject;
 use App\Models\DiscoveredVideo;
 use App\Models\VideoSource;
-use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Support\Facades\Log;
 
@@ -48,7 +47,7 @@ class DiscoveryService
             if (! $url) {
                 continue;
             }
-            $project = $this->creator->create($source->user_id, $url, ClipSettings::forAutopilot($source->settings), $source->id);
+            $project = $this->creator->create($source->user_id, $url, $source->clipSettings(), $source->id);
 
             DiscoveredVideo::create([
                 'user_id' => $source->user_id,

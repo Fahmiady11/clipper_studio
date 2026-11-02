@@ -265,7 +265,7 @@ class AgentApiTest extends TestCase
             );
             $checked++;
         }
-        $this->assertSame(17, $checked);
+        $this->assertSame(20, $checked);
     }
 
     public function test_read_only_token_can_poll_but_not_spend_or_publish(): void
@@ -336,7 +336,7 @@ class AgentApiTest extends TestCase
             ->json('result.tools'))->pluck('name')->all();
 
         $this->assertEqualsCanonicalizing(
-            ['create_project', 'get_status', 'list_clips', 'render_clip', 'get_render_status', 'list_publish_accounts'],
+            ['create_project', 'list_presets', 'get_status', 'list_clips', 'get_transcript', 'create_clip', 'render_clip', 'get_render_status', 'list_publish_accounts'],
             $names,
         );
     }
@@ -356,7 +356,7 @@ class AgentApiTest extends TestCase
         $names = fn (string $tok) => collect($this->api($tok)->postJson('/api/v1/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
             ->json('result.tools'))->pluck('name')->all();
 
-        $this->assertEqualsCanonicalizing(['get_status', 'list_clips', 'get_render_status', 'list_publish_accounts'], $names($ro));
+        $this->assertEqualsCanonicalizing(['list_presets', 'get_status', 'list_clips', 'get_transcript', 'get_render_status', 'list_publish_accounts'], $names($ro));
         $this->assertContains('publish', $names($this->token));
         $this->assertContains('create_project', $names($this->token));
     }

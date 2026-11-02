@@ -58,6 +58,12 @@ class User extends Authenticatable
         return $this->hasOne(BrandKit::class);
     }
 
+    /** The preset new projects start from, while it still exists. */
+    public function defaultStylePreset(): ?StylePreset
+    {
+        return StylePreset::findVisible($this->default_style_preset_id, $this->id);
+    }
+
     public function clipProjects(): HasMany
     {
         return $this->hasMany(ClipProject::class);

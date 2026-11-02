@@ -165,6 +165,7 @@ class ProjectController extends Controller
             'viral_score' => $c->viral_score,
             'viral_reasons' => $c->viral_reasons,
             'hook_text' => $c->hook_text,
+            'manual' => $c->manual,
             'status' => $c->status,
             'error_msg' => $c->status === 'failed' ? $c->error_msg : null,
         ]);
@@ -176,6 +177,7 @@ class ProjectController extends Controller
             'progress_message' => $project->progress_message,
             'error_msg' => $project->error_msg,
             'cancelled' => $project->cancelled_at !== null,
+            'instruction' => $project->instruction,
             'clips' => $clips,
         ]);
     }

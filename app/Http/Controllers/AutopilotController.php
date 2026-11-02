@@ -10,6 +10,7 @@ use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
 use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
+use App\Models\StylePreset;
 use App\Models\TiktokAccount;
 use App\Models\VideoSource;
 use App\Services\Autopost;
@@ -36,6 +37,7 @@ class AutopilotController extends Controller
     public function sources(): JsonResponse
     {
         $sources = VideoSource::where('user_id', Auth::id())
+            ->with('stylePreset')
             ->withCount('discoveredVideos')
             ->latest()
             ->get();
@@ -52,7 +54,9 @@ class AutopilotController extends Controller
             'videos_found' => $s->discovered_videos_count,
             'last_run_at' => $s->last_run_at?->toISOString(),
             'last_error' => $s->last_error,
-            'settings' => ClipSettings::forAutopilot($s->settings),
+            'settings' => $s->clipSettings(),
+            'style_preset_id' => $s->stylePreset?->id,
+            'style_preset_name' => $s->stylePreset?->name,
         ]));
     }
 
@@ -78,10 +82,15 @@ class AutopilotController extends Controller
             'max_per_run' => ['sometimes', 'integer', 'min:1', 'max:5'],
             'min_minutes' => ['sometimes', 'integer', 'min:1', 'max:600'],
             'max_minutes' => ['sometimes', 'integer', 'min:1', 'max:600', 'gte:min_minutes'],
+            'style_preset_id' => ['sometimes', 'nullable', 'integer', StylePreset::existsRule(Auth::id())],
         ] + ClipSettings::rules('settings.'));
 
-        // Look chosen in the form, else the user's latest manual project
+        // Look chosen in the form, else the user's latest manual project; a preset decides the look
         $settings = $data['settings'] ?? $creator->settingsFrom($this->latestManualProject());
+        $preset = StylePreset::findVisible($data['style_preset_id'] ?? null, Auth::id());
+        if ($preset) {
+            $settings = array_replace_recursive($settings, $preset->look(Auth::user()->brandKit));
+        }
 
         $source = VideoSource::create([
             'user_id' => Auth::id(),
@@ -92,6 +101,7 @@ class AutopilotController extends Controller
             'min_video_seconds' => ($data['min_minutes'] ?? 5) * 60,
             'max_video_seconds' => ($data['max_minutes'] ?? 120) * 60,
             'settings' => ClipSettings::forAutopilot($settings),
+            'style_preset_id' => $preset?->id,
         ]);
 
         return response()->json(['id' => $source->id], 201);
@@ -100,10 +110,25 @@ class AutopilotController extends Controller
     public function updateSource(Request $request, int $sourceId): JsonResponse
     {
         $source = $this->ownedSource($sourceId);
-        $data = $request->validate(['enabled' => ['sometimes', 'boolean']] + ClipSettings::rules('settings.'));
-        if (isset($data['settings'])) {
-            // Applies to clips made from now on; ones already made keep their look
-            $data['settings'] = ClipSettings::forAutopilot(array_replace_recursive($source->settings ?? [], $data['settings']));
+        $data = $request->validate([
+            'enabled' => ['sometimes', 'boolean'],
+            'style_preset_id' => ['sometimes', 'nullable', 'integer', StylePreset::existsRule(Auth::id())],
+        ] + ClipSettings::rules('settings.'));
+
+        // Applies to clips made from now on; ones already made keep their look
+        if (isset($data['settings']) || array_key_exists('style_preset_id', $data)) {
+            $kit = Auth::user()->brandKit;
+            $settings = $source->settings ?? [];
+            $unlinking = array_key_exists('style_preset_id', $data) && $data['style_preset_id'] === null;
+            if ($unlinking && $source->stylePreset) {
+                $settings = array_replace_recursive($settings, $source->stylePreset->look($kit)); // keep the look it had
+            }
+            $settings = array_replace_recursive($settings, $data['settings'] ?? []);
+            $preset = StylePreset::findVisible(array_key_exists('style_preset_id', $data) ? $data['style_preset_id'] : $source->style_preset_id, Auth::id());
+            if ($preset) {
+                $settings = array_replace_recursive($settings, $preset->look($kit));
+            }
+            $data['settings'] = ClipSettings::forAutopilot($settings);
         }
         $source->update($data);
 

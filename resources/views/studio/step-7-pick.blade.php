@@ -2,7 +2,8 @@
   <div class="wiz-head">
     <div class="wiz-kicker">Langkah 7 dari 7</div>
     <h1 class="wiz-title">Pilih clip untuk dirender</h1>
-    <p class="wiz-desc" x-text="'AI menemukan ' + clips.length + ' momen. Pilih satu untuk dipotong, diberi layout, subtitle, dan hook.'"></p>
+    <p class="wiz-desc" x-text="'AI menemukan ' + clips.filter(c => !c.manual).length + ' momen. Pilih satu untuk dipotong, diberi layout, subtitle, dan hook.'"></p>
+    <p class="pick-instr" x-show="instruction">Instruksi: <span x-text="'“' + instruction + '”'"></span></p>
   </div>
 
   <div class="render-card" x-show="renderingClipId">
@@ -35,10 +36,12 @@
         <div class="clip-rank" x-text="c.ranking"></div>
         <div>
           <div class="clip-topic" x-text="c.topic"></div>
-          <div class="clip-reason" x-text="c.reason"></div>
+          <div class="clip-reason" x-show="c.reason" x-text="c.reason"></div>
+          <div class="clip-reason" x-show="c.manual && !c.reason && c.status === 'processing'">AI sedang menulis judul dan hook, lalu clip dirender.</div>
           <div class="clip-time">
             <span x-text="'⧗ ' + fmtClock(c.start_seconds) + ' → ' + fmtClock(c.end_seconds)"></span>
             <span x-text="'durasi ' + Math.round(c.end_seconds - c.start_seconds) + 's'"></span>
+            <span class="clip-own-tag" x-show="c.manual">dipotong manual</span>
             <span class="clip-trim" role="button" tabindex="0" x-show="!renderingClipId"
                   @click.stop="openTrim(c)" @keydown.enter.stop.prevent="openTrim(c)">✂ Atur awal/akhir</span>
           </div>
@@ -57,5 +60,14 @@
         </div>
       </button>
     </template>
+  </div>
+
+  {{-- What the AI missed: cut it by hand from the transcript --}}
+  <div class="clip-own">
+    <div>
+      <div class="clip-own-title">Momen yang kamu cari tidak ada?</div>
+      <div class="clip-own-sub">Pilih sendiri kalimat awal dan akhirnya di transkrip. Judul dan hook ditulis AI, lalu dirender seperti clip lain.</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" type="button" @click="openTranscript()" :disabled="!!renderingClipId || !projectId">Buat clip dari transkrip</button>
   </div>
 </div>

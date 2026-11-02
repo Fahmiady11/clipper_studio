@@ -4,6 +4,28 @@
     <h1 class="wiz-title">Pilih tipe layout</h1>
     <p class="wiz-desc">Tiap layout menentukan bagaimana video horizontal diubah jadi vertikal 9:16.</p>
   </div>
+
+  {{-- One click sets layout, effects, subtitle, hook and music; every step stays editable --}}
+  <div class="preset-bar" x-show="presets.length || presetsError">
+    <div class="preset-bar-head">
+      <span class="fblock-title" id="preset-bar-title">Mulai dari preset</span>
+      <a class="rs-link" href="{{ route('presets.page') }}">Kelola preset</a>
+    </div>
+    <p class="trim-err" x-show="presetsError" style="margin:0">
+      <span x-text="presetsError"></span> <button class="rs-link" type="button" @click="loadPresets()">Coba lagi</button>
+    </p>
+    <div class="preset-chips" role="group" aria-labelledby="preset-bar-title">
+      <template x-for="p in presets" :key="p.id">
+        <button type="button" class="preset-chip" :class="{ on: presetId === p.id }" :aria-pressed="presetId === p.id"
+                @click="applyPreset(p)" :title="p.summary.join(' · ')">
+          <span class="preset-chip-name" x-text="p.name"></span>
+          <span class="preset-chip-sub" x-text="p.summary.join(' · ')"></span>
+          <span class="preset-chip-tag" x-show="p.id === presetDefaultId">Default</span>
+        </button>
+      </template>
+    </div>
+    <p class="fhint preset-note" x-show="presetStatus" x-text="presetStatus"></p>
+  </div>
   <div class="layout-grid">
     <template x-for="L in LAYOUTS" :key="L.id">
       <div class="layout-item">

@@ -5,7 +5,7 @@ function studio() {
   const GAMEPLAY_READY = @json(\App\Services\GameplayFootage::for(auth()->id())->available()); // the user's own uploaded footage
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
-    'url','meta',
+    'url','meta','instruction','presetId',
     'layout','jumpCut','autoZoom','progressBar','topTitle','broll','sfx',
     'clipCount','durationMode','minDuration','maxDuration',
     'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
@@ -43,6 +43,13 @@ function studio() {
     sessionId: null, historyOpen: false, history: [], clearingHistory: false,
 
     url: '', meta: null, loadingMeta: false, metaError: null,
+    instruction: '',
+    INSTRUCTION_EXAMPLES: ['bagian tentang modal usaha', 'yang lucu-lucu', 'tips praktis, maks 30 detik'],
+    // Style presets: built-in and own, applied in one click and still editable afterwards
+    presets: [], presetDefaultId: null, presetId: null, presetsError: '',
+    presetName: '', presetBrand: false, presetMakeDefault: false, presetSaving: false, presetError: '', presetSaved: '',
+    // A clip cut by hand from the transcript
+    tx: { open: false, loading: false, error: null, lines: [], startIdx: null, endIdx: null, mode: 'start', q: '', hitAt: -1, saving: false, saveError: null },
     layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true, sfx: false,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: BRAND.font_family || 'Montserrat', subtitleSize: 56,
@@ -62,6 +69,7 @@ function studio() {
     editHookOpen: false, draftHook: '', copied: '',
     batchTimer: null, batchStarting: false,
     trim: { open: false, clip: null, words: [], start: 0, end: 0, mode: 'start', loading: false, saving: false, error: null },
+    hasBrand: !!(BRAND.font_family || BRAND.highlight_color || BRAND.text_color || BRAND.has_logo),
     clipCaption: '', clipHashtags: [], loadingCaption: false,
     tiktokConfigured: false, tiktokAccounts: [], tiktokAccountId: null,
     tiktokMode: 'inbox', tiktokCreator: null, tiktokCreatorError: null, tiktokCreatorLoading: false,
@@ -295,7 +303,7 @@ function studio() {
         step: 6, maxReached: 6, done: false, locked: true,
         generateStarted: true, generateProgress: 0, generateLogIdx: 0,
         generateError: null, generateLogMsg: 'Memuat status…', generateCancelled: false,
-        projectId: item.projectId,
+        projectId: item.projectId, instruction: '',
         meta: { title: item.title, thumbnailUrl: item.thumbnailUrl, durationSeconds: 0, channel: '', language: '' },
         clips: [], selectedClip: null,
         downloadUrl: null, renderingClipId: null, renderError: null, musicMissing: false,
@@ -322,6 +330,7 @@ function studio() {
       }
 
       this.clips = this.mapClips(data.clips);
+      this.instruction = data.instruction || '';
       this.step = 7;
       this.maxReached = 7;
 
@@ -414,6 +423,7 @@ function studio() {
           },
           body: JSON.stringify({
             youtube_url: this.url,
+            instruction: this.instruction.trim() || null,
             layout_type: this.layout,
             edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx },
             watermark: this.hasLogo && this.watermark,
@@ -468,7 +478,7 @@ function studio() {
         ranking: c.ranking, start_seconds: c.start_seconds, end_seconds: c.end_seconds,
         topic: c.topic, reason: c.reason, viral_potential: c.viral_potential,
         viral_score: c.viral_score ?? null, viral_reasons: c.viral_reasons || [],
-        hook_text: c.hook_text, id: c.id, status: c.status, error_msg: c.error_msg || null,
+        hook_text: c.hook_text, id: c.id, status: c.status, error_msg: c.error_msg || null, manual: !!c.manual,
       }));
     },
 
@@ -663,6 +673,11 @@ function studio() {
             this.musicMissing = !!data.music_missing;
             const clip = this.clips.find(c => c.id === clipId);
             if (clip) clip.status = 'done';
+            // A hand-cut clip got its title and hook from the AI after it was queued
+            if (clip?.manual) {
+              await this.refreshClips();
+              this.resultHookText = this.hookAi ? (clip.hook_text || this.hookText) : this.hookText;
+            }
             this.done = true;
             this.renderingClipId = null;
             return;
@@ -827,6 +842,180 @@ function studio() {
       } finally {
         this.trim.saving = false;
       }
+    },
+
+    // ── style presets ──────────────────────────────────────────────────────
+    async loadPresets() {
+      try {
+        const res = await fetch('/api/presets', { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        this.presets = data.presets;
+        this.presetDefaultId = data.default_id;
+        this.presetsError = '';
+        if (this.presetId && !this.presets.some(p => p.id === this.presetId)) this.presetId = null; // deleted elsewhere
+      } catch (e) {
+        this.presetsError = 'Preset gagal dimuat.';
+      }
+    },
+    applyDefaultPreset() {
+      const p = this.presets.find(x => x.id === this.presetDefaultId);
+      if (p) this.applyPreset(p);
+    },
+    // Every look field across steps 2, 4 and 5; clip count, hook text and the instruction stay
+    applyPreset(p) {
+      const s = p.settings;
+      Object.assign(this, {
+        layout: s.layout_type === 'gameplay' && !GAMEPLAY_READY ? 'reframe' : s.layout_type,
+        jumpCut: s.edit.jump_cut, autoZoom: s.edit.zoom, progressBar: s.edit.progress, topTitle: s.edit.title, broll: s.edit.broll, sfx: s.edit.sfx,
+        subtitleEnabled: s.subtitle.enabled, subtitleFont: s.subtitle.font_family, subtitleSize: s.subtitle.font_size,
+        subtitleTextColor: s.subtitle.text_color, subtitleHighlight: s.subtitle.highlight_color, subtitlePos: s.subtitle.position,
+        subtitleY: s.subtitle.position_y, subtitleBg: s.subtitle.background_style, subtitleStyle: s.subtitle.style, subtitleEmoji: s.subtitle.emoji,
+        hookEnabled: s.hook.enabled, hookDuration: s.hook.duration_seconds, hookPos: s.hook.position, hookTextColor: s.hook.text_color, hookBg: s.hook.background_style,
+        musicEnabled: s.music.enabled, musicMood: s.music.mood || '', musicVolume: s.music.volume,
+        watermark: !!s.watermark,
+        presetId: p.id,
+      });
+    },
+    lookFromState() {
+      return {
+        layout_type: this.layout,
+        edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx },
+        subtitle: {
+          enabled: this.subtitleEnabled, font_family: this.subtitleFont, font_size: this.subtitleSize, text_color: this.subtitleTextColor,
+          highlight_color: this.subtitleHighlight, position: this.subtitlePos, position_y: this.subtitleY,
+          background_style: this.subtitleBg, style: this.subtitleStyle, emoji: this.subtitleEmoji,
+        },
+        hook: { enabled: this.hookEnabled, duration_seconds: this.hookDuration, position: this.hookPos, text_color: this.hookTextColor, background_style: this.hookBg },
+        music: { enabled: this.musicEnabled, mood: this.musicMood || null, volume: this.musicVolume },
+        watermark: this.hasLogo && this.watermark,
+      };
+    },
+    // Same fields in the same order, so a preset and the current state compare as strings
+    lookKey(l) {
+      const { edit: e, subtitle: u, hook: h, music: m } = l;
+      return JSON.stringify([l.layout_type, e.jump_cut, e.zoom, e.progress, e.title, e.broll, e.sfx,
+        u.enabled, u.font_family, +u.font_size, u.text_color, u.highlight_color, u.position, u.position_y ?? null, u.background_style, u.style, u.emoji,
+        h.enabled, +h.duration_seconds, h.position, h.text_color, h.background_style, m.enabled, m.mood || null, +m.volume,
+        this.hasLogo && !!l.watermark]);
+    },
+    get activePreset() { return this.presets.find(p => p.id === this.presetId) || null; },
+    get presetChanged() { return !!this.activePreset && this.lookKey(this.activePreset.settings) !== this.lookKey(this.lookFromState()); },
+    get presetStatus() {
+      const p = this.activePreset;
+      if (!p) return '';
+      return this.presetChanged
+        ? `Mulai dari preset ${p.name}, lalu kamu ubah. Simpan sebagai preset baru di langkah 5 kalau mau dipakai lagi.`
+        : `Preset ${p.name} dipakai. Layout, subtitle, hook dan musik di langkah berikutnya masih bisa diubah.`;
+    },
+    async savePreset() {
+      const name = this.presetName.trim();
+      if (!name || this.presetSaving) return;
+      this.presetSaving = true; this.presetError = ''; this.presetSaved = '';
+      const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content };
+      try {
+        const res = await fetch('/api/presets', { method: 'POST', headers, body: JSON.stringify({ name, settings: { ...this.lookFromState(), brand: this.hasBrand && this.presetBrand } }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { this.presetError = (data.errors ? Object.values(data.errors)[0][0] : data.message) || 'Preset gagal disimpan.'; return; }
+        if (this.presetMakeDefault) {
+          const r = await fetch('/api/presets/default', { method: 'PUT', headers, body: JSON.stringify({ preset_id: data.preset.id }) });
+          if (r.ok) this.presetDefaultId = data.preset.id;
+        }
+        this.presets = [...this.presets, data.preset];
+        this.presetId = data.preset.id;
+        this.presetSaved = `Tersimpan sebagai "${data.preset.name}".`;
+        this.presetName = ''; this.presetMakeDefault = false;
+      } catch (e) {
+        this.presetError = 'Koneksi gagal. Coba lagi.';
+      } finally { this.presetSaving = false; }
+    },
+
+    // ── a clip cut by hand from the transcript ─────────────────────────────
+    async openTranscript() {
+      this.tx = { ...this.tx, open: true, error: null, saveError: null, startIdx: null, endIdx: null, mode: 'start', q: '', hitAt: -1 };
+      if (this.tx.lines.length && this.tx.projectId === this.projectId) return; // already loaded for this project
+      this.tx.loading = true;
+      const projectId = this.projectId;
+      try {
+        const res = await fetch(`/api/projects/${projectId}/transcript`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (this.projectId !== projectId) return;
+        this.tx.lines = data.lines;
+        this.tx.projectId = projectId;
+      } catch (e) {
+        this.tx.error = 'Transkrip gagal dimuat. Tutup lalu coba lagi.';
+      } finally { this.tx.loading = false; }
+    },
+    get txStart() { return this.tx.startIdx === null ? null : this.tx.lines[this.tx.startIdx].start; },
+    get txEnd() { return this.tx.endIdx === null ? null : this.tx.lines[this.tx.endIdx].end; },
+    get txDuration() { return this.txStart === null || this.txEnd === null ? 0 : this.txEnd - this.txStart; },
+    get txProblem() {
+      if (this.tx.startIdx === null) return '';
+      if (this.txDuration < 3) return 'Terlalu pendek: clip minimal 3 detik. Pilih kalimat akhir yang lebih jauh.';
+      if (this.txDuration > 300) return 'Terlalu panjang: clip maksimal 5 menit.';
+      return '';
+    },
+    get txCanCreate() { return this.tx.startIdx !== null && this.tx.endIdx !== null && !this.txProblem && !this.tx.saving; },
+    txIn(i) { return this.tx.startIdx !== null && i >= this.tx.startIdx && i <= this.tx.endIdx; },
+    // The AI clip (if any) a line already belongs to, so picks don't repeat it unknowingly
+    txTaken(l) { return this.clips.find(c => l.start < c.end_seconds && l.end > c.start_seconds) || null; },
+    txHit(l) { const q = this.tx.q.trim().toLowerCase(); return q.length >= 2 && l.text.toLowerCase().includes(q); },
+    get txHits() { return this.tx.q.trim().length >= 2 ? this.tx.lines.reduce((a, l, i) => (this.txHit(l) ? [...a, i] : a), []) : []; },
+    txFindNext() {
+      const hits = this.txHits;
+      if (!hits.length) return;
+      const next = hits.find(i => i > this.tx.hitAt) ?? hits[0];
+      this.tx.hitAt = next;
+      this.$refs.txLines?.querySelectorAll('.tx-line')[next]?.scrollIntoView({ block: 'center' });
+    },
+    pickTxLine(i) {
+      this.tx.saveError = null;
+      if (this.tx.mode === 'start' || this.tx.startIdx === null) {
+        this.tx.startIdx = i;
+        if (this.tx.endIdx === null || this.tx.endIdx < i) this.tx.endIdx = i;
+        this.tx.mode = 'end';
+      } else if (i < this.tx.startIdx) {
+        this.tx.startIdx = i;
+      } else {
+        this.tx.endIdx = i;
+      }
+    },
+    async createManualClip() {
+      if (!this.txCanCreate) return;
+      this.tx.saving = true; this.tx.saveError = null;
+      try {
+        const res = await fetch(`/api/projects/${this.projectId}/clips`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+          body: JSON.stringify({ start_seconds: this.txStart, end_seconds: this.txEnd }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { this.tx.saveError = (data.errors ? Object.values(data.errors)[0][0] : data.message) || 'Clip gagal dibuat.'; return; }
+        const clip = this.mapClips([data.clip])[0];
+        this.clips = [...this.clips, clip];
+        this.selectedClip = clip.ranking;
+        this.renderError = null;
+        this.tx.open = false;
+        if (clip.status === 'processing') {
+          this.renderingClipId = clip.id;
+          this.watchRender(clip.id, 4000);
+        }
+      } catch (e) {
+        this.tx.saveError = 'Koneksi gagal. Coba lagi.';
+      } finally { this.tx.saving = false; }
+    },
+    // Fresh titles, hooks and states for the clips on screen
+    async refreshClips() {
+      try {
+        const res = await fetch(`/api/projects/${this.projectId}/status`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return;
+        const data = await res.json();
+        for (const fresh of this.mapClips(data.clips)) {
+          const c = this.clips.find(x => x.id === fresh.id);
+          if (c) Object.assign(c, fresh);
+        }
+      } catch (e) {}
     },
 
     // ── utilities ──────────────────────────────────────────────────────────
@@ -1189,7 +1378,7 @@ function studio() {
       this.clearSession();
       Object.assign(this, {
         step:1, maxReached:1, done:false, locked:false,
-        url:'', meta:null, metaError:null,
+        url:'', meta:null, metaError:null, instruction:'',
         layout:'reframe',
         clipCount:3, durationMode:'auto', minDuration:20, maxDuration:45,
         generateStarted:false, generateProgress:0, generateLogIdx:0, generateError:null, generateLogMsg:null, generateCancelled:false,
@@ -1200,6 +1389,7 @@ function studio() {
       });
       clearTimeout(this.hookTestTimer);
       this.previewT = 0;
+      this.applyDefaultPreset();
     },
 
     // ── layout illustrations ───────────────────────────────────────────────
@@ -1228,10 +1418,13 @@ function studio() {
 
     // ── init ───────────────────────────────────────────────────────────────
     async init() {
+      let fresh = true;
+      try { fresh = !localStorage.getItem(SESSION_KEY); } catch {}
       this.loadSession();
       if (this.layout === 'gameplay' && !GAMEPLAY_READY) this.layout = 'reframe'; // footage was removed since this session was saved
       // The brand link on other pages (/?new=1) opens a fresh project
       if (new URLSearchParams(location.search).has('new')) {
+        fresh = true;
         this.restart();
         history.replaceState(null, '', location.pathname);
       }
@@ -1258,7 +1451,9 @@ function studio() {
       this.$watch('tiktokMode', () => this.loadTiktokCreator());
       this.$watch('tiktokAccountId', () => this.loadTiktokCreator());
 
-      await Promise.all([this.loadTiktokAccounts(), this.loadMusicLibrary()]);
+      await Promise.all([this.loadTiktokAccounts(), this.loadMusicLibrary(), this.loadPresets()]);
+      // First visit or a new project: start from the default preset
+      if (fresh && !this.locked) this.applyDefaultPreset();
       if (this.done && this.selectedClipObj) { this.loadPublishPanel(); this.loadHookTest(); }
       // If restored from session and already done
       if (this.done && this.selectedClipObj && !this.clipCaption) this.fetchCaption();

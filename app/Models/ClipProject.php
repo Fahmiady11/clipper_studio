@@ -37,6 +37,7 @@ class ClipProject extends Model
         'music_enabled',
         'music_mood',
         'music_volume',
+        'instruction',
         'status',
         'progress_stage',
         'progress_message',

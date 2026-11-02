@@ -45,7 +45,9 @@
         <span x-text="selectedClipObj ? 'Clip #' + selectedClipObj.ranking : ''"></span>
         <span x-show="selectedClipObj?.viral_potential" x-text="'Potensi viral ' + (selectedClipObj?.viral_potential || '')"></span>
         <span x-show="meta?.title" x-text="meta?.title"></span>
+        <span x-show="selectedClipObj?.manual">Dipotong manual dari transkrip</span>
       </p>
+      <p class="rs-instr" x-show="instruction">Instruksi ke AI: <span x-text="'“' + instruction + '”'"></span></p>
       <div class="music-warn" x-show="musicMissing" style="margin-top:14px">
         Musik latar aktif, tapi library musik kosong saat dirender, jadi clip ini <b>tanpa musik</b>.
         <a href="/music">Upload lagu</a>, lalu render ulang lewat "Edit hook &amp; render ulang".

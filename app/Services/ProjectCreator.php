@@ -7,11 +7,12 @@ use App\Models\BrandKit;
 use App\Models\ClipProject;
 use App\Models\HookSetting;
 use App\Models\SubtitleSetting;
+use App\Support\ClipSettings;
 
 /**
  * Creates a clip project with its subtitle/hook settings and queues analysis.
  * $settings has the StoreProjectRequest shape (layout_type, clip_count,
- * duration_mode, min/max_duration, subtitle{}, hook{}, music{}), so studio
+ * duration_mode, min/max_duration, subtitle{}, hook{}, music{}, instruction), so studio
  * requests and autopilot sources share one path.
  */
 class ProjectCreator
@@ -41,6 +42,7 @@ class ProjectCreator
             'music_enabled' => $settings['music']['enabled'] ?? false,
             'music_mood' => $settings['music']['mood'] ?? null,
             'music_volume' => $settings['music']['volume'] ?? 25,
+            'instruction' => ClipSettings::instruction($settings['instruction'] ?? null),
             'status' => 'processing',
         ]);
 

@@ -147,6 +147,7 @@ class AnalyzeVideoJob implements ShouldQueue
         $log->info('Calling Gemini', [
             'clip_count' => $project->clip_count,
             'duration_mode' => $durationMode,
+            'instruction' => $project->instruction !== null,
         ]);
 
         $clips = $gemini->analyzeWithTranscript(
@@ -157,7 +158,8 @@ class AnalyzeVideoJob implements ShouldQueue
             $minDuration,
             $maxDuration,
             $performanceHint,
-            $performance->hookInsight($project->user_id)
+            $performance->hookInsight($project->user_id),
+            $project->instruction
         );
         $log->info('Gemini returned', ['count' => count($clips)]);
 

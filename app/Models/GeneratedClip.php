@@ -14,6 +14,11 @@ class GeneratedClip extends Model
 
     protected $keyType = 'string';
 
+    /** Shortest and longest cut a user may set (trim or a clip from the transcript). */
+    public const MIN_SECONDS = 3;
+
+    public const MAX_SECONDS = 300;
+
     protected $fillable = [
         'id',
         'clip_project_id',
@@ -52,6 +57,7 @@ class GeneratedClip extends Model
         'output_path',
         'status',
         'review_status',
+        'manual',
         'error_msg',
         'cancelled_at',
     ];
@@ -65,6 +71,7 @@ class GeneratedClip extends Model
         'subtitle_json' => 'array',
         'hashtags_json' => 'array',
         'broll_json' => 'array',
+        'manual' => 'boolean',
         'cancelled_at' => 'datetime',
         'youtube_uploaded_at' => 'datetime',
         'youtube_checked_at' => 'datetime',

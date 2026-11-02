@@ -14,6 +14,7 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\PublicMediaController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\StatusController;
+use App\Http\Controllers\StylePresetController;
 use App\Http\Controllers\ThreadsController;
 use App\Http\Controllers\TikTokController;
 use App\Http\Controllers\UserApprovalController;
@@ -88,6 +89,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/settings/api', [ApiTokenController::class, 'page'])->middleware('cache.headers:no_store;private')->name('api.tokens');
     Route::get('/settings/gameplay', [GameplayClipController::class, 'page'])->middleware('cache.headers:no_store;private')->name('gameplay.page');
     Route::get('/settings/gameplay/{clipId}/thumb', [GameplayClipController::class, 'thumb'])->whereNumber('clipId')->name('gameplay.thumb');
+    Route::get('/settings/presets', [StylePresetController::class, 'page'])->middleware('cache.headers:no_store;private')->name('presets.page');
     Route::get('/settings/brand', [BrandKitController::class, 'edit'])->name('brand.edit');
     Route::put('/settings/brand', [BrandKitController::class, 'update'])->name('brand.update');
     Route::get('/settings/brand/logo', [BrandKitController::class, 'logo'])->name('brand.logo');
