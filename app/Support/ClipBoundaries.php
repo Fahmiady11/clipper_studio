@@ -49,7 +49,7 @@ final class ClipBoundaries
     }
 
     /** Timed words, or caption lines standing in for words when there is no word timing. */
-    private static function words(array $segments): array
+    public static function words(array $segments): array
     {
         $words = [];
         foreach ($segments as $seg) {
@@ -115,7 +115,7 @@ final class ClipBoundaries
      * A sentence ends between $a and $b: punctuation, a pause, or (ASR
      * captions rarely punctuate) $b opening with a capital after a lowercase word.
      */
-    private static function isBreak(array $a, array $b): bool
+    public static function isBreak(array $a, array $b): bool
     {
         return preg_match('/[.?!…]["\')]*$/u', $a['text'])
             || $b['start'] - $a['end'] >= self::PAUSE

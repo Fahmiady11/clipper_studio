@@ -35,6 +35,7 @@
     <p class="tx-legend" x-show="tx.lines.length">Garis di kiri: bagian yang sudah jadi clip.</p>
 
     <div class="trim-err" x-show="txProblem" x-text="txProblem"></div>
+    <p class="tx-legend" x-show="txLimitNote" x-text="txLimitNote"></p>
     <div class="trim-err" x-show="tx.saveError" role="alert" x-text="tx.saveError"></div>
     <div class="modal-actions">
       <span class="tx-cost" x-show="txCanCreate" x-text="'Memakai ±' + Math.ceil(txDuration) + ' detik kuota render'"></span>

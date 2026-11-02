@@ -16,6 +16,7 @@ use App\Services\YtDlpService;
 use App\Support\Cancellation;
 use App\Support\ClipBoundaries;
 use App\Support\HookText;
+use App\Support\InstructionDuration;
 use App\Support\JobCancelled;
 use App\Support\ViralityScore;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -141,6 +142,12 @@ class AnalyzeVideoJob implements ShouldQueue
         $durationMode = $project->duration_mode;
         $minDuration = $project->min_duration ?? 30;
         $maxDuration = $project->max_duration ?? 90;
+        // "maks 30 detik" in the instruction: the AI gets that range, and the clips are held to it below
+        $limits = InstructionDuration::parse($project->instruction);
+        if ($limits) {
+            $durationMode = 'manual';
+            [$minDuration, $maxDuration] = InstructionDuration::promptRange($limits, $minDuration, $maxDuration);
+        }
 
         $performanceHint = $performance->promptInsight();
 
@@ -148,6 +155,7 @@ class AnalyzeVideoJob implements ShouldQueue
             'clip_count' => $project->clip_count,
             'duration_mode' => $durationMode,
             'instruction' => $project->instruction !== null,
+            'length_limits' => $limits,
         ]);
 
         $clips = $gemini->analyzeWithTranscript(
@@ -169,9 +177,22 @@ class AnalyzeVideoJob implements ShouldQueue
         // Stage 6 — save to DB
         $this->stage($project, 6);
         $auto = $project->video_source_id !== null;
+        $kept = [];
         foreach ($clips as $clip) {
             // Start and end on real sentence boundaries, not mid-word
             [$start, $end] = ClipBoundaries::snap((float) $clip['start_seconds'], (float) $clip['end_seconds'], $transcriptData['segments']);
+            if ($limits) {
+                $fitted = InstructionDuration::fit($start, $end, $transcriptData['segments'], $limits, $project->duration_seconds);
+                // A clip stretched to the minimum may now cover most of another one: keep the better-ranked
+                $overlaps = $fitted && collect($kept)->contains(fn ($k) => min($k[1], $fitted[1]) - max($k[0], $fitted[0]) > ($fitted[1] - $fitted[0]) / 2);
+                if (! $fitted || $overlaps) {
+                    $log->info('Clip dropped: does not fit the length in the instruction', ['ranking' => $clip['ranking'] ?? null, 'start' => $start, 'end' => $end, 'limits' => $limits]);
+
+                    continue;
+                }
+                [$start, $end] = $fitted;
+            }
+            $kept[] = [$start, $end];
             $generated = GeneratedClip::create([
                 'clip_project_id' => $project->id,
                 'ranking' => $clip['ranking'],

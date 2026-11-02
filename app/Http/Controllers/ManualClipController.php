@@ -10,6 +10,7 @@ use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Services\RenderQuota;
 use App\Support\ClipBoundaries;
+use App\Support\InstructionDuration;
 use App\Support\TranscriptText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,6 +36,8 @@ class ManualClipController extends Controller
             'language' => $project->transcript?->language,
             'duration_seconds' => $project->duration_seconds,
             'lines' => TranscriptText::lines($project->transcript?->content ?? []),
+            // Lengths from the instruction, for a hint only: a range picked by hand is kept as picked
+            'length_limits' => ($limits = InstructionDuration::parse($project->instruction)) ? $limits + ['label' => InstructionDuration::label($limits)] : null,
         ]);
     }
 

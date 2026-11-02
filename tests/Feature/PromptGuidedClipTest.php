@@ -96,6 +96,54 @@ class PromptGuidedClipTest extends TestCase
         exec('rm -rf '.escapeshellarg(storage_path('app/temp/'.$project->id)));
     }
 
+    public function test_lengths_in_the_instruction_steer_the_ai_and_hold_its_clips(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create();
+        $project = ClipProject::create([
+            'user_id' => $user->id, 'youtube_url' => 'https://youtu.be/abcdefg', 'layout_type' => 'reframe', 'duration_seconds' => 120,
+            'clip_count' => 3, 'duration_mode' => 'auto', 'status' => 'processing', 'instruction' => 'yang lucu, 10-12 detik',
+        ]);
+        // Six sentences of four 1 s words, one every 5.4 s, ending at 4.6, 10.0 ... 31.6
+        $segments = [];
+        $t = 0.0;
+        for ($i = 0; $i < 6; $i++) {
+            $words = [];
+            foreach (['satu', 'dua', 'tiga', 'empat.'] as $w) {
+                $words[] = ['start' => $t, 'end' => $t + 1.0, 'text' => $w];
+                $t += 1.2;
+            }
+            $segments[] = ['start' => $words[0]['start'], 'end' => $words[3]['end'], 'text' => 'satu dua tiga empat.', 'words' => $words];
+            $t += 0.6;
+        }
+        $this->mock(YtDlpService::class)->shouldReceive('download')->andReturnUsing(function ($url, $path) {
+            @mkdir(dirname($path), 0755, true);
+            file_put_contents($path, 'video');
+        });
+        $this->mock(TranscriptService::class)->shouldReceive('fetch')->andReturn(['language' => 'id', 'segments' => $segments]);
+        $this->mock(GeminiService::class)->shouldReceive('analyzeWithTranscript')
+            // the AI is asked for 10-12 s clips, whatever the project said
+            ->withArgs(fn ($tr, $count, $layout, $mode, $min, $max) => $mode === 'manual' && $min === 10 && $max === 12)
+            ->andReturn([
+                ['ranking' => 1, 'start_seconds' => 0, 'end_seconds' => 31, 'topic' => 'Kepanjangan', 'reason' => 'R'],
+                ['ranking' => 2, 'start_seconds' => 27.0, 'end_seconds' => 31.6, 'topic' => 'Terlalu pendek di ujung video', 'reason' => 'R'],
+                ['ranking' => 3, 'start_seconds' => 16.2, 'end_seconds' => 26.2, 'topic' => 'Pas', 'reason' => 'R'],
+            ]);
+
+        $this->app->call([new AnalyzeVideoJob($project->id), 'handle']);
+
+        $clips = GeneratedClip::where('clip_project_id', $project->id)->orderBy('ranking')->get();
+        $this->assertSame(['Kepanjangan', 'Pas'], $clips->pluck('topic')->all());
+        $this->assertLessThanOrEqual(12.5, $clips[0]->end_seconds - $clips[0]->start_seconds);
+        $this->assertEqualsWithDelta(10.35, $clips[0]->end_seconds, 0.01); // after the second sentence, not mid-word
+        $this->assertEqualsWithDelta(10.35, $clips[1]->end_seconds - $clips[1]->start_seconds, 0.2);
+
+        // The transcript for cutting by hand says what the instruction asked, as a hint
+        $this->actingAs($user)->getJson("/api/projects/{$project->id}/transcript")
+            ->assertJsonPath('length_limits.min', 10)->assertJsonPath('length_limits.label', '10 detik sampai 12 detik');
+        exec('rm -rf '.escapeshellarg(storage_path('app/temp/'.$project->id)));
+    }
+
     public function test_prompt_puts_the_instruction_first_only_when_given(): void
     {
         config([

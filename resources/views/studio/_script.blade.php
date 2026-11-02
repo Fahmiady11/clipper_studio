@@ -49,7 +49,7 @@ function studio() {
     presets: [], presetDefaultId: null, presetId: null, presetsError: '',
     presetName: '', presetBrand: false, presetMakeDefault: false, presetSaving: false, presetError: '', presetSaved: '',
     // A clip cut by hand from the transcript
-    tx: { open: false, loading: false, error: null, lines: [], startIdx: null, endIdx: null, mode: 'start', q: '', hitAt: -1, saving: false, saveError: null },
+    tx: { open: false, loading: false, error: null, lines: [], limits: null, startIdx: null, endIdx: null, mode: 'start', q: '', hitAt: -1, saving: false, saveError: null },
     layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true, sfx: false,
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: BRAND.font_family || 'Montserrat', subtitleSize: 56,
@@ -942,6 +942,7 @@ function studio() {
         const data = await res.json();
         if (this.projectId !== projectId) return;
         this.tx.lines = data.lines;
+        this.tx.limits = data.length_limits;
         this.tx.projectId = projectId;
       } catch (e) {
         this.tx.error = 'Transkrip gagal dimuat. Tutup lalu coba lagi.';
@@ -955,6 +956,14 @@ function studio() {
       if (this.txDuration < 3) return 'Terlalu pendek: clip minimal 3 detik. Pilih kalimat akhir yang lebih jauh.';
       if (this.txDuration > 300) return 'Terlalu panjang: clip maksimal 5 menit.';
       return '';
+    },
+    // The instruction asked for a length; a hand pick may differ on purpose, so this only says so
+    get txLimitNote() {
+      const l = this.tx.limits;
+      if (!l || this.tx.startIdx === null || this.txProblem) return '';
+      const d = this.txDuration;
+      if ((l.max === null || d <= l.max + 0.5) && (l.min === null || d >= l.min - 0.5)) return '';
+      return `Instruksimu minta ${l.label}, bagian ini ${Math.round(d)} detik. Clip tetap dibuat sesuai pilihanmu.`;
     },
     get txCanCreate() { return this.tx.startIdx !== null && this.tx.endIdx !== null && !this.txProblem && !this.tx.saving; },
     txIn(i) { return this.tx.startIdx !== null && i >= this.tx.startIdx && i <= this.tx.endIdx; },
