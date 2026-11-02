@@ -2,12 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\DescribeClipJob;
+use App\Jobs\RenderClipJob;
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
+use App\Models\SubtitleSetting;
+use App\Models\Transcript;
 use App\Models\User;
 use App\Services\EditPlanner;
+use App\Services\FFmpegService;
+use App\Services\GeminiService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Mockery;
 use Tests\TestCase;
 
 class EditPlannerTest extends TestCase
@@ -101,5 +109,41 @@ class EditPlannerTest extends TestCase
 
         $this->assertSame([null, false], app(EditPlanner::class)->plan($this->clip(200.0, 230.0), $this->segments, 3.0));
         Http::assertNothingSent();
+    }
+
+    public function test_a_manual_clip_gets_its_edit_plan_when_the_chained_render_runs(): void
+    {
+        Storage::fake();
+        config(['services.pexels.key' => '', 'services.pixabay.key' => '']);
+        $clip = $this->clip();
+        $project = $clip->clipProject;
+        $project->update(['layout_type' => 'gaussian', 'jump_cut' => false, 'auto_zoom' => false, 'progress_bar' => false, 'sfx' => true]);
+        Transcript::create(['clip_project_id' => $project->id, 'language' => 'id', 'content' => $this->segments]);
+        SubtitleSetting::create(['clip_project_id' => $project->id, 'enabled' => true, 'emoji' => true]);
+        $clip->update(['manual' => true, 'topic' => 'placeholder', 'status' => 'processing']);
+        $dir = storage_path('app/temp/'.$project->id);
+        @mkdir($dir, 0755, true);
+        touch($dir.'/video.mp4');
+
+        $ai = $this->mock(GeminiService::class);
+        $ai->shouldReceive('describeClip')->andReturn(['topic' => 'Boxing pertama', 'hook_text' => 'Pemula *dipukul*']);
+        $ai->shouldReceive('editPlan')->once()
+            ->withArgs(fn ($topic, $phrases) => $topic === 'Boxing pertama' && str_contains($phrases, '#1 [25.0] Gue dipukul'))
+            ->andReturn(['broll' => [], 'emoji' => [['phrase' => 1, 'word' => 'ngakak', 'emoji' => '😂']], 'punchlines' => [1]]);
+        $ffmpeg = Mockery::mock(FFmpegService::class, [])->makePartial(); // [] runs the constructor
+        $ffmpeg->shouldReceive('applyLayout')->once()
+            ->withArgs(fn ($in, $layout, $out, $s, $e, $track, $pieces, $zoom, $overlay) => array_column($overlay['emojis'], 'start') === [26.6] && touch($out));
+        $ffmpeg->shouldReceive('normalizeVoice')->andReturn(false);
+        $ffmpeg->shouldReceive('mixSfx')->once()
+            ->withArgs(fn ($in, $cues, $out) => array_column($cues, 'sound') === ['pop'] && touch($out));
+        $this->app->instance(FFmpegService::class, $ffmpeg);
+
+        $this->app->call([new DescribeClipJob($clip->id), 'handle']);
+        $this->app->call([new RenderClipJob($clip->id), 'handle']);
+
+        $clip->refresh();
+        $this->assertSame('done', $clip->status);
+        $this->assertSame('1f602', $clip->edit_plan['emoji'][0]['code']);
+        exec('rm -rf '.escapeshellarg($dir));
     }
 }
