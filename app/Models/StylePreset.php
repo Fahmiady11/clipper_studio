@@ -133,7 +133,7 @@ class StylePreset extends Model
             $s['hook']['enabled'] ? null : 'Tanpa hook',
             $s['edit']['title'] ? 'Judul di atas' : null,
             $s['music']['enabled'] ? trim('Musik '.($moods[$s['music']['mood']] ?? '')) : null,
-            $s['edit']['sfx'] ? 'Efek suara' : null,
+            $s['edit']['sfx'] ? ($s['edit']['sfx_style'] === 'energetic' ? 'Efek suara energik' : 'Efek suara') : null,
             $s['edit']['broll'] ? "B\u{2011}roll" : null, // non-breaking hyphen: never split across lines
             $s['edit']['zoom'] ? 'Zoom' : null,
         ]));

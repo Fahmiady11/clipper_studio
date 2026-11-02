@@ -29,6 +29,7 @@ class ClipProject extends Model
         'top_title',
         'broll',
         'sfx',
+        'sfx_style',
         'watermark',
         'clip_count',
         'duration_mode',

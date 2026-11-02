@@ -862,6 +862,15 @@ a.btn {
     color: var(--text)
 }
 
+/* Halus / Energik under the sound effects toggle */
+.sfx-style {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px
+}
+
 .radio-cards {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

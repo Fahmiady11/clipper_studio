@@ -23,6 +23,9 @@ final class ClipSettings
 
     public const SUBTITLE_STYLES = ['karaoke', 'pop', 'word'];
 
+    /** Sound effect profiles (SfxCues::STYLES): Halus / Energik in the UI */
+    public const SFX_STYLES = ['subtle', 'energetic'];
+
     /** Bundled in resources/fonts; see VideoLayoutService::resolveFontByFamily. */
     public const FONT_FAMILIES = ['Arial', 'Roboto', 'Montserrat', 'Oswald', 'Bebas Neue'];
 
@@ -32,7 +35,7 @@ final class ClipSettings
         'duration_mode' => 'auto',
         'min_duration' => 20,
         'max_duration' => 60,
-        'edit' => ['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false, 'broll' => true, 'sfx' => false],
+        'edit' => ['jump_cut' => true, 'zoom' => true, 'progress' => true, 'title' => false, 'broll' => true, 'sfx' => false, 'sfx_style' => 'subtle'],
         'subtitle' => [
             'enabled' => true, 'font_family' => 'Montserrat', 'font_size' => 56, 'text_color' => '#ffffff',
             'highlight_color' => '#facc15', 'position' => 'bottom', 'position_y' => null, 'background_style' => 'semi',
@@ -77,6 +80,7 @@ final class ClipSettings
             'edit.title' => ['sometimes', 'boolean'],
             'edit.broll' => ['sometimes', 'boolean'],
             'edit.sfx' => ['sometimes', 'boolean'],
+            'edit.sfx_style' => ['sometimes', 'in:'.implode(',', self::SFX_STYLES)],
 
             'subtitle' => ['sometimes', 'array'],
             'subtitle.enabled' => ['sometimes', 'boolean'],

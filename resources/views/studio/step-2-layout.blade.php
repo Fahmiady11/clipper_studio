@@ -83,7 +83,14 @@
         <span class="tgl-track"></span>
         <span class="tgl-text">Efek suara otomatis</span>
       </button>
-      <div class="fhint" style="margin-top:8px">Whoosh di potongan dan zoom, pop saat emoji muncul, ding di angka dan kata penting. Dicampur pelan di bawah suara pembicara.</div>
+      <div class="fhint" style="margin-top:8px">Whoosh saat B-roll masuk, pop saat emoji muncul, bunyi pendek di punchline. Potongan dan zoom tetap tanpa suara.</div>
+      <div class="sfx-style" x-show="sfx" x-cloak>
+        <div class="seg" role="group" aria-label="Gaya efek suara">
+          <button type="button" :class="{ on: sfxStyle === 'subtle' }" :aria-pressed="sfxStyle === 'subtle'" @click="sfxStyle = 'subtle'">Halus</button>
+          <button type="button" :class="{ on: sfxStyle === 'energetic' }" :aria-pressed="sfxStyle === 'energetic'" @click="sfxStyle = 'energetic'">Energik</button>
+        </div>
+        <div class="fhint" x-text="sfxStyle === 'energetic' ? 'Sampai 7 suara per clip, lebih keras, plus whoosh saat hook selesai.' : 'Paling banyak 4 suara per clip, pelan di bawah suara pembicara.'"></div>
+      </div>
     </div>
     <div class="fblock">
       <button class="tgl" :class="{ on: broll }" @click="broll = !broll" type="button">

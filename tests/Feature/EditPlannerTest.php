@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\EditPlanner;
 use App\Services\FFmpegService;
 use App\Services\GeminiService;
+use App\Support\SfxCues;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -117,7 +118,7 @@ class EditPlannerTest extends TestCase
         config(['services.pexels.key' => '', 'services.pixabay.key' => '']);
         $clip = $this->clip();
         $project = $clip->clipProject;
-        $project->update(['layout_type' => 'gaussian', 'jump_cut' => false, 'auto_zoom' => false, 'progress_bar' => false, 'sfx' => true]);
+        $project->update(['layout_type' => 'gaussian', 'jump_cut' => false, 'auto_zoom' => false, 'progress_bar' => false, 'sfx' => true, 'sfx_style' => 'energetic']);
         Transcript::create(['clip_project_id' => $project->id, 'language' => 'id', 'content' => $this->segments]);
         SubtitleSetting::create(['clip_project_id' => $project->id, 'enabled' => true, 'emoji' => true]);
         $clip->update(['manual' => true, 'topic' => 'placeholder', 'status' => 'processing']);
@@ -135,7 +136,7 @@ class EditPlannerTest extends TestCase
             ->withArgs(fn ($in, $layout, $out, $s, $e, $track, $pieces, $zoom, $overlay) => array_column($overlay['emojis'], 'start') === [26.6] && touch($out));
         $ffmpeg->shouldReceive('normalizeVoice')->andReturn(false);
         $ffmpeg->shouldReceive('mixSfx')->once()
-            ->withArgs(fn ($in, $cues, $out) => array_column($cues, 'sound') === ['pop'] && touch($out));
+            ->withArgs(fn ($in, $cues, $out) => array_column($cues, 'sound') === ['pop'] && $cues[0]['gain'] === SfxCues::GAIN['energetic']['pop'] && touch($out));
         $this->app->instance(FFmpegService::class, $ffmpeg);
 
         $this->app->call([new DescribeClipJob($clip->id), 'handle']);

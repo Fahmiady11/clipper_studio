@@ -166,6 +166,11 @@ class McpController extends Controller
                     'max_duration' => ['type' => 'integer', 'description' => 'Seconds, with duration_mode=manual'],
                     'instruction' => $str('Optional brief for the AI, max 300 chars, e.g. "ambil bagian tentang modal usaha", "yang lucu-lucu", "maks 30 detik". Steers which moments are picked.'),
                     'preset_id' => ['type' => 'integer', 'description' => 'Style preset from list_presets (layout, subtitle, hook, music, effects). Default: the owner\'s default preset, if any.'],
+                    'edit' => ['type' => 'object', 'description' => 'Editing effects; a key left out comes from the preset or the default', 'properties' => [
+                        'jump_cut' => ['type' => 'boolean'], 'zoom' => ['type' => 'boolean'], 'progress' => ['type' => 'boolean'],
+                        'title' => ['type' => 'boolean'], 'broll' => ['type' => 'boolean'], 'sfx' => ['type' => 'boolean', 'description' => 'Sound effects (default off)'],
+                        'sfx_style' => ['type' => 'string', 'enum' => ['subtle', 'energetic'], 'description' => 'With sfx on: subtle (default, at most 4 soft sounds per clip) or energetic (up to 7, louder, a whoosh as the hook leaves)'],
+                    ]],
                 ]],
                 'route' => fn ($a) => ['POST', '/api/v1/projects', $a],
             ],

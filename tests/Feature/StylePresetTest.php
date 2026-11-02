@@ -189,6 +189,7 @@ class StylePresetTest extends TestCase
         $api->postJson('/api/v1/projects', ['youtube_url' => 'https://youtu.be/abcdefghijk', 'preset_id' => $this->builtin('energik')->id, 'clip_count' => 1])->assertCreated();
         $project = ClipProject::firstOrFail();
         $this->assertSame(['reframe', 1, 'Bebas Neue'], [$project->layout_type, $project->clip_count, $project->subtitleSetting->font_family]);
+        $this->assertSame([true, 'energetic'], [$project->sfx, $project->sfx_style]);
 
         $api->postJson('/api/v1/projects', ['youtube_url' => 'https://youtu.be/abcdefghijk', 'preset_id' => 999999])->assertJsonValidationErrors('preset_id');
         $api->getJson('/api/v1/presets')->assertOk()->assertJsonCount(5, 'presets');

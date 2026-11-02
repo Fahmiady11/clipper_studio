@@ -51,9 +51,23 @@ Semua request memakai header `Authorization: Bearer clp_...`. Batas 120 request/
 
 Teks bebas, maksimal 300 karakter, mis. `"ambil bagian tentang modal usaha"`, `"yang lucu-lucu"`, `"maks 30 detik"`. AI memilih klip yang sesuai instruksi itu dulu, baru kriteria viral. Panjang yang ditulis di instruksi (`maks 30 detik`, `di bawah 1 menit`, `minimal 20 detik`, `15-45 detik`, `sekitar 30 detik`, juga `under 1 minute`, `at least 20 seconds`) dibaca server: AI diminta rentang itu (menggantikan `duration_mode`/`min_duration`/`max_duration`), lalu klip yang masih kepanjangan dipotong di akhir kalimat (atau kata) terakhir yang muat, yang kependekan diperpanjang sampai akhir kalimat berikutnya, dan klip yang tidak bisa dibuat pas dibuang (jadi jumlah klip bisa kurang dari `clip_count`). Klip yang dipotong sendiri lewat `POST /projects/{id}/clips` tidak diubah; `GET /projects/{id}/transcript` mengembalikan `length_limits` sebagai petunjuk. Kalau momen yang cocok kurang dari `clip_count`, sisanya diisi yang paling mendekati dan alasannya ditulis di `reason`. Kosong atau tidak dikirim = perilaku lama (momen paling berpotensi viral). Instruksi tersimpan di project, ikut dipakai saat `retry`, dan juga dipakai AI saat menulis judul/hook klip yang dipotong sendiri.
 
+### Efek suara (`edit.sfx`, `edit.sfx_style`)
+
+`edit.sfx: true` menyalakan efek suara (default mati). Suara hanya menandai yang terlihat: whoosh saat B-roll masuk, pop saat emoji muncul, bunyi pendek di punchline; potongan dan zoom tanpa suara. `edit.sfx_style` memilih gayanya:
+
+- `subtle` (Halus, default): paling banyak 4 suara per klip, minimal 4 detik antar suara, pelan di bawah suara pembicara.
+- `energetic` (Energik): sampai 7 suara, minimal 2,5 detik antar suara, lebih keras, plus whoosh saat hook selesai.
+
+Nilai lain dijawab `422`. Lewat MCP: argumen `edit` di `create_project`.
+
+```bash
+curl -X POST $CLIPPER/api/v1/projects -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"youtube_url":"https://youtu.be/VIDEO_ID","edit":{"sfx":true,"sfx_style":"energetic"}}'
+```
+
 ### Preset tampilan (`preset_id`)
 
-Preset menyimpan layout, efek (potong jeda, zoom, progress bar, judul atas, b-roll, efek suara), subtitle, gaya hook (bukan teks hook), musik, logo, dan apakah font/warna brand kit ikut dipakai. Jumlah klip, durasi dan instruksi tidak termasuk. Ada empat preset bawaan (Podcast bersih, Energik, Minimalis, Brand kit); preset sendiri dibuat dan dikelola dari web (Studio langkah 5, Pengaturan > Preset tampilan).
+Preset menyimpan layout, efek (potong jeda, zoom, progress bar, judul atas, b-roll, efek suara dan gayanya), subtitle, gaya hook (bukan teks hook), musik, logo, dan apakah font/warna brand kit ikut dipakai. Jumlah klip, durasi dan instruksi tidak termasuk. Ada empat preset bawaan (Podcast bersih, Energik, Minimalis, Brand kit; efek suara hanya aktif di Energik, dengan gaya `energetic`); preset sendiri dibuat dan dikelola dari web (Studio langkah 5, Pengaturan > Preset tampilan).
 
 Lewat token hanya bisa dibaca. Dari sesi web: `GET/POST /api/presets` (body `name`, `settings`), `PATCH /api/presets/{id}` (`name` dan/atau `settings`), `DELETE /api/presets/{id}`, `PUT /api/presets/default` (`preset_id`, `null` = tanpa default). Preset bawaan tidak bisa diubah atau dihapus (`403`); maksimal 20 preset per akun.
 

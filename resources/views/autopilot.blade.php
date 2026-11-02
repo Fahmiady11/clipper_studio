@@ -551,7 +551,11 @@
                 <span class="tgl-track"></span>
                 <span class="tgl-text">Efek suara otomatis</span>
               </button>
-              <div class="ap-ed-note">Whoosh di potongan dan zoom, pop saat emoji muncul, ding di angka dan kata penting.</div>
+              <div class="ap-ed-note">Whoosh saat B-roll masuk, pop saat emoji muncul, bunyi pendek di punchline.</div>
+              <div class="seg" role="group" aria-label="Gaya efek suara" x-show="ed.s.edit.sfx" x-cloak style="margin-top:10px">
+                <button type="button" :class="{ on: ed.s.edit.sfx_style !== 'energetic' }" :aria-pressed="ed.s.edit.sfx_style !== 'energetic'" @click="ed.s.edit.sfx_style = 'subtle'">Halus</button>
+                <button type="button" :class="{ on: ed.s.edit.sfx_style === 'energetic' }" :aria-pressed="ed.s.edit.sfx_style === 'energetic'" @click="ed.s.edit.sfx_style = 'energetic'">Energik</button>
+              </div>
             </div>
             <div class="fblock">
               <button class="tgl" :class="{ on: ed.s.edit.broll }" @click="ed.s.edit.broll = !ed.s.edit.broll" type="button">
@@ -870,7 +874,7 @@ function autopilot() {
         s.hook.enabled ? `Hook <b>${esc(hook)}</b>` : 'Tanpa hook',
         s.subtitle.enabled ? `Subtitle <b>${esc(s.subtitle.font_family)}</b>` : 'Tanpa subtitle',
         ...(s.music.enabled ? ['Musik'] : []),
-        ...(s.edit?.sfx ? ['Efek suara'] : []),
+        ...(s.edit?.sfx ? [s.edit.sfx_style === 'energetic' ? 'Efek suara energik' : 'Efek suara'] : []),
       ];
     },
     presetName(id) { return this.presets.find(p => p.id === id)?.name || null; },
@@ -898,7 +902,7 @@ function autopilot() {
       this.ed.s.instruction ??= '';
       this.ed.s.subtitle.style ??= 'karaoke'; // saved before subtitle styles / emoji existed
       this.ed.s.subtitle.emoji ??= true;
-      this.ed.s.edit = { jump_cut: true, zoom: true, progress: true, title: false, broll: true, sfx: false, ...(this.ed.s.edit || {}) }; // saved before these existed
+      this.ed.s.edit = { jump_cut: true, zoom: true, progress: true, title: false, broll: true, sfx: false, sfx_style: 'subtle', ...(this.ed.s.edit || {}) }; // saved before these existed
       this.pvTab = 'hook';
     },
     async saveEditor() {

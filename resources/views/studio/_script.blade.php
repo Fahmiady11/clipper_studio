@@ -6,7 +6,7 @@ function studio() {
   const PERSIST_KEYS = [
     'step','maxReached','done','locked',
     'url','meta','instruction','presetId',
-    'layout','jumpCut','autoZoom','progressBar','topTitle','broll','sfx',
+    'layout','jumpCut','autoZoom','progressBar','topTitle','broll','sfx','sfxStyle',
     'clipCount','durationMode','minDuration','maxDuration',
     'subtitleEnabled','subtitleFont','subtitleSize','subtitleTextColor','subtitleHighlight','subtitlePos','subtitleY','subtitleBg','subtitleStyle','subtitleEmoji',
     'hookEnabled','hookText','hookAi','hookDuration','hookPos','hookTextColor','hookBg',
@@ -50,7 +50,7 @@ function studio() {
     presetName: '', presetBrand: false, presetMakeDefault: false, presetSaving: false, presetError: '', presetSaved: '',
     // A clip cut by hand from the transcript
     tx: { open: false, loading: false, error: null, lines: [], limits: null, startIdx: null, endIdx: null, mode: 'start', q: '', hitAt: -1, saving: false, saveError: null },
-    layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true, sfx: false,
+    layout: 'reframe', jumpCut: true, autoZoom: true, progressBar: true, topTitle: false, broll: true, sfx: false, sfxStyle: 'subtle',
     clipCount: 3, durationMode: 'auto', minDuration: 20, maxDuration: 45,
     subtitleEnabled: true, subtitleFont: BRAND.font_family || 'Montserrat', subtitleSize: 56,
     subtitleTextColor: BRAND.text_color || '#ffffff', subtitleHighlight: BRAND.highlight_color || '#facc15',
@@ -425,7 +425,7 @@ function studio() {
             youtube_url: this.url,
             instruction: this.instruction.trim() || null,
             layout_type: this.layout,
-            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx },
+            edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx, sfx_style: this.sfxStyle },
             watermark: this.hasLogo && this.watermark,
             clip_count: this.clipCount,
             duration_mode: this.durationMode,
@@ -867,7 +867,7 @@ function studio() {
       const s = p.settings;
       Object.assign(this, {
         layout: s.layout_type === 'gameplay' && !GAMEPLAY_READY ? 'reframe' : s.layout_type,
-        jumpCut: s.edit.jump_cut, autoZoom: s.edit.zoom, progressBar: s.edit.progress, topTitle: s.edit.title, broll: s.edit.broll, sfx: s.edit.sfx,
+        jumpCut: s.edit.jump_cut, autoZoom: s.edit.zoom, progressBar: s.edit.progress, topTitle: s.edit.title, broll: s.edit.broll, sfx: s.edit.sfx, sfxStyle: s.edit.sfx_style || 'subtle',
         subtitleEnabled: s.subtitle.enabled, subtitleFont: s.subtitle.font_family, subtitleSize: s.subtitle.font_size,
         subtitleTextColor: s.subtitle.text_color, subtitleHighlight: s.subtitle.highlight_color, subtitlePos: s.subtitle.position,
         subtitleY: s.subtitle.position_y, subtitleBg: s.subtitle.background_style, subtitleStyle: s.subtitle.style, subtitleEmoji: s.subtitle.emoji,
@@ -880,7 +880,7 @@ function studio() {
     lookFromState() {
       return {
         layout_type: this.layout,
-        edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx },
+        edit: { jump_cut: this.jumpCut, zoom: this.autoZoom, progress: this.progressBar, title: this.topTitle, broll: this.broll, sfx: this.sfx, sfx_style: this.sfxStyle },
         subtitle: {
           enabled: this.subtitleEnabled, font_family: this.subtitleFont, font_size: this.subtitleSize, text_color: this.subtitleTextColor,
           highlight_color: this.subtitleHighlight, position: this.subtitlePos, position_y: this.subtitleY,
@@ -894,7 +894,7 @@ function studio() {
     // Same fields in the same order, so a preset and the current state compare as strings
     lookKey(l) {
       const { edit: e, subtitle: u, hook: h, music: m } = l;
-      return JSON.stringify([l.layout_type, e.jump_cut, e.zoom, e.progress, e.title, e.broll, e.sfx,
+      return JSON.stringify([l.layout_type, e.jump_cut, e.zoom, e.progress, e.title, e.broll, e.sfx, e.sfx_style || 'subtle',
         u.enabled, u.font_family, +u.font_size, u.text_color, u.highlight_color, u.position, u.position_y ?? null, u.background_style, u.style, u.emoji,
         h.enabled, +h.duration_seconds, h.position, h.text_color, h.background_style, m.enabled, m.mood || null, +m.volume,
         this.hasLogo && !!l.watermark]);

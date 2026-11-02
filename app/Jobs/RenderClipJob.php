@@ -296,7 +296,7 @@ class RenderClipJob implements ShouldQueue
         if ($project->sfx) {
             // Sounds mark what the viewer sees: B-roll cutting in, emoji popping, a punchline landing
             $cues = SfxCues::plan(array_column($broll, 'start'), array_column($emojis, 'start'), $moments['punch'],
-                $clipDuration, $hookOverlay ? $hookDuration : null);
+                $clipDuration, $hookOverlay ? $hookDuration : null, (string) ($project->sfx_style ?? 'subtle'));
             if ($cues) {
                 $log->info('Mixing sfx', ['cues' => array_map(fn ($c) => $c['sound'].'@'.$c['at'], $cues)]);
                 $withSfx = $tempDir.'/sfx_'.$this->clipId.'.mp4';
