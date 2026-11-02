@@ -223,15 +223,17 @@ class GeminiService
         {$phrases}
 
         == BROLL: cuplikan video stok yang menutupi pembicara ±2 detik ==
-        Paling banyak {$maxBroll}. Hanya untuk frasa yang menyebut BENDA, TEMPAT, atau AKSI fisik yang bisa direkam kamera
-        dan memang membantu penonton membayangkan ceritanya.
+        Paling banyak {$maxBroll}, antar B-roll minimal 10 detik. Hanya untuk frasa yang menyebut BENDA, TEMPAT, atau AKSI fisik
+        yang bisa direkam kamera dan memang membantu penonton membayangkan ceritanya: penonton harus langsung paham
+        gambarnya adalah hal yang sedang diceritakan. Tempat yang cuma disebut sambil lalu (ruang tamu, rumah, kantor) tidak perlu.
         - Pahami maksud kalimat, bukan kata per kata: "banting tulang" = kerja keras (kiasan, bukan tulang), "kursi" di DPR = jabatan
           (bukan kursi), "cuci tangan" dari masalah = kiasan. Kiasan tidak dapat B-roll; sesuatu yang benar-benar terjadi boleh.
         - JANGAN untuk: perasaan, opini, candaan, nama orang/merek/acara/penghargaan, istilah abstrak, kiasan, atau frasa punchline.
         - query: BAHASA INGGRIS, 2–5 kata, subjek + aksi + tempat yang bisa ditemukan apa adanya di Pexels/Pixabay,
           mis. "chef chopping vegetables in kitchen", "couple walking on beach at sunset". Tanpa kata abstrak (concept, success, emotion) dan tanpa animasi/3D.
         - alt: query cadangan lebih umum, 1–3 kata ("cooking", "beach couple").
-        - must: 1–2 kata Inggris untuk SUBJEK utama yang wajib terlihat ("chef", "beach"); bukan kata umum (person, people, man, woman).
+        - must: SATU kata Inggris yang pasti ada di tag video yang cocok: subjek utamanya ("chef", "trophy"), bukan tempat
+          atau kata umum (person, people, man, woman, gym, home).
         - word: kata dalam frasa itu, saat B-roll muncul.
 
         == EMOJI: muncul 1 detik di atas subtitle ==
@@ -243,7 +245,7 @@ class GeminiService
         0–2 nomor frasa yang jadi puncak: bagian paling lucu, kejutan, atau jawaban yang ditunggu. Di sana pembicara harus terlihat.
 
         Kembalikan JSON:
-        {"broll": [{"phrase": 4, "word": "masak", "query": "chef chopping vegetables in kitchen", "alt": "cooking", "must": ["chef", "kitchen"]}],
+        {"broll": [{"phrase": 4, "word": "masak", "query": "chef chopping vegetables in kitchen", "alt": "cooking", "must": ["chef"]}],
          "emoji": [{"phrase": 9, "word": "ngakak", "emoji": "😂"}],
          "punchlines": [9]}
         PROMPT;
@@ -254,14 +256,46 @@ class GeminiService
     }
 
     /**
+     * Which of the candidate stock frames shows what the speaker talks about, by
+     * looking at them: tags alone pick a tap washing hands for "holding hands".
+     *
+     * @param  list<array{mime: string, data: string}>  $images  thumbnails, base64, in candidate order
+     * @return int|null index into $images, null when none fits
+     *
+     * @throws RuntimeException when no AI answers
+     */
+    public function pickFootage(string $query, string $phrase, array $images): ?int
+    {
+        $count = count($images);
+        $last = $count - 1;
+
+        $prompt = <<<PROMPT
+        Kamu editor video pendek. Pembicara sedang bilang: "{$phrase}"
+        Di momen itu kita mau menyisipkan B-roll yang menggambarkan: "{$query}".
+        Berikut {$count} gambar kandidat dari video stok, bernomor 0 sampai {$last} sesuai urutan.
+        Pilih SATU yang subjek atau aksi utamanya jelas hal itu dan cocok dengan maksud kalimatnya, dan terlihat seperti rekaman
+        asli (bukan animasi, render 3D, green screen, atau teks). Detail boleh sedikit beda (petinju berlatih sendiri untuk
+        "latihan tinju berdua" masih cocok), tapi orang yang melakukan kegiatan lain di tempat yang mirip itu salah.
+        Kalau tidak ada yang cocok, jawab null: tanpa B-roll lebih baik daripada B-roll yang salah.
+
+        Kembalikan JSON: {"pick": 0} atau {"pick": null}
+        PROMPT;
+
+        $pick = $this->generate($prompt, 'pickFootage', 0.1, 60, fn ($d) => is_array($d) && array_key_exists('pick', $d) ? ['pick' => $d['pick']] : null, $images)['pick'];
+
+        return is_numeric($pick) && (int) $pick >= 0 && (int) $pick < $count ? (int) $pick : null;
+    }
+
+    /**
      * Ask each provider in turn until one returns JSON that $accept turns into a value.
      *
      * @template T
      *
      * @param  callable(mixed): (T|null)  $accept  null = unusable answer, try the next model
+     * @param  list<array{mime: string, data: string}>  $images  sent after the prompt (base64)
      * @return T
      */
-    private function generate(string $prompt, string $tag, float $temperature, int $timeout, callable $accept): mixed
+    private function generate(string $prompt, string $tag, float $temperature, int $timeout, callable $accept, array $images = []): mixed
     {
         $log = Log::channel('clipper_jobs');
         $failures = [];
@@ -275,7 +309,7 @@ class GeminiService
                 }
                 try {
                     $log->info("[LLM:{$tag}] {$name}", ['try' => $try + 1]);
-                    $response = $target['call']($prompt, $temperature, $timeout);
+                    $response = $target['call']($prompt, $temperature, $timeout, $images);
                 } catch (\Throwable $e) {
                     $failures[$name] = 'koneksi gagal';
                     $log->warning("[LLM:{$tag}] {$name} exception", ['error' => $e->getMessage()]);
@@ -339,11 +373,14 @@ class GeminiService
             $gw = $this->gateway;
             $targets[] = [
                 'name' => 'gateway:'.$model,
-                'call' => fn (string $prompt, float $t, int $timeout): Response => Http::timeout(max($timeout, 120))
+                'call' => fn (string $prompt, float $t, int $timeout, array $images = []): Response => Http::timeout(max($timeout, 120))
                     ->withToken($gw['key'])
                     ->post($gw['url'].'/chat/completions', [
                         'model' => $model,
-                        'messages' => [['role' => 'user', 'content' => $prompt]],
+                        'messages' => [['role' => 'user', 'content' => $images ? [
+                            ['type' => 'text', 'text' => $prompt],
+                            ...array_map(fn ($i) => ['type' => 'image_url', 'image_url' => ['url' => "data:{$i['mime']};base64,{$i['data']}"]], $images),
+                        ] : $prompt]],
                         'temperature' => $t,
                     ]),
                 'text' => fn (Response $r) => $r->json('choices.0.message.content'),
@@ -355,10 +392,11 @@ class GeminiService
             $targets[] = [
                 'name' => $model,
                 // Key in a header, not the URL: URLs end up in exception messages and logs
-                'call' => fn (string $prompt, float $t, int $timeout): Response => Http::timeout($timeout)
+                'call' => fn (string $prompt, float $t, int $timeout, array $images = []): Response => Http::timeout($timeout)
                     ->withHeaders(['x-goog-api-key' => $this->apiKey])
                     ->post(self::BASE."{$model}:generateContent", [
-                        'contents' => [['parts' => [['text' => $prompt]]]],
+                        'contents' => [['parts' => [['text' => $prompt],
+                            ...array_map(fn ($i) => ['inline_data' => ['mime_type' => $i['mime'], 'data' => $i['data']]], $images)]]],
                         'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => $t],
                     ]),
                 'text' => fn (Response $r) => $r->json('candidates.0.content.parts.0.text'),

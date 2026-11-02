@@ -53,7 +53,8 @@ class EditPlanTest extends TestCase
         ], $this->phrases(), 95.0, 130.0);
 
         $this->assertSame('95.00-130.00', $plan['key']);
-        $this->assertSame([['time' => 101.6, 'end' => 102.55, 'query' => 'boxing gym training', 'alt' => 'boxing', 'must' => ['boxing']]], $plan['broll']);
+        $this->assertSame([['time' => 101.6, 'end' => 102.55, 'query' => 'boxing gym training', 'alt' => 'boxing', 'must' => ['boxing'],
+            'phrase' => 'Pertama kali gue ke gym boxing.']], $plan['broll']);
         $this->assertSame([['code' => '1f602', 'time' => 121.6]], $plan['emoji']);
         $this->assertSame([['start' => 120.0, 'end' => 122.75]], $plan['punch']);
     }
@@ -69,7 +70,7 @@ class EditPlanTest extends TestCase
     {
         $plan = [
             'broll' => [
-                ['time' => 101.6, 'end' => 102.55, 'query' => 'boxing gym', 'alt' => '', 'must' => ['boxing']],
+                ['time' => 101.6, 'end' => 102.55, 'query' => 'boxing gym', 'alt' => '', 'must' => ['boxing'], 'phrase' => 'ke gym boxing.'],
                 ['time' => 120.5, 'end' => 122.0, 'query' => 'man falling', 'alt' => ''], // over the punchline
             ],
             'emoji' => [
@@ -84,7 +85,7 @@ class EditPlanTest extends TestCase
 
         $moments = EditPlan::onTimeline($plan, $pieces, 95.0, 36.0, 4.0);
 
-        $this->assertSame([['time' => 6.6, 'duration' => BrollCues::MIN_DURATION, 'query' => 'boxing gym', 'alt' => '', 'must' => ['boxing']]], $moments['broll']);
+        $this->assertSame([['time' => 6.6, 'duration' => BrollCues::MIN_DURATION, 'query' => 'boxing gym', 'alt' => '', 'must' => ['boxing'], 'phrase' => 'ke gym boxing.']], $moments['broll']);
         $this->assertSame([['code' => '1f602', 'start' => 23.0]], $moments['emoji']);
         $this->assertSame([23.75], $moments['punch']);
     }

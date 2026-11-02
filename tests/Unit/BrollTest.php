@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\FFmpegService;
+use App\Services\GeminiService;
 use App\Services\StockFootage;
 use App\Support\BrollCues;
 use Illuminate\Support\Facades\Http;
@@ -102,8 +103,8 @@ class BrollTest extends TestCase
         // "hands" alone is not enough for a 4-word query: the couple wins over the tap
         $this->assertSame('px2', $stock->clip('couple holding hands street')['id']);
         $this->assertNull($stock->clip('couple holding hands street', ['px2']));
-        // the fallback query is tried when the first finds nothing related
-        $pick = $stock->clip('boxer punching heavy bag', [], 'coffee');
+        // results of the fallback query count too
+        $pick = $stock->clip('boxer punching heavy bag', [], 'woman drinking coffee');
         $this->assertSame('px3', $pick['id']);
         $this->assertSame(0.0, $pick['offset']); // too short to skip into
     }
@@ -125,6 +126,60 @@ class BrollTest extends TestCase
 
         $this->assertSame('pb3', $stock->clip('two people boxing pad work', [], '', ['boxing'])['id']);
         $this->assertNull($stock->clip('two people boxing pad work', ['pb3'], '', ['boxing']));
+    }
+
+    public function test_with_a_judge_the_ai_picks_from_the_thumbnails_or_refuses_them_all(): void
+    {
+        config(['services.pexels.key' => '', 'services.pixabay.key' => 'pb']);
+        $hit = fn ($id, $tags) => ['id' => $id, 'type' => 'film', 'tags' => $tags, 'duration' => 9,
+            'videos' => ['medium' => ['url' => "https://cdn.pixabay.test/{$id}.mp4", 'width' => 1080, 'height' => 1920, 'thumbnail' => "https://cdn.pixabay.test/{$id}.jpg"]]];
+        Http::fake([
+            'pixabay.com/api/*' => Http::response(['hits' => [
+                $hit(1, 'hands, water, tap'),
+                $hit(2, 'couple, hands, love'),
+                $hit(3, 'hands, ring') + ['isAiGenerated' => true],
+            ]]),
+            'cdn.pixabay.test/*.jpg' => Http::response('JPEG', 200, ['Content-Type' => 'image/jpeg']),
+            'cdn.pixabay.test/*' => Http::response('MP4'),
+        ]);
+        $stock = new StockFootage;
+        $seen = [];
+        $judge = function (array $images) use (&$seen) {
+            $seen[] = $images;
+
+            return 1;
+        };
+
+        // ranked pb2, pb1 by tags; the AI's pick (the second frame) wins
+        $this->assertSame('pb1', $stock->clip('couple holding hands', [], '', [], $judge)['id']);
+        $this->assertCount(2, $seen[0]); // the AI-made clip is not even shown
+        $this->assertSame(['mime' => 'image/jpeg', 'data' => base64_encode('JPEG')], $seen[0][0]);
+
+        $this->assertSame('pb1', $stock->clip('couple holding hands', [], '', [], $judge)['id']);
+        $this->assertCount(1, $seen); // remembered
+
+        $this->assertNull($stock->clip('hands', [], '', [], fn () => null));
+        $this->assertSame('pb2', $stock->clip('couple hand', ['pb1'], '', [], fn () => throw new \RuntimeException('down'))['id']); // 2 words matched
+        $this->assertNull($stock->clip('hands', ['pb2'], '', [], fn () => throw new \RuntimeException('down')));          // 1 word: not enough without the AI
+    }
+
+    public function test_the_ai_judge_sees_the_frames_and_its_answer_is_checked(): void
+    {
+        $answers = [['pick' => 1], ['pick' => null], ['pick' => 7]];
+        Http::fake(['*model-a:*' => function () use (&$answers) {
+            return Http::response(['candidates' => [['content' => ['parts' => [['text' => json_encode(array_shift($answers))]]]]]]);
+        }]);
+        $ai = app(GeminiService::class);
+        $frames = [['mime' => 'image/jpeg', 'data' => 'AAA'], ['mime' => 'image/png', 'data' => 'BBB']];
+
+        $this->assertSame(1, $ai->pickFootage('couple holding hands', 'dia gak berani pegangan tangan', $frames));
+        $this->assertNull($ai->pickFootage('couple holding hands', 'x', $frames));
+        $this->assertNull($ai->pickFootage('couple holding hands', 'x', $frames)); // out of range
+        Http::assertSent(function ($r) {
+            $parts = $r['contents'][0]['parts'];
+
+            return str_contains($parts[0]['text'], 'pegangan tangan') && $parts[2] === ['inline_data' => ['mime_type' => 'image/png', 'data' => 'BBB']];
+        });
     }
 
     public function test_query_terms_drop_filler_and_share_a_stem(): void
@@ -160,8 +215,8 @@ class BrollTest extends TestCase
         ];
 
         $this->assertSame([
-            ['time' => 12.0, 'duration' => BrollCues::MIN_DURATION, 'query' => 'counting money', 'alt' => '', 'must' => []],
-            ['time' => 30.0, 'duration' => BrollCues::MAX_DURATION, 'query' => 'boxing gym', 'alt' => 'gym', 'must' => ['boxing']],
+            ['time' => 12.0, 'duration' => BrollCues::MIN_DURATION, 'query' => 'counting money', 'alt' => '', 'must' => [], 'phrase' => ''],
+            ['time' => 30.0, 'duration' => BrollCues::MAX_DURATION, 'query' => 'boxing gym', 'alt' => 'gym', 'must' => ['boxing'], 'phrase' => ''],
         ], BrollCues::filter($cues, 60.0, 4.0, [[45.0, 47.0]]));
         $this->assertSame(3, BrollCues::max(60.0));
         $this->assertSame(1, BrollCues::max(30.0));
@@ -203,7 +258,7 @@ class BrollTest extends TestCase
         ];
 
         $this->assertSame(
-            [['time' => 10.0, 'duration' => 1.8, 'query' => 'counting money', 'alt' => '', 'must' => []], ['time' => 26.0, 'duration' => 1.8, 'query' => 'city traffic', 'alt' => '', 'must' => []]],
+            [['time' => 10.0, 'duration' => 1.8, 'query' => 'counting money', 'alt' => '', 'must' => [], 'phrase' => ''], ['time' => 26.0, 'duration' => 1.8, 'query' => 'city traffic', 'alt' => '', 'must' => [], 'phrase' => '']],
             BrollCues::fromAnalysis($broll, $pieces, 100.0, 56.0, 4.0)
         );
     }

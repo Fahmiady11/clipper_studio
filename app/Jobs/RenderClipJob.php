@@ -8,6 +8,7 @@ use App\Services\EditPlanner;
 use App\Services\FaceTracker;
 use App\Services\FFmpegService;
 use App\Services\GameplayFootage;
+use App\Services\GeminiService;
 use App\Services\HookRenderer;
 use App\Services\JobWatchdog;
 use App\Services\MusicService;
@@ -242,7 +243,13 @@ class RenderClipJob implements ShouldQueue
                 ?? (is_array($clip->broll_json) ? BrollCues::fromAnalysis($clip->broll_json, $pieces, $clipStart, $clipDuration, $hookDuration + 1.0) : []);
             $used = [];
             foreach ($cues as $cue) {
-                $footage = $stock->clip($cue['query'], $used, $cue['alt'], $cue['must']);
+                // An AI looks at the candidate frames and may refuse them all
+                $judge = function (array $images) use ($cue, &$aiCostUsd) {
+                    $aiCostUsd += config('billing.gemini_usd_per_call');
+
+                    return app(GeminiService::class)->pickFootage($cue['query'], $cue['phrase'] ?: $cue['query'], $images);
+                };
+                $footage = $stock->clip($cue['query'], $used, $cue['alt'], $cue['must'], $judge);
                 if ($footage) {
                     $used[] = $footage['id'];
                     $broll[] = ['path' => $footage['path'], 'start' => $cue['time'], 'duration' => $cue['duration'], 'offset' => $footage['offset']];
@@ -254,7 +261,7 @@ class RenderClipJob implements ShouldQueue
         $logo = $project->watermark ? BrandKit::where('user_id', $project->user_id)->value('logo_path') : null;
         $logoPath = $logo && Storage::disk('local')->exists($logo) ? Storage::disk('local')->path($logo) : null;
 
-        $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => count($emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
+        $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => array_map(fn ($e) => round($e['start'], 1), $emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
         $ffmpeg->applyLayout($srcVideo, $layoutType, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
             'title' => $titlePath, 'progress' => $progress, 'broll' => $broll, 'logo' => $logoPath, 'gameplay' => $gameplay,
@@ -291,7 +298,7 @@ class RenderClipJob implements ShouldQueue
             $cues = SfxCues::plan(array_column($broll, 'start'), array_column($emojis, 'start'), $moments['punch'],
                 $clipDuration, $hookOverlay ? $hookDuration : null);
             if ($cues) {
-                $log->info('Mixing sfx', ['cues' => count($cues)]);
+                $log->info('Mixing sfx', ['cues' => array_map(fn ($c) => $c['sound'].'@'.$c['at'], $cues)]);
                 $withSfx = $tempDir.'/sfx_'.$this->clipId.'.mp4';
                 $ffmpeg->mixSfx($current, $cues, $withSfx);
                 $current = $withSfx;

@@ -18,48 +18,57 @@ class StockFootage
 
     private const PIXABAY = 'https://pixabay.com/api/videos/';
 
+    private const JUDGED = 4; // candidates the AI looks at
+
     public function configured(): bool
     {
         return $this->provider() !== null;
     }
 
     /**
-     * A local MP4 for $query (then $alt, then the $must words alone), or null when
-     * nothing fits or the provider is unreachable. Results are ranked by the query
-     * words their tags (Pixabay) or page slug (Pexels) share; a result missing
-     * every $must word (the subject: "boxing", "trophy") is never used, since no
-     * B-roll beats unrelated B-roll. Green-screen shots are skipped too.
+     * A local MP4 showing $query, or null when nothing fits or the provider is
+     * unreachable. Results for $query, $alt and the $must words are pooled and
+     * ranked by the words their tags (Pixabay) or page slug (Pexels) share with
+     * the query; one missing every $must word (the subject) or shot on green
+     * screen is never used. With $judge, an AI looks at the best few frames and
+     * picks one or none, since no B-roll beats unrelated B-roll.
      * $skip: ids already used in this clip (no repeats).
      *
      * @param  list<string>  $must
+     * @param  (callable(list<array{mime: string, data: string}>): ?int)|null  $judge
      * @return array{id: string, path: string, offset: float}|null
      */
-    public function clip(string $query, array $skip = [], string $alt = '', array $must = []): ?array
+    public function clip(string $query, array $skip = [], string $alt = '', array $must = [], ?callable $judge = null): ?array
     {
         $provider = $this->provider();
         if (! $provider || trim($query) === '') {
             return null;
         }
-        $must = self::terms(implode(' ', $must));
 
         try {
-            foreach (array_unique(array_filter([trim($query), trim($alt), implode(' ', $must)])) as $q) {
-                $video = $this->best($this->search($provider, $q), $q, $must, $skip);
-                if (! $video) {
-                    continue;
+            $pool = [];
+            foreach (array_unique(array_filter([trim($query), trim($alt), trim(implode(' ', $must))])) as $q) {
+                foreach ($this->search($provider, $q) as $v) {
+                    $pool[$v['id']] ??= $v;
                 }
-                $path = $this->dir().'/'.$video['id'].'.mp4';
-                if (is_file($path)) {
-                    touch($path); // in use: cleanup keeps it
-                } else {
-                    $tmp = $path.'.part';
-                    Http::timeout(120)->sink($tmp)->get($video['url'])->throw();
-                    rename($tmp, $path);
-                }
-
-                // Stock clips often open on a fade or a still frame: start a second in when there is room
-                return ['id' => $video['id'], 'path' => $path, 'offset' => ($video['duration'] ?? 0) >= 6 ? 1.0 : 0.0];
             }
+            $ranked = $this->rank(array_values($pool), $query.' '.$alt, self::terms(implode(' ', $must)), $skip, $judge === null);
+            $video = $judge ? $this->judged(array_slice($ranked, 0, self::JUDGED), $query, $judge) : ($ranked[0] ?? null);
+            if (! $video) {
+                return null;
+            }
+
+            $path = $this->dir().'/'.$video['id'].'.mp4';
+            if (is_file($path)) {
+                touch($path); // in use: cleanup keeps it
+            } else {
+                $tmp = $path.'.part';
+                Http::timeout(120)->sink($tmp)->get($video['url'])->throw();
+                rename($tmp, $path);
+            }
+
+            // Stock clips often open on a fade or a still frame: start a second in when there is room
+            return ['id' => $video['id'], 'path' => $path, 'offset' => ($video['duration'] ?? 0) >= 6 ? 1.0 : 0.0];
         } catch (Throwable $e) {
             Log::channel('clipper_jobs')->warning('Stock footage unavailable', ['provider' => $provider, 'query' => $query, 'error' => $e->getMessage()]);
         }
@@ -93,18 +102,21 @@ class StockFootage
     }
 
     /**
-     * The most relevant result not in $skip; ties keep the provider's order.
-     * Without $must words a query of 3+ words needs two of them matched: one
-     * shared word ("hands") is how a tap washing hands turns up for "couple holding hands".
+     * Usable results, most relevant first (ties keep the provider's order), each
+     * with its score. $strict (no AI to look) asks more: without $must words a
+     * query of 3+ words needs two of them matched, since one shared word
+     * ("hands") is how a tap washing hands turns up for "couple holding hands".
+     *
+     * @return list<array>
      */
-    private function best(array $results, string $query, array $must, array $skip): ?array
+    private function rank(array $results, string $query, array $must, array $skip, bool $strict): array
     {
         $want = self::terms($query);
-        $best = null;
-        $bestScore = ! $must && count($want) >= 3 ? 1 : 0;
+        $min = $strict && ! $must && count($want) >= 3 ? 2 : 1;
+        $out = [];
         foreach ($results as $video) {
             $tags = (string) ($video['tags'] ?? '');
-            if (in_array($video['id'], $skip, true) || preg_match('/green ?(screen|box)|chroma/i', $tags)) {
+            if (in_array($video['id'], $skip, true) || ! empty($video['poor']) || preg_match('/green ?(screen|box)|chroma/i', $tags)) {
                 continue;
             }
             $have = self::terms($tags);
@@ -112,12 +124,50 @@ class StockFootage
                 continue;
             }
             $score = count(array_intersect($want, $have)) + count(array_intersect($must, $have));
-            if ($score > $bestScore) {
-                [$best, $bestScore] = [$video, $score];
+            if ($score >= $min) {
+                $out[] = ['score' => $score] + $video;
             }
         }
+        usort($out, fn ($a, $b) => $b['score'] <=> $a['score']);
 
-        return $best;
+        return $out;
+    }
+
+    /**
+     * The candidate the AI picks from their thumbnails, remembered per query and
+     * candidate set so a re-render asks nothing. If the AI cannot answer, only a
+     * strong tag match (2+ words) is used.
+     */
+    private function judged(array $candidates, string $query, callable $judge): ?array
+    {
+        $candidates = array_values(array_filter($candidates, fn ($v) => ($v['thumb'] ?? '') !== ''));
+        if (! $candidates) {
+            return null;
+        }
+        $cache = $this->dir().'/j_'.md5(mb_strtolower(trim($query)).'|'.implode(',', array_column($candidates, 'id'))).'.json';
+        if (is_file($cache)) {
+            $id = json_decode(file_get_contents($cache), true)['id'] ?? null;
+
+            return collect($candidates)->firstWhere('id', $id);
+        }
+
+        try {
+            $images = array_map(function ($v) {
+                $res = Http::timeout(20)->get($v['thumb'])->throw();
+
+                return ['mime' => explode(';', $res->header('Content-Type') ?: 'image/jpeg')[0], 'data' => base64_encode($res->body())];
+            }, $candidates);
+            $pick = $judge($images);
+        } catch (Throwable $e) {
+            Log::channel('clipper_jobs')->warning('B-roll judge unavailable', ['query' => $query, 'error' => $e->getMessage()]);
+
+            return $candidates[0]['score'] >= 2 ? $candidates[0] : null;
+        }
+
+        $video = $pick === null ? null : ($candidates[$pick] ?? null);
+        file_put_contents($cache, json_encode(['id' => $video['id'] ?? null]));
+
+        return $video;
     }
 
     private function provider(): ?string
@@ -129,10 +179,10 @@ class StockFootage
         };
     }
 
-    /** @return list<array{id: string, url: string, tags: string, duration: float}> in the provider's order */
+    /** @return list<array{id: string, url: string, tags: string, duration: float, thumb: string, poor?: bool}> in the provider's order */
     private function search(string $provider, string $query): array
     {
-        $cache = $this->dir().'/q2_'.$provider.'_'.md5(mb_strtolower(trim($query))).'.json';
+        $cache = $this->dir().'/q3_'.$provider.'_'.md5(mb_strtolower(trim($query))).'.json';
         if (is_file($cache)) {
             touch($cache);
 
@@ -167,7 +217,8 @@ class StockFootage
             if ($best) {
                 // Pexels has no tags; its page slug names the shot ("man-boxing-in-a-gym-854982")
                 $slug = basename(parse_url((string) ($v['url'] ?? ''), PHP_URL_PATH) ?: '');
-                $out[] = ['id' => 'px'.$v['id'], 'url' => (string) $best['link'], 'tags' => str_replace('-', ' ', $slug), 'duration' => (float) $v['duration']];
+                $out[] = ['id' => 'px'.$v['id'], 'url' => (string) $best['link'], 'tags' => str_replace('-', ' ', $slug),
+                    'duration' => (float) $v['duration'], 'thumb' => (string) ($v['image'] ?? '')];
             }
         }
 
@@ -177,7 +228,8 @@ class StockFootage
     /**
      * Pixabay has no orientation filter and is mostly landscape: the render
      * crops the middle 9:16, so a file needs 1080 of height (portrait ones first).
-     * Real footage only: its animations (3D renders, green screen) look like stock.
+     * Real footage only: its animations (3D renders) look like stock, and AI-made or
+     * low-quality clips are marked poor.
      */
     private function searchPixabay(string $query): array
     {
@@ -198,7 +250,9 @@ class StockFootage
             if (! $fits) {
                 continue;
             }
-            $hit = ['id' => 'pb'.$v['id'], 'url' => (string) $fits[0]['url'], 'tags' => (string) ($v['tags'] ?? ''), 'duration' => (float) $v['duration']];
+            $hit = ['id' => 'pb'.$v['id'], 'url' => (string) $fits[0]['url'], 'tags' => (string) ($v['tags'] ?? ''), 'duration' => (float) $v['duration'],
+                'thumb' => (string) ($v['videos']['medium']['thumbnail'] ?? $fits[0]['thumbnail'] ?? ''),
+                'poor' => ! empty($v['isAiGenerated']) || ! empty($v['isLowQuality'])];
             if ($fits[0]['height'] > $fits[0]['width']) {
                 $portrait[] = $hit;
             } else {

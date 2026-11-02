@@ -22,10 +22,10 @@ final class SfxCues
 
     public const STYLES = ['subtle', 'energetic'];
 
-    /** Level of each sound under the voice (voice sits at -14 LUFS), 0..1, per style */
+    /** Level of each sound, 0..1, per style: subtle peaks ~14 LU under the voice (-14 LUFS), energetic ~10 */
     public const GAIN = [
-        'subtle' => [self::WHOOSH => 0.30, self::POP => 0.30, self::DING => 0.22],
-        'energetic' => [self::WHOOSH => 0.45, self::POP => 0.45, self::DING => 0.34],
+        'subtle' => [self::WHOOSH => 0.40, self::POP => 0.45, self::DING => 0.30],
+        'energetic' => [self::WHOOSH => 0.60, self::POP => 0.65, self::DING => 0.45],
     ];
 
     /** Most cues per clip, and the least time between any two */

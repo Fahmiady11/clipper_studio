@@ -47,9 +47,9 @@ final class BrollCues
     }
 
     /**
-     * @param  array<int, mixed>  $cues  [{time, duration?, query, alt?, must?}], clip-relative
+     * @param  array<int, mixed>  $cues  [{time, duration?, query, alt?, must?, phrase?}], clip-relative
      * @param  list<array{0: float, 1: float}>  $punches  punchline spans the speaker must stay visible for
-     * @return list<array{time: float, duration: float, query: string, alt: string, must: list<string>}>
+     * @return list<array{time: float, duration: float, query: string, alt: string, must: list<string>, phrase: string}>
      */
     public static function filter(array $cues, float $duration, float $notBefore, array $punches = []): array
     {
@@ -73,7 +73,7 @@ final class BrollCues
                 continue;
             }
             $out[] = ['time' => round($time, 2), 'duration' => $length, 'query' => mb_substr($query, 0, 60),
-                'alt' => mb_substr(trim((string) ($c['alt'] ?? '')), 0, 40), 'must' => array_values((array) ($c['must'] ?? []))];
+                'alt' => mb_substr(trim((string) ($c['alt'] ?? '')), 0, 40), 'must' => array_values((array) ($c['must'] ?? [])), 'phrase' => (string) ($c['phrase'] ?? '')];
             if (count($out) >= self::max($duration)) {
                 break;
             }

@@ -91,7 +91,8 @@ final class EditPlan
             if ($p && $query !== '') {
                 $plan['broll'][] = ['time' => self::anchor($p, (string) ($b['word'] ?? '')), 'end' => $p['end'] + self::BROLL_TAIL,
                     'query' => mb_substr($query, 0, 60), 'alt' => mb_substr(trim((string) ($b['alt'] ?? '')), 0, 40),
-                    'must' => array_slice(array_values(array_filter((array) ($b['must'] ?? []), fn ($w) => is_string($w) && trim($w) !== '')), 0, 3)];
+                    'must' => array_slice(array_values(array_filter((array) ($b['must'] ?? []), fn ($w) => is_string($w) && trim($w) !== '')), 0, 3),
+                    'phrase' => $p['text']];
             }
         }
         foreach (array_filter((array) ($data['emoji'] ?? []), 'is_array') as $e) {
@@ -110,7 +111,7 @@ final class EditPlan
      * applied: nothing under the hook, B-roll never over a punchline, emoji never
      * while B-roll covers the speaker.
      *
-     * @return array{broll: list<array{time: float, duration: float, query: string, alt: string, must: list<string>}>, emoji: list<array{code: string, start: float}>, punch: list<float>}
+     * @return array{broll: list<array{time: float, duration: float, query: string, alt: string, must: list<string>, phrase: string}>, emoji: list<array{code: string, start: float}>, punch: list<float>}
      */
     public static function onTimeline(array $plan, array $pieces, float $clipStart, float $duration, float $notBefore): array
     {
@@ -128,7 +129,7 @@ final class EditPlan
         foreach ((array) ($plan['broll'] ?? []) as $b) {
             if ($inClip($b['time'] ?? -1)) {
                 $at = $map($b['time']);
-                $broll[] = ['time' => $at, 'duration' => $map($b['end'] ?? $b['time']) - $at, 'query' => $b['query'] ?? '', 'alt' => $b['alt'] ?? '', 'must' => $b['must'] ?? []];
+                $broll[] = ['time' => $at, 'duration' => $map($b['end'] ?? $b['time']) - $at, 'query' => $b['query'] ?? '', 'alt' => $b['alt'] ?? '', 'must' => $b['must'] ?? [], 'phrase' => $b['phrase'] ?? ''];
             }
         }
         $broll = BrollCues::filter($broll, $duration, $notBefore, $punches);
