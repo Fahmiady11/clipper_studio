@@ -13,6 +13,7 @@ use App\Models\TiktokAccount;
 use App\Models\User;
 use App\Models\VideoSource;
 use App\Models\YoutubeAccount;
+use App\Services\ScheduledPublisher;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -170,7 +171,12 @@ class ConnectedAccountsTest extends TestCase
             ->assertJsonPath('platforms.1.accounts.0.problem', null);
     }
 
-    public function test_approve_sends_to_the_default_tiktok_account_when_tiktok_is_on(): void
+    private function tiktokSlots(array $extra = []): array
+    {
+        return $extra + ['enabled' => true, 'max_per_day' => 2, 'slot_times' => ['09:00', '15:00'], 'timezone' => 'Asia/Jakarta'];
+    }
+
+    public function test_approve_books_the_default_tiktok_account_when_tiktok_is_on(): void
     {
         $user = User::factory()->create();
         $this->tiktok($user, 'Satu');
@@ -181,14 +187,39 @@ class ConnectedAccountsTest extends TestCase
         $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertUnprocessable()
             ->assertJsonPath('message', 'Belum ada tujuan. Nyalakan TikTok atau upload otomatis di Akun terhubung.');
 
-        // TikTok has only a switch: no slots needed
-        $this->actingAs($user)->putJson('/api/autopilot/tiktok', ['enabled' => true, 'account_id' => $two->id])->assertOk()
-            ->assertJson(['platform' => 'tiktok', 'enabled' => true, 'account_id' => $two->id])
+        // Slots are saved and read back like any other platform
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', $this->tiktokSlots(['account_id' => $two->id]))->assertOk()
+            ->assertJson(['platform' => 'tiktok', 'enabled' => true, 'account_id' => $two->id, 'max_per_day' => 2, 'slot_times' => ['09:00', '15:00']])
             ->assertJsonPath('accounts.1.name', 'Dua');
+        $this->actingAs($user)->getJson('/api/autopilot/tiktok')->assertOk()->assertJson(['slot_times' => ['09:00', '15:00'], 'timezone' => 'Asia/Jakarta']);
+
+        // The next slot is booked, nothing is uploaded yet
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertOk()
+            ->assertJsonPath('tiktok.scheduled_at', '2026-11-10T08:00:00.000000Z');
+        Queue::assertNotPushed(UploadToTikTokJob::class);
+        $post = ScheduledPost::sole();
+        $this->assertSame(['tiktok', $two->id, 'scheduled'], [$post->platform, $post->account_id, $post->status]);
+        $this->assertNull($clip->fresh()->tiktok_status);
+
+        // Due: the scheduler hands it to the upload job
+        $this->travelTo(CarbonImmutable::parse('2026-11-10 15:01', 'Asia/Jakarta'));
+        $this->assertSame(1, app(ScheduledPublisher::class)->publishDue());
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $clip->id && $job->accountId === $two->id && $job->mode === 'inbox');
+        $this->assertSame([$two->id, 'queued'], [$clip->fresh()->tiktok_account_id, $clip->fresh()->tiktok_status]);
+    }
+
+    public function test_unapprove_frees_the_waiting_tiktok_slot(): void
+    {
+        $user = User::factory()->create();
+        $this->tiktok($user, 'Satu');
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', $this->tiktokSlots())->assertOk();
+        $clip = $this->reviewClip($user);
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertOk();
-        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $clip->id && $job->accountId === $two->id);
-        $this->assertSame([$two->id, 'queued'], [$clip->fresh()->tiktok_account_id, $clip->fresh()->tiktok_status]);
+        $this->assertSame(1, ScheduledPost::count());
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/unapprove")->assertOk();
+        $this->assertSame(0, ScheduledPost::count());
+        $this->assertSame('pending', $clip->fresh()->review_status);
     }
 
     public function test_disconnecting_the_default_stops_autopilot_until_another_is_picked(): void
@@ -235,7 +266,7 @@ class ConnectedAccountsTest extends TestCase
         $user = User::factory()->create();
         $one = $this->tiktok($user, 'Satu');
         $this->tiktok($user, 'Dua');
-        $this->actingAs($user)->putJson('/api/autopilot/tiktok', ['enabled' => true])->assertOk()->assertJsonPath('account_id', $one->id);
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', $this->tiktokSlots())->assertOk()->assertJsonPath('account_id', $one->id);
         $one->delete(); // e.g. through the old DELETE /api/tiktok/accounts/{id}
 
         $clip = $this->reviewClip($user);

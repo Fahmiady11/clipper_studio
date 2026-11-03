@@ -441,10 +441,10 @@
                 <button class="btn btn-ghost ap-btn btn-danger" type="button" @click="reject(c)">Reject</button>
               </div>
             </div>
-            <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': ['failed', 'skipped'].includes(c.tiktok_status), 'is-warn': c.tiktok_status === 'unknown' }">
+            <div class="ap-result" x-show="c.review_status !== 'pending'" :class="{ 'is-fail': !c.tiktok && ['failed', 'skipped'].includes(c.tiktok_status), 'is-warn': !c.tiktok && c.tiktok_status === 'unknown' }">
               <span x-text="reviewLabel(c)"></span>
-              <small x-show="['failed', 'skipped', 'processing', 'unknown'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
-              <a class="ap-link" x-show="c.tiktok_status === 'skipped'" href="/settings/accounts#tiktok">Pilih akun utama TikTok</a>
+              <small x-show="!c.tiktok && ['failed', 'skipped', 'processing', 'unknown'].includes(c.tiktok_status) && c.tiktok_error" x-text="c.tiktok_error"></small>
+              <a class="ap-link" x-show="c.tiktok?.status === 'skipped'" href="/settings/accounts#tiktok">Pilih akun utama TikTok</a>
               <template x-for="pf in AUTOPOST" :key="pf.id">
                 <div class="ap-ytline" :class="{ 'is-fail': autopostFailed(c, pf.id) }" x-show="c.review_status === 'approved' && c[pf.id]">
                   <span><span x-text="pf.name + ': '"></span><b x-text="autopostLabel(c, pf.id)"></b></span>
@@ -828,8 +828,9 @@ function autopilot() {
     reviewStatus: '', reviewCounts: { pending: 0, approved: 0, rejected: 0 },
     performance: { clip_count: 0, total_views: 0, total_likes: 0, best_clip: null, top_clips: [] },
     cleaning: false, cleanMsg: '',
-    // Card lines per calendar platform; noun goes in "Hubungkan ulang …"
+    // Card lines per calendar platform, TikTok included; noun goes in "Hubungkan ulang …"
     AUTOPOST: [
+      { id: 'tiktok', name: 'TikTok', noun: 'akun' },
       { id: 'youtube', name: 'YouTube', noun: 'channel' },
       { id: 'facebook', name: 'Facebook', noun: 'Page' },
       { id: 'instagram', name: 'Instagram', noun: 'akun' },
@@ -1021,7 +1022,6 @@ function autopilot() {
             : p.needs_default ? 'akun utama diputus, pilih akun utama' + (p.autopost.enabled ? ' (dilewati sampai dipilih)' : '')
             : !account ? 'belum terhubung'
             : !p.autopost.enabled ? 'nonaktif'
-            : p.id === 'tiktok' ? 'langsung ke inbox ' + account.name
             : account.name + ', maks ' + p.autopost.max_per_day + ' per hari pukul ' + p.autopost.slot_times.join(', ');
           if (account?.reconnect) text += ' (perlu dihubungkan ulang)';
           return { id: p.id, name: p.name, on, text };
@@ -1087,13 +1087,13 @@ function autopilot() {
       } catch (e) { c.actionError = e.message; }
       finally { c.busy = false; }
     },
-    // Nothing went out yet: TikTok untouched and every calendar post still waiting
+    // Nothing has been handed to an upload job yet; every calendar post can still wait or be freed
     canUnapprove(c) {
       return c.review_status === 'approved' && (!c.tiktok_status || c.tiktok_status === 'skipped')
         && this.AUTOPOST.every(p => !c[p.id] || ['scheduled', 'failed', 'skipped'].includes(c[p.id].status));
     },
 
-    // ── Autopost lines on the cards (YouTube, Facebook, Instagram, Threads) ─────
+    // ── Autopost lines on the cards (TikTok, YouTube, Facebook, Instagram, Threads) ─────
     anyDestination() { return this.destinations.some(d => d.on); },
     platformInfo(platform) { return this.AUTOPOST.find(p => p.id === platform); },
     autopostFailed(c, platform) {
@@ -1116,9 +1116,9 @@ function autopilot() {
         failed: 'upload gagal',
       }[y.delivery] || 'dikirim';
     },
-    // Approved clips are already in TikTok: drop their files and cards
+    // Approved clips whose calendar posts are done: drop their files and cards
     async cleanApproved() {
-      if (!confirm('Hapus semua klip yang sudah disetujui dari daftar ini? File videonya ikut dihapus dari server. Klip yang masih diupload ke TikTok tidak disentuh.')) return;
+      if (!confirm('Hapus semua klip yang sudah disetujui dari daftar ini? File videonya ikut dihapus dari server. Klip yang masih menunggu atau diupload tidak disentuh.')) return;
       this.cleaning = true;
       this.cleanMsg = '';
       try {

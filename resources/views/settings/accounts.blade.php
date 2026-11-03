@@ -225,8 +225,7 @@
                 <span class="tgl-text" x-text="ap[p.id].enabled ? 'Aktif' : 'Nonaktif'"></span><span class="tgl-track"></span>
               </button>
             </div>
-            <template x-if="p.id !== 'tiktok'">
-              <div class="ac-grid">
+            <div class="ac-grid">
                 <label>
                   <span class="ac-label">Maks per hari</span>
                   <input class="field" type="number" min="1" max="10" x-model.number="ap[p.id].max_per_day" style="min-height:44px;font-family:var(--font-mono)">
@@ -244,15 +243,13 @@
                   </div>
                   <div class="ac-tz">Zona waktu <b x-text="ap[p.id].timezone"></b>, ikut browser ini.</div>
                 </div>
-              </div>
-            </template>
+            </div>
             <p class="ac-foot" style="margin:0" x-show="INFO[p.id].note" x-text="INFO[p.id].note"></p>
             <div class="ac-err" style="margin:0" x-show="ap[p.id].error" x-text="ap[p.id].error" role="alert"></div>
-            <div class="ac-acts" x-show="p.id !== 'tiktok'">
+            <div class="ac-acts">
               <button class="btn btn-sm" type="button" style="min-height:44px" @click="saveAutopost(p, ap[p.id].enabled)" :disabled="ap[p.id].saving" x-text="ap[p.id].saving ? 'Menyimpan…' : 'Simpan jam upload'"></button>
               <span class="ac-saved" x-show="ap[p.id].savedMsg" x-text="ap[p.id].savedMsg" role="status"></span>
             </div>
-            <span class="ac-saved" x-show="p.id === 'tiktok' && ap[p.id].savedMsg" x-text="ap[p.id].savedMsg" role="status"></span>
           </div>
         </template>
       </div>
@@ -278,8 +275,8 @@ function connectedAccounts() {
     INFO: {
       tiktok: {
         empty: 'Belum ada akun TikTok. Hubungkan akun yang mau menerima clip.',
-        autoTitle: 'Kirim ke TikTok saat clip di-approve',
-        autoText: 'Clip masuk inbox TikTok akun utama, lalu kamu selesaikan posting-nya di aplikasi TikTok.',
+        autoTitle: 'Jadwalkan ke TikTok saat clip di-approve',
+        autoText: 'Clip masuk inbox TikTok akun utama di jam upload di bawah, lalu kamu selesaikan posting-nya di aplikasi TikTok.',
       },
       youtube: {
         empty: 'Belum ada channel YouTube. Hubungkan channel yang mau menerima Shorts.',
@@ -393,13 +390,11 @@ function connectedAccounts() {
     async saveAutopost(p, enabled) {
       const st = this.ap[p.id];
       st.error = ''; st.savedMsg = '';
-      if (p.id !== 'tiktok') {
-        if (!(st.max_per_day >= 1 && st.max_per_day <= 10)) { st.error = 'Maks per hari antara 1 dan 10 clip.'; return; }
-        if (st.slot_times.some(t => !t)) { st.error = 'Ada jam upload yang masih kosong.'; return; }
-      }
+      if (!(st.max_per_day >= 1 && st.max_per_day <= 10)) { st.error = 'Maks per hari antara 1 dan 10 clip.'; return; }
+      if (st.slot_times.some(t => !t)) { st.error = 'Ada jam upload yang masih kosong.'; return; }
       st.saving = true;
       try {
-        const body = p.id === 'tiktok' ? { enabled } : { enabled, max_per_day: st.max_per_day, slot_times: st.slot_times, timezone: st.timezone };
+        const body = { enabled, max_per_day: st.max_per_day, slot_times: st.slot_times, timezone: st.timezone };
         const d = await this.request('/api/autopilot/' + p.id, { method: 'PUT', body: JSON.stringify(body) });
         st.enabled = d.enabled;
         if (d.slot_times) st.slot_times = [...d.slot_times];

@@ -32,13 +32,14 @@ class Autopost
         private FacebookAutopost $facebook,
         private InstagramAutopost $instagram,
         private ThreadsAutopost $threads,
+        private TiktokAutopost $tiktok,
         private ConnectedAccounts $connected,
     ) {}
 
     /** @return array<string, AutopostPlatform> */
     public function platforms(): array
     {
-        return ['youtube' => $this->youtube, 'facebook' => $this->facebook, 'instagram' => $this->instagram, 'threads' => $this->threads];
+        return ['tiktok' => $this->tiktok, 'youtube' => $this->youtube, 'facebook' => $this->facebook, 'instagram' => $this->instagram, 'threads' => $this->threads];
     }
 
     public function platform(string $platform): AutopostPlatform
@@ -56,23 +57,33 @@ class Autopost
      * Book the clip on every platform with autopost on. The approval stands
      * whatever happens; a platform that can't take the clip keeps the reason.
      *
+     * @param  array<string, int>  $accountOverrides
      * @return array<string, array{scheduled_at: string}|array{error: string}>
      */
-    public function scheduleAll(GeneratedClip $clip): array
+    public function scheduleAll(GeneratedClip $clip, array $accountOverrides = []): array
     {
-        $enabled = PlatformSetting::where('user_id', $clip->clipProject->user_id)->where('enabled', true)
-            ->whereIn('platform', array_keys($this->platforms()))->get();
+        $settings = PlatformSetting::where('user_id', $clip->clipProject->user_id)
+            ->whereIn('platform', array_keys($this->platforms()))->get()->keyBy('platform');
+
+        // An approve-time TikTok account is a one-post choice, not a new default.
+        if ($override = $accountOverrides['tiktok'] ?? null) {
+            $settings->put('tiktok', tap(
+                $settings->get('tiktok') ?? PlatformSetting::for($clip->clipProject->user_id, 'tiktok'),
+                fn (PlatformSetting $setting) => $setting->forceFill(['enabled' => true, 'account_id' => $override])
+            ));
+        }
+        $settings = $settings->filter(fn (PlatformSetting $setting) => $setting->enabled)->values();
 
         $results = [];
-        foreach ($enabled as $settings) {
-            $platform = $this->platform($settings->platform);
+        foreach ($settings as $setting) {
+            $platform = $this->platform($setting->platform);
             try {
-                $post = $this->schedule($clip, $settings);
+                $post = $this->schedule($clip, $setting);
                 $platform->recordSkip($clip, null);
-                $results[$settings->platform] = ['scheduled_at' => $post->scheduled_at->toISOString()];
+                $results[$setting->platform] = ['scheduled_at' => $post->scheduled_at->toISOString()];
             } catch (RuntimeException $e) {
                 $platform->recordSkip($clip, $e->getMessage());
-                $results[$settings->platform] = ['error' => $e->getMessage()];
+                $results[$setting->platform] = ['error' => $e->getMessage()];
             }
         }
 

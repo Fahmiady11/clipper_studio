@@ -180,7 +180,7 @@ class YouTubeAutopostTest extends TestCase
             ->assertJsonPath('youtube.scheduled_at', '2026-11-10T08:00:00.000000Z');
     }
 
-    public function test_approve_still_sends_to_tiktok_and_needs_a_destination(): void
+    public function test_approve_books_tiktok_on_the_calendar_and_needs_a_destination(): void
     {
         $user = User::factory()->create();
         $tiktok = TiktokAccount::create([
@@ -194,14 +194,15 @@ class YouTubeAutopostTest extends TestCase
         $this->assertSame('pending', $clip->fresh()->review_status);
 
         $this->approve($user, $clip, ['account_id' => $tiktok->id])->assertOk()->assertJsonPath('youtube', null);
-        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $clip->id);
-        $this->assertSame(0, ScheduledPost::count());
+        Queue::assertNotPushed(UploadToTikTokJob::class);
+        $this->assertSame(['tiktok'], ScheduledPost::pluck('platform')->all());
 
-        // Both: TikTok right away, YouTube on the calendar
+        // Both: each on its own calendar slot
         $this->autopost($user, $this->channel($user));
         $both = $this->reviewClip($user);
         $this->approve($user, $both, ['account_id' => $tiktok->id])->assertOk()->assertJsonPath('youtube.scheduled_at', '2026-11-10T08:00:00.000000Z');
-        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $both->id);
+        $this->assertEqualsCanonicalizing(['tiktok', 'youtube'], ScheduledPost::where('generated_clip_id', $both->id)->pluck('platform')->all());
+        Queue::assertNotPushed(UploadToTikTokJob::class);
     }
 
     public function test_a_clip_youtube_cannot_take_is_approved_with_the_reason(): void

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresQueueWorker;
 use App\Jobs\DiscoverVideosJob;
-use App\Jobs\UploadToTikTokJob;
 use App\Models\ClipProject;
 use App\Models\ClipPublication;
 use App\Models\GeneratedClip;
@@ -232,9 +231,9 @@ class AutopilotController extends Controller
     }
 
     /**
-     * Approve a clip: with TikTok on (Akun terhubung) it goes to the default
-     * TikTok account right away, and it takes the next free calendar slot of
-     * every platform with autopost on. account_id picks another TikTok account.
+     * Approve a clip: it takes the next free calendar slot of every platform
+     * with autopost on, TikTok included, and ScheduledPublisher uploads it when
+     * due. account_id picks another TikTok account for this clip only.
      */
     public function approve(Request $request, string $clipId, Autopost $autopost, ConnectedAccounts $connected): JsonResponse
     {
@@ -243,12 +242,9 @@ class AutopilotController extends Controller
         $account = isset($data['account_id'])
             ? TiktokAccount::where('user_id', Auth::id())->findOrFail($data['account_id'])
             : $this->tiktokOnApprove($connected);
-        // TikTok is on but its default account was disconnected: skip TikTok, never pick another account
-        $tiktokSkip = ! $account && $this->tiktokIsOn() && $connected->needsDefault(Auth::id(), 'tiktok')
-            ? ConnectedAccounts::needsDefaultMessage('tiktok')
-            : null;
+        $overrides = $account ? ['tiktok' => $account->id] : [];
 
-        abort_if(! $account && ! $tiktokSkip && ! $autopost->isOn(Auth::id()), 422, 'Belum ada tujuan. Nyalakan TikTok atau upload otomatis di Akun terhubung.');
+        abort_if(! $account && ! $autopost->isOn(Auth::id()), 422, 'Belum ada tujuan. Nyalakan TikTok atau upload otomatis di Akun terhubung.');
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
         abort_if($clip->review_status === 'rejected', 422, 'Clip sudah ditolak dan filenya dihapus.');
         if ($account) {
@@ -256,20 +252,12 @@ class AutopilotController extends Controller
             abort_unless($account->hasScope('video.upload'), 422, TiktokAccount::scopeMessage('video.upload'));
         }
 
-        $clip->update(['review_status' => 'approved'] + match (true) {
-            (bool) $account => ['tiktok_account_id' => $account->id, 'tiktok_publish_id' => null, 'tiktok_status' => 'queued', 'tiktok_error' => null],
-            (bool) $tiktokSkip => ['tiktok_account_id' => null, 'tiktok_publish_id' => null, 'tiktok_status' => 'skipped', 'tiktok_error' => $tiktokSkip],
-            default => [],
-        });
-        if ($account) {
-            UploadToTikTokJob::dispatch($clip->id, $account->id);
-            $this->ensureQueueWorkerRunning();
-        }
+        $clip->update(['review_status' => 'approved']);
 
         // The approval stands either way; a platform that can't take the clip keeps the reason on its card
-        $booked = $autopost->scheduleAll($clip);
+        $booked = $autopost->scheduleAll($clip, $overrides);
 
-        $result = ['success' => true, 'tiktok' => $tiktokSkip ? ['error' => $tiktokSkip] : null];
+        $result = ['success' => true];
         foreach (array_keys($autopost->platforms()) as $platform) {
             $result[$platform] = $booked[$platform] ?? null; // {scheduled_at} or {error}; null when off
         }
@@ -302,22 +290,17 @@ class AutopilotController extends Controller
         return response()->json($this->presentAutopost(PlatformSetting::for(Auth::id(), $platform), $autopost, $connected));
     }
 
-    /**
-     * TikTok has only the switch (send to the inbox on approve); the other
-     * platforms also have slots. account_id, when given, becomes the default.
-     */
+    /** A platform's switch and slots. account_id, when given, becomes the default. */
     public function updateAutopostSettings(Request $request, string $platform, Autopost $autopost, ConnectedAccounts $connected): JsonResponse
     {
-        $slots = $platform !== 'tiktok';
         $data = $request->validate([
             'enabled' => ['required', 'boolean'],
             'account_id' => ['nullable', 'integer'],
-        ] + ($slots ? [
             'max_per_day' => ['required', 'integer', 'min:1', 'max:10'],
             'slot_times' => ['required', 'array', 'min:1', 'max:10'],
             'slot_times.*' => ['required', 'string', 'distinct', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
             'timezone' => ['required', 'timezone:all'],
-        ] : []), [
+        ], [
             'slot_times.*.regex' => 'Jam upload harus format JJ:MM, misalnya 09:00.',
             'slot_times.*.distinct' => 'Ada jam upload yang sama.',
         ]);
@@ -329,11 +312,12 @@ class AutopilotController extends Controller
         }
 
         $settings = PlatformSetting::for(Auth::id(), $platform);
-        $settings->fill(['enabled' => $data['enabled']] + ($slots ? [
+        $settings->fill([
+            'enabled' => $data['enabled'],
             'max_per_day' => $data['max_per_day'],
             'slot_times' => collect($data['slot_times'])->sort()->values()->all(),
             'timezone' => $data['timezone'],
-        ] : []))->save();
+        ])->save();
 
         return response()->json($this->presentAutopost($settings, $autopost, $connected));
     }

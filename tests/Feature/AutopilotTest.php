@@ -9,6 +9,7 @@ use App\Jobs\UploadToTikTokJob;
 use App\Models\ClipProject;
 use App\Models\DiscoveredVideo;
 use App\Models\GeneratedClip;
+use App\Models\ScheduledPost;
 use App\Models\TiktokAccount;
 use App\Models\User;
 use App\Models\VideoSource;
@@ -202,7 +203,10 @@ class AutopilotTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$a->id}/approve", ['account_id' => $account->id])->assertOk();
         $this->assertSame('approved', $a->fresh()->review_status);
-        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $a->id && $job->mode === 'inbox');
+        // Booked on the calendar for that account, not uploaded on the spot
+        Queue::assertNotPushed(UploadToTikTokJob::class);
+        $post = ScheduledPost::where('generated_clip_id', $a->id)->sole();
+        $this->assertSame(['tiktok', $account->id, 'scheduled', 'inbox'], [$post->platform, $post->account_id, $post->status, $post->options['mode']]);
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$b->id}/reject")->assertOk();
         $this->assertSame('rejected', $b->fresh()->review_status);
