@@ -18,6 +18,7 @@ use App\Services\ConnectedAccounts;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
 use App\Services\StorageCleanup;
+use App\Support\CaptionCredit;
 use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
 use Illuminate\Http\JsonResponse;
@@ -193,7 +194,7 @@ class AutopilotController extends Controller
                 return [
                     'id' => $c->id,
                     // null until generated (GET /api/clips/{id}/caption); copied by hand since TikTok drafts carry no caption
-                    'caption' => $c->caption ? $music->captionWithCredit($c->caption, $credit) : null,
+                    'caption' => $c->caption ? CaptionCredit::append($c->caption, CaptionCredit::block($credit, $c->clipProject)) : null,
                     'hashtags' => $c->hashtags_json ?? [],
                     'review_status' => $c->review_status,
                     'status' => $c->status,

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\GeneratedClip;
+use App\Support\CaptionCredit;
 
 /** Autopilot to Threads video posts. */
 class ThreadsAutopost extends MetaAutopost
@@ -28,10 +29,10 @@ class ThreadsAutopost extends MetaAutopost
     }
 
     /** Threads turns only one hashtag into a topic: the caption and the first hashtag, cut to 500. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags): array
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
     {
         return [
-            'text' => ThreadsPosts::fit(trim($caption."\n\n".($hashtags[0] ?? ''))),
+            'text' => CaptionCredit::compose($caption, $credit, $hashtags[0] ?? '', ThreadsPosts::TEXT_MAX_BYTES, bytes: true),
             'autopilot' => true,
         ];
     }

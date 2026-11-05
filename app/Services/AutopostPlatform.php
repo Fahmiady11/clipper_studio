@@ -26,8 +26,11 @@ interface AutopostPlatform
     /** Why this clip can't go to the platform, or null. */
     public function refusal(GeneratedClip $clip): ?string;
 
-    /** ScheduledPost options, as the calendar would fill them in. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags): array;
+    /**
+     * ScheduledPost options, as the calendar would fill them in. The credit
+     * (music, source channel) is kept whole when the caption is cut to the platform's limit.
+     */
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array;
 
     /** Keep (or with null, clear) why autopilot could not book the clip. */
     public function recordSkip(GeneratedClip $clip, ?string $reason): void;

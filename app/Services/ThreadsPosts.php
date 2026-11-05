@@ -66,19 +66,6 @@ class ThreadsPosts implements MetaPublisher
             : null;
     }
 
-    /** Cut to the limit at a word boundary, never inside a character. */
-    public static function fit(string $text): string
-    {
-        $text = trim($text);
-        if (strlen($text) <= self::TEXT_MAX_BYTES) {
-            return $text;
-        }
-        $cut = mb_strcut($text, 0, self::TEXT_MAX_BYTES - 3);
-        $space = mb_strrpos($cut, ' ');
-
-        return rtrim($space > 0 ? mb_substr($cut, 0, $space) : $cut).'…';
-    }
-
     public function start(MetaTarget $target, GeneratedClip $clip, string $text): array
     {
         if ($problem = self::textProblem($text)) {

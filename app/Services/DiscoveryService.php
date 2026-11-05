@@ -55,7 +55,7 @@ class DiscoveryService
                 'video_id' => $video['id'],
                 'clip_project_id' => $project->id,
             ]);
-            $project->update(['video_title' => $video['title']]);
+            $project->update(['video_title' => $video['title'], 'source_channel' => $video['channel'] ?? null]);
 
             $log->info('Autopilot: project started', ['source_id' => $source->id, 'video' => $video['id'], 'project_id' => $project->id]);
             $started[] = $project;

@@ -100,6 +100,7 @@ class AutopilotTest extends TestCase
         $this->assertSame('gaussian', $project->layout_type);
         $this->assertTrue($project->music_enabled);
         $this->assertSame('Video baru 1', $project->video_title);
+        $this->assertSame('Chan', $project->source_channel);
         $this->assertNotNull($project->subtitleSetting);
         Queue::assertPushed(AnalyzeVideoJob::class, 2);
         $this->assertNotNull($source->fresh()->last_run_at);

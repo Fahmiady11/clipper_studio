@@ -20,6 +20,7 @@ class ClipProject extends Model
         'video_source_id',
         'youtube_url',
         'video_title',
+        'source_channel',
         'duration_seconds',
         'thumbnail_url',
         'layout_type',

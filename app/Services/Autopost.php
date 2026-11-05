@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\GeneratedClip;
 use App\Models\PlatformSetting;
 use App\Models\ScheduledPost;
+use App\Support\CaptionCredit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -115,8 +116,8 @@ class Autopost
             throw new RuntimeException("Tidak dijadwalkan ke {$platform->name()}: {$reason}");
         }
 
-        [$caption, $hashtags] = $this->caption($clip); // may call the AI: outside the lock
-        $options = $platform->options($clip, $caption, $hashtags);
+        [$caption, $hashtags, $credit] = $this->caption($clip); // may call the AI: outside the lock
+        $options = $platform->options($clip, $caption, $hashtags, $credit);
 
         return DB::transaction(function () use ($settings, $account, $clip, $options) {
             // One approval at a time per user and platform, so two clips never take the same slot
@@ -183,7 +184,7 @@ class Autopost
         throw new RuntimeException('Tidak ada slot '.$this->platform($settings->platform)->name().' kosong dalam setahun ke depan.');
     }
 
-    /** @return array{0: string, 1: list<string>} AI caption with the music credit, and the hashtags */
+    /** @return array{0: string, 1: list<string>, 2: ?string} AI caption, hashtags, and the credit lines (music, source channel) */
     private function caption(GeneratedClip $clip): array
     {
         $caption = ['caption' => '', 'hashtags' => []];
@@ -192,8 +193,8 @@ class Autopost
         } catch (Throwable) {
             // Without a caption the post still goes, with the hashtags alone
         }
-        $body = $this->music->captionWithCredit($caption['caption'], $this->music->creditFor($clip->music_track));
+        $credit = CaptionCredit::block($this->music->creditFor($clip->music_track), $clip->clipProject);
 
-        return [$body, array_values(array_filter(array_map('strval', $caption['hashtags'] ?? [])))];
+        return [$caption['caption'], array_values(array_filter(array_map('strval', $caption['hashtags'] ?? []))), $credit];
     }
 }

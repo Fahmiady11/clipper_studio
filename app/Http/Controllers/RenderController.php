@@ -9,6 +9,7 @@ use App\Models\GeneratedClip;
 use App\Services\ClipCaption;
 use App\Services\MusicService;
 use App\Services\RenderQuota;
+use App\Support\CaptionCredit;
 use App\Support\HookText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -164,7 +165,7 @@ class RenderController extends Controller
         $result = $captions->ensure($clip);
 
         return response()->json([
-            'caption' => $music->captionWithCredit($result['caption'], $credit),
+            'caption' => CaptionCredit::append($result['caption'], CaptionCredit::block($credit, $clip->clipProject)),
             'hashtags' => $result['hashtags'],
             'music_credit' => $credit,
         ]);

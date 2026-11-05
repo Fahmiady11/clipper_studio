@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\GeneratedClip;
 use App\Models\PlatformSetting;
 use App\Models\TiktokAccount;
+use App\Support\CaptionCredit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -58,13 +59,13 @@ class TiktokAutopost implements AutopostPlatform
     }
 
     /** The inbox draft gets the caption when it is sent; TikTok itself stores no caption. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags): array
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
     {
         unset($clip);
 
         return [
             'mode' => 'inbox',
-            'title' => mb_substr(trim($caption."\n\n".implode(' ', $hashtags)), 0, 2200),
+            'title' => CaptionCredit::compose($caption, $credit, implode(' ', $hashtags), 2200),
             'allow_comment' => false,
             'allow_duet' => false,
             'allow_stitch' => false,

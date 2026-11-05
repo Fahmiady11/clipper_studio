@@ -18,6 +18,7 @@ use App\Services\PublicMediaUrl;
 use App\Services\ScheduledPublisher;
 use App\Services\ThreadsLogin;
 use App\Services\ThreadsPosts;
+use App\Support\CaptionCredit;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -404,11 +405,11 @@ class InstagramThreadsTest extends TestCase
 
     public function test_threads_text_is_cut_at_a_word_within_500_bytes(): void
     {
-        $text = ThreadsPosts::fit(str_repeat('kata 😀 ', 200));
+        $text = CaptionCredit::compose(str_repeat('kata 😀 ', 200), null, '', ThreadsPosts::TEXT_MAX_BYTES, bytes: true);
         $this->assertLessThanOrEqual(500, strlen($text));
         $this->assertTrue(mb_check_encoding($text, 'UTF-8'));
         $this->assertStringEndsWith('…', $text);
-        $this->assertSame('pendek', ThreadsPosts::fit('  pendek '));
+        $this->assertSame('pendek', CaptionCredit::compose('  pendek ', null, '', ThreadsPosts::TEXT_MAX_BYTES, bytes: true));
     }
 
     // ── autopilot ───────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ use App\Http\Controllers\YouTubeController;
 use App\Models\GeneratedClip;
 use App\Models\PlatformSetting;
 use App\Models\YoutubeAccount;
+use App\Support\CaptionCredit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -57,11 +58,11 @@ class YouTubeAutopost implements AutopostPlatform
     }
 
     /** Title, description and tags: topic, AI caption, hashtags. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags): array
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
     {
         return [
             'title' => mb_substr(trim(str_replace(['<', '>'], '', (string) $clip->topic)), 0, 100) ?: 'Clip',
-            'description' => mb_substr(trim($caption."\n\n".implode(' ', $hashtags)), 0, 5000),
+            'description' => CaptionCredit::compose($caption, $credit, implode(' ', $hashtags), 5000),
             'privacy' => 'public', // YouTube keeps it private until the API project passes its audit
             'tags' => array_slice(array_values(array_filter(array_map(fn ($h) => ltrim($h, '#'), $hashtags))), 0, 30),
             'autopilot' => true,

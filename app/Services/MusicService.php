@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\MusicTrack;
+use App\Support\CaptionCredit;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -164,7 +165,7 @@ class MusicService
     /** CC BY music must be credited: appended on every read so an edited credit shows up. */
     public function captionWithCredit(string $caption, ?string $credit): string
     {
-        return $credit ? rtrim($caption)."\n\n🎵 {$credit}" : $caption;
+        return CaptionCredit::append($caption, CaptionCredit::block($credit, null));
     }
 
     /**
