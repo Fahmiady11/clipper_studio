@@ -77,7 +77,7 @@ class SourceCreditTest extends TestCase
             "Sumber: Satu Dua\nhttps://youtu.be/abcdefg",
             CaptionCredit::source($this->clip($user, "  Satu \n Dua ")->clipProject), // one line, no stray whitespace
         );
-        $this->assertSame(100 + 8, mb_strlen(explode("\n", CaptionCredit::source($this->clip($user, str_repeat('x', 300))->clipProject))[0]));
+        $this->assertSame(100 + 8, mb_strlen(explode("\n", CaptionCredit::source($this->clip($user, str_repeat('x', 150))->clipProject))[0]));
     }
 
     public function test_no_credit_when_the_channel_is_unknown(): void
