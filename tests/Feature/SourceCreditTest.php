@@ -181,7 +181,7 @@ class SourceCreditTest extends TestCase
     }
 
     #[DataProvider('limits')]
-    public function test_a_short_caption_is_not_touched_by_the_limit(string $platform, string $key): void
+    public function test_a_short_caption_is_not_touched_by_the_limit(string $platform, string $key, int $limit, bool $bytes): void
     {
         $clip = $this->clip(User::factory()->create());
 
