@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use App\Support\CaptionCredit;
 
 /** Autopilot to Instagram Reels on an account linked to a connected Page. */
@@ -29,7 +30,7 @@ class InstagramAutopost extends MetaAutopost
     }
 
     /** Caption with music credit, then at most 30 hashtags, within 2200 characters. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null, ?PlatformSetting $settings = null): array
     {
         $tags = implode(' ', array_slice($hashtags, 0, InstagramReels::MAX_HASHTAGS));
 

@@ -58,6 +58,13 @@
   .ac-slot button:hover { color: var(--danger); }
   .ac-tz { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
   .ac-tz b { font-family: var(--font-mono); font-weight: 500; color: var(--text-muted); }
+  .ac-mode { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .ac-mode legend { padding: 0; }
+  .ac-opt { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 12px; align-items: start; min-height: 44px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+  .ac-opt:has(input:checked) { border-color: var(--accent-ink); }
+  .ac-opt input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent-ink); }
+  .ac-opt b { display: block; font-size: 13.5px; }
+  .ac-opt small { display: block; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 2px; }
   .ac-saved { font-size: 12.5px; color: var(--text-muted); }
   /* Facebook logins and the Page / Instagram picker */
   .ac-login { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-strong); }
@@ -218,13 +225,32 @@
             <div class="ac-auto-head">
               <div>
                 <b x-text="INFO[p.id].autoTitle"></b>
-                <span x-text="INFO[p.id].autoText"></span>
+                <span x-text="autoText(p)"></span>
               </div>
               <button class="tgl" :class="{ on: ap[p.id].enabled }" @click="saveAutopost(p, !ap[p.id].enabled)" type="button" role="switch"
                       :aria-checked="ap[p.id].enabled ? 'true' : 'false'" :aria-label="INFO[p.id].autoTitle" :disabled="ap[p.id].saving">
                 <span class="tgl-text" x-text="ap[p.id].enabled ? 'Aktif' : 'Nonaktif'"></span><span class="tgl-track"></span>
               </button>
             </div>
+            <template x-if="p.id === 'tiktok'">
+              <fieldset class="ac-mode">
+                <legend class="ac-label">Cara kirim ke TikTok</legend>
+                <label class="ac-opt">
+                  <input type="radio" name="tiktok-mode" value="inbox" x-model="ap.tiktok.mode">
+                  <span>
+                    <b>Kirim ke inbox TikTok</b>
+                    <small>Clip masuk sebagai draf di aplikasi TikTok. Kamu menyelesaikan posting-nya sendiri.</small>
+                  </span>
+                </label>
+                <label class="ac-opt">
+                  <input type="radio" name="tiktok-mode" value="direct" x-model="ap.tiktok.mode">
+                  <span>
+                    <b>Posting langsung</b>
+                    <small>Clip diposting otomatis di jam upload. App ini belum diaudit TikTok, jadi TikTok membatasi postingan langsung menjadi privat: hanya pemilik akun yang bisa melihatnya, sampai app disetujui.</small>
+                  </span>
+                </label>
+              </fieldset>
+            </template>
             <div class="ac-grid">
                 <label>
                   <span class="ac-label">Maks per hari</span>
@@ -247,7 +273,7 @@
             <p class="ac-foot" style="margin:0" x-show="INFO[p.id].note" x-text="INFO[p.id].note"></p>
             <div class="ac-err" style="margin:0" x-show="ap[p.id].error" x-text="ap[p.id].error" role="alert"></div>
             <div class="ac-acts">
-              <button class="btn btn-sm" type="button" style="min-height:44px" @click="saveAutopost(p, ap[p.id].enabled)" :disabled="ap[p.id].saving" x-text="ap[p.id].saving ? 'Menyimpan…' : 'Simpan jam upload'"></button>
+              <button class="btn btn-sm" type="button" style="min-height:44px" @click="saveAutopost(p, ap[p.id].enabled)" :disabled="ap[p.id].saving" x-text="ap[p.id].saving ? 'Menyimpan…' : 'Simpan pengaturan'"></button>
               <span class="ac-saved" x-show="ap[p.id].savedMsg" x-text="ap[p.id].savedMsg" role="status"></span>
             </div>
           </div>
@@ -277,6 +303,7 @@ function connectedAccounts() {
         empty: 'Belum ada akun TikTok. Hubungkan akun yang mau menerima clip.',
         autoTitle: 'Jadwalkan ke TikTok saat clip di-approve',
         autoText: 'Clip masuk inbox TikTok akun utama di jam upload di bawah, lalu kamu selesaikan posting-nya di aplikasi TikTok.',
+        autoTextDirect: 'Clip diposting langsung ke akun utama di jam upload di bawah. Selama app belum diaudit TikTok, postingannya privat.',
       },
       youtube: {
         empty: 'Belum ada channel YouTube. Hubungkan channel yang mau menerima Shorts.',
@@ -355,7 +382,7 @@ function connectedAccounts() {
           const a = p.autopost;
           // Unsaved edits survive a reload of the list; slots follow the browser until saved once
           this.ap[p.id] = this.ap[p.id] && this.loaded ? { ...this.ap[p.id], enabled: a.enabled } : {
-            enabled: a.enabled, max_per_day: a.max_per_day, slot_times: [...a.slot_times],
+            enabled: a.enabled, mode: a.mode, max_per_day: a.max_per_day, slot_times: [...a.slot_times],
             timezone: a.saved ? a.timezone : (browserTz || a.timezone), saving: false, error: '', savedMsg: '',
           };
         });
@@ -382,6 +409,10 @@ function connectedAccounts() {
       catch (e) { this.error = e.message; }
     },
 
+    autoText(p) {
+      const info = this.INFO[p.id];
+      return p.id === 'tiktok' && this.ap.tiktok?.mode === 'direct' ? info.autoTextDirect : info.autoText;
+    },
     addSlot(platform) {
       const slots = this.ap[platform].slot_times;
       const h = (parseInt(slots[slots.length - 1] || '09:00', 10) + 3) % 24;
@@ -394,9 +425,10 @@ function connectedAccounts() {
       if (st.slot_times.some(t => !t)) { st.error = 'Ada jam upload yang masih kosong.'; return; }
       st.saving = true;
       try {
-        const body = { enabled, max_per_day: st.max_per_day, slot_times: st.slot_times, timezone: st.timezone };
+        const body = { enabled, max_per_day: st.max_per_day, slot_times: st.slot_times, timezone: st.timezone, ...(p.id === 'tiktok' ? { mode: st.mode } : {}) };
         const d = await this.request('/api/autopilot/' + p.id, { method: 'PUT', body: JSON.stringify(body) });
         st.enabled = d.enabled;
+        if (d.mode) st.mode = d.mode;
         if (d.slot_times) st.slot_times = [...d.slot_times];
         st.savedMsg = d.enabled ? 'Tersimpan, aktif.' : 'Tersimpan, nonaktif.';
       } catch (e) { st.error = e.message; }

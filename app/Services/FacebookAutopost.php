@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\GeneratedClip;
+use App\Models\PlatformSetting;
 use App\Support\CaptionCredit;
 
 /** Autopilot to Facebook Page Reels. */
@@ -29,7 +30,7 @@ class FacebookAutopost extends MetaAutopost
     }
 
     /** The Reel description: AI caption with music credit, then the hashtags. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null, ?PlatformSetting $settings = null): array
     {
         return [
             'description' => CaptionCredit::compose($caption, $credit, implode(' ', $hashtags), 5000),

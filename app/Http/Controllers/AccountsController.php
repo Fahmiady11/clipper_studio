@@ -49,6 +49,7 @@ class AccountsController extends Controller
                         'max_per_day' => $setting->max_per_day,
                         'slot_times' => $setting->slot_times,
                         'timezone' => $setting->timezone,
+                        'mode' => $platform === 'tiktok' ? $setting->tiktokMode() : null,
                         'saved' => $setting->exists,
                     ],
                 ];

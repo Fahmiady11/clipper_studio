@@ -9,7 +9,7 @@ use App\Support\CaptionCredit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
-/** Autopilot to TikTok: the post waits for its calendar slot, then goes to the inbox. */
+/** Autopilot to TikTok: the post waits for its calendar slot, then goes to the inbox or is posted directly, per the setting. */
 class TiktokAutopost implements AutopostPlatform
 {
     private const BUSY = ['queued', 'uploading', 'processing'];
@@ -51,20 +51,27 @@ class TiktokAutopost implements AutopostPlatform
         return 'Belum ada akun TikTok yang terhubung. Hubungkan di Akun terhubung.';
     }
 
-    public function refusal(GeneratedClip $clip): ?string
+    public function refusal(GeneratedClip $clip, ?PlatformSetting $settings = null): ?string
     {
-        return in_array($clip->tiktok_status, self::BUSY, true)
-            ? 'Clip ini sedang diupload ke TikTok.'
-            : null;
+        if (in_array($clip->tiktok_status, self::BUSY, true)) {
+            return 'Clip ini sedang diupload ke TikTok.';
+        }
+
+        // ScheduledPublisher checks again at run time, but only after the slot has passed
+        if ($settings?->tiktokMode() === 'direct' && ($account = $this->account($settings)) && ! $account->hasScope('video.publish')) {
+            return TiktokAccount::scopeMessage('video.publish');
+        }
+
+        return null;
     }
 
-    /** The inbox draft gets the caption when it is sent; TikTok itself stores no caption. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
+    /** The caption goes with the post in both modes; TikTok stores none for an inbox draft. */
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null, ?PlatformSetting $settings = null): array
     {
         unset($clip);
 
         return [
-            'mode' => 'inbox',
+            'mode' => $settings?->tiktokMode() ?? 'inbox',
             'title' => CaptionCredit::compose($caption, $credit, implode(' ', $hashtags), 2200),
             'allow_comment' => false,
             'allow_duet' => false,

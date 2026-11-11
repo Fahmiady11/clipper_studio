@@ -43,7 +43,7 @@ class YouTubeAutopost implements AutopostPlatform
         return 'Belum ada channel YouTube yang terhubung. Hubungkan di Akun terhubung.';
     }
 
-    public function refusal(GeneratedClip $clip): ?string
+    public function refusal(GeneratedClip $clip, ?PlatformSetting $settings = null): ?string
     {
         // Jump cuts make the rendered clip shorter than end - start
         try {
@@ -58,7 +58,7 @@ class YouTubeAutopost implements AutopostPlatform
     }
 
     /** Title, description and tags: topic, AI caption, hashtags. */
-    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null): array
+    public function options(GeneratedClip $clip, string $caption, array $hashtags, ?string $credit = null, ?PlatformSetting $settings = null): array
     {
         return [
             'title' => mb_substr(trim(str_replace(['<', '>'], '', (string) $clip->topic)), 0, 100) ?: 'Clip',

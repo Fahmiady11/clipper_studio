@@ -39,7 +39,7 @@ abstract class MetaAutopost implements AutopostPlatform
         return app(ConnectedAccounts::class)->default($settings->user_id, $this->platform());
     }
 
-    public function refusal(GeneratedClip $clip): ?string
+    public function refusal(GeneratedClip $clip, ?PlatformSetting $settings = null): ?string
     {
         return $this->publishing->publisher($this->platform())->refusal($clip);
     }

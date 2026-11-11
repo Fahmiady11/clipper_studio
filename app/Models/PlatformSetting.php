@@ -10,12 +10,15 @@ use Illuminate\Database\Eloquent\Model;
  * enabled switches autopost on (for TikTok: send to the inbox when a clip is approved),
  * max_per_day and slot_times are the autopost slots. account_id may point at a
  * disconnected account; ConnectedAccounts::default() then falls back to the first one.
+ * tiktok_mode is read on the tiktok row only: 'inbox' (draft in the TikTok app) or 'direct'.
  */
 class PlatformSetting extends Model
 {
     public const DEFAULT_SLOTS = ['09:00', '15:00', '20:00'];
 
-    protected $fillable = ['user_id', 'platform', 'account_id', 'enabled', 'max_per_day', 'slot_times', 'timezone'];
+    public const TIKTOK_MODES = ['inbox', 'direct'];
+
+    protected $fillable = ['user_id', 'platform', 'account_id', 'enabled', 'max_per_day', 'slot_times', 'timezone', 'tiktok_mode'];
 
     protected function casts(): array
     {
@@ -35,6 +38,13 @@ class PlatformSetting extends Model
             'max_per_day' => 3,
             'slot_times' => self::DEFAULT_SLOTS,
             'timezone' => 'Asia/Jakarta',
+            'tiktok_mode' => 'inbox',
         ]);
+    }
+
+    /** Anything but 'direct' is inbox, so an unknown or empty value never posts publicly. */
+    public function tiktokMode(): string
+    {
+        return $this->tiktok_mode === 'direct' ? 'direct' : 'inbox';
     }
 }

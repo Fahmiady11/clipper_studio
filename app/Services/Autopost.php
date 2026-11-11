@@ -112,12 +112,12 @@ class Autopost
             return $existing;
         }
 
-        if ($reason = $platform->refusal($clip)) {
+        if ($reason = $platform->refusal($clip, $settings)) {
             throw new RuntimeException("Tidak dijadwalkan ke {$platform->name()}: {$reason}");
         }
 
         [$caption, $hashtags, $credit] = $this->caption($clip); // may call the AI: outside the lock
-        $options = $platform->options($clip, $caption, $hashtags, $credit);
+        $options = $platform->options($clip, $caption, $hashtags, $credit, $settings);
 
         return DB::transaction(function () use ($settings, $account, $clip, $options) {
             // One approval at a time per user and platform, so two clips never take the same slot

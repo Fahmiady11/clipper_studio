@@ -1022,7 +1022,7 @@ function autopilot() {
             : p.needs_default ? 'akun utama diputus, pilih akun utama' + (p.autopost.enabled ? ' (dilewati sampai dipilih)' : '')
             : !account ? 'belum terhubung'
             : !p.autopost.enabled ? 'nonaktif'
-            : account.name + ', maks ' + p.autopost.max_per_day + ' per hari pukul ' + p.autopost.slot_times.join(', ');
+            : account.name + (p.id === 'tiktok' ? (p.autopost.mode === 'direct' ? ' (posting langsung, privat)' : ' (inbox TikTok)') : '') + ', maks ' + p.autopost.max_per_day + ' per hari pukul ' + p.autopost.slot_times.join(', ');
           if (account?.reconnect) text += ' (perlu dihubungkan ulang)';
           return { id: p.id, name: p.name, on, text };
         });
