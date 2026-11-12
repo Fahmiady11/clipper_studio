@@ -44,7 +44,7 @@ Semua request memakai header `Authorization: Bearer clp_...`. Batas 120 request/
 | GET | `/clips/{id}/download` | File MP4 |
 | GET | `/publish/accounts` | Akun YouTube dan TikTok yang tersambung |
 | POST | `/clips/{id}/youtube` | `account_id`, `title`, `privacy`, opsional `description`, `tags` |
-| POST | `/clips/{id}/tiktok` | `account_id`, opsional `mode` (`inbox` default / `direct`). Mode `direct` wajib `privacy_level` (`PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`), tetapi selama app TikTok belum lolos audit nilainya dipaksa jadi `SELF_ONLY`, dan konten branded ditolak. Mode `inbox` masuk sebagai draf di app TikTok |
+| POST | `/clips/{id}/tiktok` | `account_id`, opsional `mode` (`inbox` default / `direct`). Mode `direct` wajib `privacy_level` (`PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`), dan harus salah satu yang diizinkan akun itu (`privacy_level_options` dari creator info). Opsional `title`, `disable_comment`, `disable_duet`, `disable_stitch`, `brand_organic_toggle`, `brand_content_toggle`; konten branded (`brand_content_toggle`) tidak bisa `SELF_ONLY`. Mode `inbox` masuk sebagai draf di app TikTok |
 | GET | `/clips/{id}/youtube-status`, `/tiktok-status` | Status upload |
 
 ### Instruksi untuk AI (`instruction`)

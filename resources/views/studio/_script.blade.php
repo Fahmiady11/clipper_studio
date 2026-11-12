@@ -1080,7 +1080,8 @@ function studio() {
     },
     get pubTiktokReady() {
       if (this.tiktokMode === 'inbox') return true;
-      if (!this.tiktokCreator || this.tiktokTooLong) return false;
+      if (!this.tiktokCreator || this.tiktokTooLong || !this.tiktokPrivacy) return false;
+      if (this.tiktokBrandContent && this.tiktokPrivacy === 'SELF_ONLY') return false;
       return !this.tiktokDisclose || this.tiktokBrandOrganic || this.tiktokBrandContent;
     },
     get pubCanSend() {
@@ -1112,6 +1113,9 @@ function studio() {
           this.pub.ytTitle = String(clip.topic || '').replace(/[<>]/g, '').slice(0, 100);
           // Direct posting still loads TikTok's required form (creator info) every time
           this.tiktokMode = data.tiktok_mode === 'direct' ? 'direct' : 'inbox';
+          // TikTok: privacy, interactions and disclosure are chosen again for every post, nothing preset
+          Object.assign(this, { tiktokPrivacy: '', tiktokAllowComment: false, tiktokAllowDuet: false, tiktokAllowStitch: false,
+            tiktokDisclose: false, tiktokBrandOrganic: false, tiktokBrandContent: false });
         }
         this.pubWatch();
       } catch (e) {
@@ -1155,7 +1159,8 @@ function studio() {
         caption: this.pub.caption, hashtags: this.pubTags,
         youtube_title: this.pub.ytTitle.trim(), youtube_privacy: this.pub.ytPrivacy,
         tiktok_mode: this.tiktokMode, tiktok_allow_comment: this.tiktokAllowComment, tiktok_allow_duet: this.tiktokAllowDuet,
-        tiktok_allow_stitch: this.tiktokAllowStitch, tiktok_branded: this.tiktokDisclose && (this.tiktokBrandOrganic || this.tiktokBrandContent),
+        tiktok_allow_stitch: this.tiktokAllowStitch, tiktok_privacy_level: this.tiktokPrivacy || null,
+        tiktok_brand_organic: this.tiktokDisclose && this.tiktokBrandOrganic, tiktok_brand_content: this.tiktokDisclose && this.tiktokBrandContent,
       };
       this.pub.sending = true;
       try {

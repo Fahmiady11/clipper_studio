@@ -70,12 +70,16 @@ class TiktokAutopost implements AutopostPlatform
     {
         unset($clip);
 
+        $mode = $settings?->tiktokMode() ?? 'inbox';
+        $direct = $mode === 'direct' ? $settings->tiktokDirect() : ['allow_comment' => false, 'allow_duet' => false, 'allow_stitch' => false];
+
         return [
-            'mode' => $settings?->tiktokMode() ?? 'inbox',
+            'mode' => $mode,
             'title' => CaptionCredit::compose($caption, $credit, implode(' ', $hashtags), 2200),
-            'allow_comment' => false,
-            'allow_duet' => false,
-            'allow_stitch' => false,
+            'allow_comment' => $direct['allow_comment'],
+            'allow_duet' => $direct['allow_duet'],
+            'allow_stitch' => $direct['allow_stitch'],
+            ...($mode === 'direct' ? ['privacy_level' => $direct['privacy_level']] : []),
             'autopilot' => true,
         ];
     }

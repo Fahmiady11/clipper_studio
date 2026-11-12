@@ -271,15 +271,51 @@
                   </div>
                   <div class="cal-hint" style="margin-top:8px" x-show="form.ttMode === 'inbox'">Draft masuk ke inbox TikTok tanpa caption. Kamu selesaikan posting-nya di aplikasi TikTok.</div>
                 </div>
+                {{-- TikTok's direct-post rules: creator name, privacy from creator_info with no preset, interactions the creator allows, disclosure, consent --}}
                 <div x-show="form.ttMode === 'direct'" class="cal-contents">
-                  <div>
-                    <label class="cal-label" for="cal-tt-title">Caption</label>
-                    <textarea id="cal-tt-title" class="field" maxlength="2200" x-model="form.ttTitle"></textarea>
-                  </div>
-                  <label class="cal-check"><input type="checkbox" x-model="form.ttComment"> Izinkan komentar</label>
-                  <label class="cal-check"><input type="checkbox" x-model="form.ttDuet"> Izinkan duet</label>
-                  <label class="cal-check"><input type="checkbox" x-model="form.ttStitch"> Izinkan stitch</label>
-                  <div class="cal-hint warn">App TikTok belum lolos audit, jadi posting langsung sementara hanya privat (Hanya saya).</div>
+                  <div class="cal-hint" x-show="ttCreatorLoading">Membaca info akun TikTok…</div>
+                  <div class="cal-error" x-show="ttCreatorError" role="alert" x-text="ttCreatorError"></div>
+                  <template x-if="ttCreator">
+                    <div class="cal-contents">
+                      <div class="cal-hint">Posting sebagai <b x-text="ttCreator.creator_nickname || ttCreator.creator_username"></b>. Setelah dikirim, TikTok butuh beberapa menit memproses video sebelum muncul di profil.</div>
+                      <video x-show="form.clipId" :src="form.clipId ? '/api/clips/' + form.clipId + '/download?inline=1' : ''" controls playsinline preload="metadata"
+                             aria-label="Pratinjau clip yang akan diposting" style="width:100%;max-width:220px;aspect-ratio:9/16;border-radius:10px;background:#000"></video>
+                      <div class="cal-hint warn" x-show="ttTooLong" x-text="'Clip ini ' + (selectedClip && selectedClip.seconds) + ' detik, akun TikTok ini maksimal ' + ttCreator.max_video_post_duration_sec + ' detik.'"></div>
+                      <div>
+                        <label class="cal-label" for="cal-tt-title">Caption</label>
+                        <textarea id="cal-tt-title" class="field" maxlength="2200" x-model="form.ttTitle"></textarea>
+                      </div>
+                      <div>
+                        <label class="cal-label" for="cal-tt-priv">Siapa yang bisa menonton</label>
+                        <select id="cal-tt-priv" class="select" x-model="form.ttPrivacy" style="min-height:44px">
+                          <option value="">Pilih</option>
+                          <template x-for="level in ttCreator.privacy_level_options || []" :key="level">
+                            <option :value="level" :disabled="level === 'SELF_ONLY' && form.ttBrandContent" :selected="level === form.ttPrivacy" x-text="PRIVACY_LABELS[level] || level"></option>
+                          </template>
+                        </select>
+                        <div class="cal-hint warn" style="margin-top:8px" x-show="!form.ttPrivacy">Pilih siapa yang bisa menonton sebelum menjadwalkan.</div>
+                      </div>
+                      <label class="cal-check"><input type="checkbox" x-model="form.ttComment" :disabled="ttCreator.comment_disabled"> Izinkan komentar</label>
+                      <label class="cal-check"><input type="checkbox" x-model="form.ttDuet" :disabled="ttCreator.duet_disabled"> Izinkan duet</label>
+                      <label class="cal-check"><input type="checkbox" x-model="form.ttStitch" :disabled="ttCreator.stitch_disabled"> Izinkan stitch</label>
+                      <div class="cal-hint" x-show="ttCreator.comment_disabled || ttCreator.duet_disabled || ttCreator.stitch_disabled">Yang tidak bisa dicentang dimatikan di pengaturan akun TikTok ini.</div>
+                      <div>
+                        <label class="cal-check"><input type="checkbox" x-model="form.ttDisclose" @change="if (!form.ttDisclose) { form.ttBrandOrganic = false; form.ttBrandContent = false }"> Video ini mempromosikan brand, produk, atau jasa</label>
+                        <div x-show="form.ttDisclose" style="margin-left:28px">
+                          <label class="cal-check"><input type="checkbox" x-model="form.ttBrandOrganic"> Brand kamu sendiri</label>
+                          <label class="cal-check"><input type="checkbox" x-model="form.ttBrandContent" @change="if (form.ttBrandContent && form.ttPrivacy === 'SELF_ONLY') form.ttPrivacy = ''"> Branded content (brand lain atau pihak ketiga)</label>
+                          <div class="cal-hint warn" x-show="!form.ttBrandOrganic && !form.ttBrandContent">Pilih minimal satu jenis promosi.</div>
+                          <div class="cal-hint" x-show="form.ttBrandContent">Branded content tidak bisa diposting sebagai Hanya saya. Video kamu akan diberi label Paid partnership.</div>
+                          <div class="cal-hint" x-show="form.ttBrandOrganic && !form.ttBrandContent">Video kamu akan diberi label Promotional content.</div>
+                        </div>
+                      </div>
+                      <div class="cal-hint">
+                        Dengan menjadwalkan, kamu menyetujui
+                        <template x-if="form.ttBrandContent"><span><a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener" style="color:var(--accent-ink)">Branded Content Policy</a> dan </span></template>
+                        <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener" style="color:var(--accent-ink)">Music Usage Confirmation</a> TikTok.
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </div>
             </template>
@@ -387,6 +423,7 @@ function scheduleCalendar() {
       instagram: { label: 'Caption', max: 2200, hashtags: 30, maxSeconds: 900, hint: 'Reels Instagram tampil di tab Reels dan feed. Maksimal 2200 karakter dan 30 hashtag.' },
       threads: { label: 'Teks', max: 500, bytes: true, maxSeconds: 300, hint: 'Threads hanya menjadikan satu hashtag sebagai topik. Video maksimal 5 menit.' },
     },
+    PRIVACY_LABELS: { PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya' },
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'lokal',
 
     month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -400,12 +437,14 @@ function scheduleCalendar() {
     instagram: { configured: false, accounts: [], blocked: null },
     threads: { configured: false, accounts: [], blocked: null },
 
-    form: { open: false, clipId: '', platform: '', accountId: null, when: '', ytTitle: '', ytDescription: '', ytTags: [], ytPrivacy: 'private', metaText: { facebook: '', instagram: '', threads: '' }, ttMode: 'inbox', ttTitle: '', ttComment: false, ttDuet: false, ttStitch: false },
+    form: { open: false, clipId: '', platform: '', accountId: null, when: '', ytTitle: '', ytDescription: '', ytTags: [], ytPrivacy: 'private', metaText: { facebook: '', instagram: '', threads: '' }, ttMode: 'inbox', ttTitle: '', ttComment: false, ttDuet: false, ttStitch: false, ttPrivacy: '', ttDisclose: false, ttBrandOrganic: false, ttBrandContent: false },
     formError: '', saving: false,
+    ttCreator: null, ttCreatorError: '', ttCreatorLoading: false, ttCreatorFor: null,
     editing: null, editError: '', confirmingId: null,
 
     async init() {
       await Promise.all([this.load(), this.loadClips(), this.loadAccounts()]);
+      ['form.ttMode', 'form.platform', 'form.accountId'].forEach(key => this.$watch(key, () => this.loadTtCreator()));
       const wanted = new URLSearchParams(location.search).get('clip');
       if (wanted && this.clips.some(c => c.id === wanted)) this.openForm(wanted);
       // Statuses move on their own (queued, uploading, published); refresh while the tab is visible
@@ -540,7 +579,37 @@ function scheduleCalendar() {
       if (!f.clipId || !f.platform || !f.accountId || !f.when) return false;
       if (f.platform === 'youtube') return !!f.ytTitle.trim() && !/[<>]/.test(f.ytTitle);
       if (this.META[f.platform]) return !this.metaProblem && !this[f.platform].blocked;
-      return true;
+      if (f.ttMode !== 'direct') return true;
+      if (!this.ttCreator || this.ttTooLong || !f.ttPrivacy) return false;
+      if (f.ttBrandContent && f.ttPrivacy === 'SELF_ONLY') return false;
+      return !f.ttDisclose || f.ttBrandOrganic || f.ttBrandContent;
+    },
+    get ttTooLong() {
+      const max = this.ttCreator?.max_video_post_duration_sec;
+      return !!max && !!this.selectedClip && this.selectedClip.seconds > max;
+    },
+    // A direct post offers only what TikTok's creator_info allows the chosen account, read again whenever the form opens
+    async loadTtCreator() {
+      const f = this.form;
+      const key = f.platform === 'tiktok' && f.ttMode === 'direct' && f.accountId ? f.accountId : null;
+      if (key === this.ttCreatorFor && (this.ttCreator || this.ttCreatorLoading)) return;
+      this.ttCreatorFor = key; this.ttCreator = null; this.ttCreatorError = ''; f.ttPrivacy = '';
+      if (!key) return;
+      this.ttCreatorLoading = true;
+      try {
+        const res = await fetch(`/api/tiktok/accounts/${key}/creator-info`, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json().catch(() => null);
+        if (this.ttCreatorFor !== key) return;
+        if (!res.ok) { this.ttCreatorError = errorText(data, 'Gagal membaca info akun TikTok.'); return; }
+        this.ttCreator = data;
+        if (data.comment_disabled) f.ttComment = false;
+        if (data.duet_disabled) f.ttDuet = false;
+        if (data.stitch_disabled) f.ttStitch = false;
+      } catch (e) {
+        if (this.ttCreatorFor === key) this.ttCreatorError = 'Koneksi gagal.';
+      } finally {
+        if (this.ttCreatorFor === key) this.ttCreatorLoading = false;
+      }
     },
     defaultWhen() {
       const [y, m, d] = this.selected.split('-').map(Number);
@@ -561,6 +630,10 @@ function scheduleCalendar() {
       this.pickPlatform(f.platform);
       f.when = this.defaultWhen();
       this.fillFromClip();
+      // TikTok: privacy, interactions and disclosure are chosen again for every post, nothing preset
+      Object.assign(f, { ttPrivacy: '', ttComment: false, ttDuet: false, ttStitch: false, ttDisclose: false, ttBrandOrganic: false, ttBrandContent: false });
+      this.ttCreatorFor = undefined;
+      this.loadTtCreator();
     },
     // Cut to a byte budget at a word, like the server does for autopilot posts
     fitBytes(text, max) {
@@ -605,7 +678,11 @@ function scheduleCalendar() {
       const body = { clip_id: f.clipId, platform: f.platform, account_id: f.accountId, scheduled_at: when.toISOString() };
       if (f.platform === 'youtube') Object.assign(body, { title: f.ytTitle.trim(), description: f.ytDescription, privacy: f.ytPrivacy, tags: f.ytTags });
       else if (this.META[f.platform]) Object.assign(body, { description: f.metaText[f.platform] });
-      else Object.assign(body, { mode: f.ttMode, title: f.ttMode === 'direct' ? f.ttTitle : '', allow_comment: f.ttComment, allow_duet: f.ttDuet, allow_stitch: f.ttStitch });
+      else if (f.ttMode === 'direct') Object.assign(body, {
+        mode: 'direct', title: f.ttTitle, privacy_level: f.ttPrivacy, allow_comment: f.ttComment, allow_duet: f.ttDuet, allow_stitch: f.ttStitch,
+        brand_organic_toggle: f.ttDisclose && f.ttBrandOrganic, brand_content_toggle: f.ttDisclose && f.ttBrandContent,
+      });
+      else Object.assign(body, { mode: 'inbox', title: '', allow_comment: false, allow_duet: false, allow_stitch: false });
 
       this.saving = true;
       try {

@@ -15,6 +15,12 @@ use RuntimeException;
  */
 class TikTokService
 {
+    /** Direct-post privacy levels; creator_info's privacy_level_options says which ones an account may use. */
+    public const PRIVACY_LEVELS = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
+
+    /** TikTok rejects branded content (paid partnership) that only the creator can see. */
+    public const BRANDED_SELF_ONLY = 'Branded content tidak bisa diposting sebagai "Hanya saya".';
+
     private const AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 
     private const API = 'https://open.tiktokapis.com/v2';
@@ -93,8 +99,8 @@ class TikTokService
     }
 
     /**
-     * Post straight to the profile (scope video.publish). Until the app passes
-     * TikTok's audit only privacy_level SELF_ONLY is accepted.
+     * Post straight to the profile (scope video.publish). privacy_level must be
+     * one of the account's creator_info privacy_level_options.
      *
      * @param  array{title: string, privacy_level: string, disable_comment: bool, disable_duet: bool, disable_stitch: bool, brand_organic_toggle?: bool, brand_content_toggle?: bool}  $postInfo
      * @return string publish_id

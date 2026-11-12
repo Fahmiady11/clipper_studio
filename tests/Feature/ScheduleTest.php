@@ -102,12 +102,56 @@ class ScheduleTest extends TestCase
         $this->actingAs($user)->postJson('/api/schedule', [
             'clip_id' => $clip->id, 'platform' => 'tiktok', 'account_id' => $account->id,
             'scheduled_at' => now()->addHours(3)->toIso8601String(), 'mode' => 'direct', 'title' => 'Caption', 'allow_comment' => true,
+            'privacy_level' => 'PUBLIC_TO_EVERYONE', 'allow_stitch' => true, 'brand_organic_toggle' => true,
         ])->assertCreated();
 
-        $this->assertSame(
-            ['mode' => 'direct', 'title' => 'Caption', 'allow_comment' => true, 'allow_duet' => false, 'allow_stitch' => false],
-            ScheduledPost::sole()->options,
-        );
+        $this->assertSame([
+            'mode' => 'direct', 'title' => 'Caption', 'allow_comment' => true, 'allow_duet' => false, 'allow_stitch' => true,
+            'privacy_level' => 'PUBLIC_TO_EVERYONE', 'brand_organic_toggle' => true, 'brand_content_toggle' => false,
+        ], ScheduledPost::sole()->options);
+    }
+
+    public function test_a_tiktok_draft_stores_no_direct_post_choices(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->tiktok($user);
+        $clip = $this->doneClip($user);
+
+        $this->actingAs($user)->postJson('/api/schedule', [
+            'clip_id' => $clip->id, 'platform' => 'tiktok', 'account_id' => $account->id,
+            'scheduled_at' => now()->addHours(3)->toIso8601String(), 'mode' => 'inbox', 'privacy_level' => 'PUBLIC_TO_EVERYONE',
+        ])->assertCreated();
+
+        $this->assertSame(['mode' => 'inbox', 'title' => '', 'allow_comment' => false, 'allow_duet' => false, 'allow_stitch' => false], ScheduledPost::sole()->options);
+    }
+
+    public function test_direct_tiktok_schedule_validates_privacy_and_branded_content(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->tiktok($user);
+        $clip = $this->doneClip($user);
+        $base = ['clip_id' => $clip->id, 'platform' => 'tiktok', 'account_id' => $account->id, 'scheduled_at' => now()->addHours(3)->toIso8601String(), 'mode' => 'direct'];
+
+        // TikTok wants the audience picked by the user: no privacy, no post
+        $this->actingAs($user)->postJson('/api/schedule', $base)->assertUnprocessable()->assertJsonValidationErrors('privacy_level');
+        $this->actingAs($user)->postJson('/api/schedule', $base + ['privacy_level' => 'EVERYONE'])->assertJsonValidationErrors('privacy_level');
+        $this->actingAs($user)->postJson('/api/schedule', $base + ['privacy_level' => 'SELF_ONLY', 'brand_content_toggle' => true])
+            ->assertJsonValidationErrors(['privacy_level' => 'Hanya saya']);
+        $this->actingAs($user)->postJson('/api/schedule', $base + ['privacy_level' => 'PUBLIC_TO_EVERYONE', 'allow_duet' => 'maybe'])
+            ->assertJsonValidationErrors('allow_duet');
+        $this->assertSame(0, ScheduledPost::count());
+
+        // Someone else's account is never usable
+        $stranger = User::factory()->create();
+        $this->actingAs($stranger)->postJson('/api/schedule', ['account_id' => $this->tiktok($stranger)->id, 'privacy_level' => 'PUBLIC_TO_EVERYONE'] + $base)->assertForbidden();
+
+        // Direct posting needs video.publish
+        $uploadOnly = $this->tiktok($user, ['open_id' => 'open-upload', 'scope' => 'user.info.basic,video.upload']);
+        $this->actingAs($user)->postJson('/api/schedule', ['account_id' => $uploadOnly->id, 'privacy_level' => 'PUBLIC_TO_EVERYONE'] + $base)
+            ->assertUnprocessable()->assertJsonPath('message', TiktokAccount::scopeMessage('video.publish'));
+
+        $this->actingAs($user)->postJson('/api/schedule', $base + ['privacy_level' => 'FOLLOWER_OF_CREATOR', 'brand_content_toggle' => true])->assertCreated();
+        $this->assertSame('FOLLOWER_OF_CREATOR', ScheduledPost::sole()->options['privacy_level']);
     }
 
     public function test_refuses_bad_times_other_users_and_double_booking(): void
@@ -206,7 +250,31 @@ class ScheduleTest extends TestCase
         Queue::assertPushed(UploadToYouTubeJob::class, 1);
     }
 
-    public function test_due_tiktok_post_keeps_its_mode_and_stays_private(): void
+    public function test_due_direct_post_goes_out_with_the_chosen_post_info(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create();
+        $account = $this->tiktok($user, ['scope' => 'user.info.basic,video.upload,video.publish']);
+        $clip = $this->doneClip($user);
+        $this->scheduled($user, $clip, [
+            'platform' => 'tiktok', 'account_id' => $account->id, 'scheduled_at' => now()->subMinute(),
+            'options' => [
+                'mode' => 'direct', 'title' => 'Cap #fyp', 'privacy_level' => 'MUTUAL_FOLLOW_FRIENDS',
+                'allow_comment' => true, 'allow_duet' => false, 'allow_stitch' => true,
+                'brand_organic_toggle' => false, 'brand_content_toggle' => true,
+            ],
+        ]);
+
+        $this->assertSame(1, app(ScheduledPublisher::class)->publishDue());
+
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->clipId === $clip->id && $job->accountId === $account->id
+            && $job->mode === 'direct' && $job->postInfo === [
+                'title' => 'Cap #fyp', 'privacy_level' => 'MUTUAL_FOLLOW_FRIENDS', 'disable_comment' => false, 'disable_duet' => true,
+                'disable_stitch' => false, 'brand_organic_toggle' => false, 'brand_content_toggle' => true,
+            ]);
+    }
+
+    public function test_due_tiktok_post_booked_without_privacy_stays_private(): void
     {
         Queue::fake();
         $user = User::factory()->create();

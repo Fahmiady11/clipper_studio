@@ -245,7 +245,7 @@ class TikTokTest extends TestCase
             && $job->postInfo === ['title' => 'caption', 'privacy_level' => 'SELF_ONLY', 'disable_comment' => true, 'disable_duet' => true, 'disable_stitch' => false, 'brand_organic_toggle' => false, 'brand_content_toggle' => false]);
     }
 
-    public function test_direct_upload_blocks_branded_content_when_unaudited(): void
+    public function test_direct_upload_posts_branded_content_publicly(): void
     {
         Queue::fake();
         $user = User::factory()->create();
@@ -255,10 +255,13 @@ class TikTokTest extends TestCase
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", [
             'account_id' => $account->id, 'mode' => 'direct', 'privacy_level' => 'PUBLIC_TO_EVERYONE',
             'brand_organic_toggle' => true, 'brand_content_toggle' => true,
-        ])->assertUnprocessable();
+        ])->assertOk();
+
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->postInfo['privacy_level'] === 'PUBLIC_TO_EVERYONE'
+            && $job->postInfo['brand_organic_toggle'] === true && $job->postInfo['brand_content_toggle'] === true);
     }
 
-    public function test_direct_upload_forces_self_only_when_unaudited(): void
+    public function test_direct_upload_keeps_the_chosen_privacy(): void
     {
         Queue::fake();
         $user = User::factory()->create();
@@ -267,10 +270,33 @@ class TikTokTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", [
             'account_id' => $account->id, 'mode' => 'direct', 'privacy_level' => 'PUBLIC_TO_EVERYONE',
-            'title' => 'test',
+            'title' => 'test', 'disable_comment' => false,
         ])->assertOk();
 
-        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->postInfo['privacy_level'] === 'SELF_ONLY');
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->postInfo === [
+            'title' => 'test', 'privacy_level' => 'PUBLIC_TO_EVERYONE', 'disable_comment' => false, 'disable_duet' => false,
+            'disable_stitch' => false, 'brand_organic_toggle' => false, 'brand_content_toggle' => false,
+        ]);
+    }
+
+    public function test_direct_upload_rejects_an_unknown_privacy_and_others_clips(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create();
+        $clip = $this->doneClip($user);
+        $account = $this->account($user, ['scope' => 'user.info.basic,video.upload,video.publish']);
+
+        $this->actingAs($user)->postJson("/api/clips/{$clip->id}/tiktok", [
+            'account_id' => $account->id, 'mode' => 'direct', 'privacy_level' => 'EVERYONE',
+        ])->assertJsonValidationErrors('privacy_level');
+
+        $other = User::factory()->create();
+        $theirs = $this->account($other, ['open_id' => 'open-9', 'scope' => 'user.info.basic,video.upload,video.publish']);
+        $this->actingAs($other)->postJson("/api/clips/{$clip->id}/tiktok", [
+            'account_id' => $theirs->id, 'mode' => 'direct', 'privacy_level' => 'PUBLIC_TO_EVERYONE',
+        ])->assertForbidden();
+
+        Queue::assertNothingPushed();
     }
 
     public function test_branded_content_cannot_be_private(): void

@@ -62,17 +62,19 @@ class ScheduledPublisher
         }
     }
 
-    /** TikTok direct-post settings. The app is unaudited, so only private posts are accepted. */
+    /** TikTok direct-post settings. Posts booked before privacy was a choice carry none and stay private. */
     public static function tiktokPostInfo(array $options): array
     {
+        $privacy = $options['privacy_level'] ?? null;
+
         return [
             'title' => (string) ($options['title'] ?? ''),
-            'privacy_level' => 'SELF_ONLY',
+            'privacy_level' => in_array($privacy, TikTokService::PRIVACY_LEVELS, true) ? $privacy : 'SELF_ONLY',
             'disable_comment' => ! ($options['allow_comment'] ?? false),
             'disable_duet' => ! ($options['allow_duet'] ?? false),
             'disable_stitch' => ! ($options['allow_stitch'] ?? false),
-            'brand_organic_toggle' => false,
-            'brand_content_toggle' => false,
+            'brand_organic_toggle' => (bool) ($options['brand_organic_toggle'] ?? false),
+            'brand_content_toggle' => (bool) ($options['brand_content_toggle'] ?? false),
         ];
     }
 

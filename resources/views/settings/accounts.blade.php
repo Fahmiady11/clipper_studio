@@ -66,6 +66,10 @@
   .ac-opt b { display: block; font-size: 13.5px; }
   .ac-opt small { display: block; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-top: 2px; }
   .ac-saved { font-size: 12.5px; color: var(--text-muted); }
+  .ac-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+  .ac-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 13.5px; }
+  .ac-check input { width: 18px; height: 18px; accent-color: var(--accent-ink); }
+  .ac-check:has(input:disabled) { opacity: .6; }
   /* Facebook logins and the Page / Instagram picker */
   .ac-login { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-strong); }
   .ac-login-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); }
@@ -236,19 +240,39 @@
               <fieldset class="ac-mode">
                 <legend class="ac-label">Cara kirim ke TikTok</legend>
                 <label class="ac-opt">
-                  <input type="radio" name="tiktok-mode" value="inbox" x-model="ap.tiktok.mode">
+                  <input type="radio" name="tiktok-mode" value="inbox" x-model="ap.tiktok.mode" @change="loadTtCreator()">
                   <span>
                     <b>Kirim ke inbox TikTok</b>
                     <small>Clip masuk sebagai draf di aplikasi TikTok. Kamu menyelesaikan posting-nya sendiri.</small>
                   </span>
                 </label>
                 <label class="ac-opt">
-                  <input type="radio" name="tiktok-mode" value="direct" x-model="ap.tiktok.mode">
+                  <input type="radio" name="tiktok-mode" value="direct" x-model="ap.tiktok.mode" @change="loadTtCreator()">
                   <span>
                     <b>Posting langsung</b>
-                    <small>Clip diposting otomatis di jam upload. App ini belum diaudit TikTok, jadi TikTok membatasi postingan langsung menjadi privat: hanya pemilik akun yang bisa melihatnya, sampai app disetujui.</small>
+                    <small>Clip diposting ke profil TikTok di jam upload, dengan privasi dan izin yang kamu pilih di bawah.</small>
                   </span>
                 </label>
+                {{-- Applied to every autopilot direct post; only what the account's creator_info allows is offered --}}
+                <div class="ac-direct" x-show="ap.tiktok.mode === 'direct'">
+                  <p class="ac-foot" style="margin:0" x-show="ttCreatorLoading">Membaca pengaturan akun TikTok…</p>
+                  <p class="ac-err" style="margin:0" x-show="ttCreatorError" x-text="ttCreatorError" role="alert"></p>
+                  <p class="ac-foot" style="margin:0" x-show="ttCreator">Posting sebagai <b x-text="ttCreator?.creator_nickname || ttCreator?.creator_username"></b>.</p>
+                  <label>
+                    <span class="ac-label">Siapa yang bisa menonton</span>
+                    <select class="select" x-model="ap.tiktok.direct.privacy_level" style="min-height:44px">
+                      <template x-for="level in ttPrivacyOptions" :key="level">
+                        <option :value="level" :selected="level === ap.tiktok.direct.privacy_level" x-text="PRIVACY_LABELS[level] || level"></option>
+                      </template>
+                    </select>
+                  </label>
+                  <p class="ac-err" style="margin:0" x-show="ttCreator && !ttPrivacyOptions.includes(ap.tiktok.direct.privacy_level)">Akun TikTok ini tidak mengizinkan pilihan yang tersimpan. Pilih yang lain lalu simpan.</p>
+                  <label class="ac-check"><input type="checkbox" x-model="ap.tiktok.direct.allow_comment" :disabled="ttCreator?.comment_disabled"> Izinkan komentar</label>
+                  <label class="ac-check"><input type="checkbox" x-model="ap.tiktok.direct.allow_duet" :disabled="ttCreator?.duet_disabled"> Izinkan duet</label>
+                  <label class="ac-check"><input type="checkbox" x-model="ap.tiktok.direct.allow_stitch" :disabled="ttCreator?.stitch_disabled"> Izinkan stitch</label>
+                  <p class="ac-foot" style="margin:0" x-show="ttCreator?.comment_disabled || ttCreator?.duet_disabled || ttCreator?.stitch_disabled">Yang tidak bisa dicentang dimatikan di pengaturan akun TikTok ini.</p>
+                  <p class="ac-foot" style="margin:0">Dengan menyimpan, kamu menyetujui <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener" style="color:var(--accent-ink)">Music Usage Confirmation</a> TikTok untuk setiap clip yang diposting autopilot.</p>
+                </div>
               </fieldset>
             </template>
             <div class="ac-grid">
@@ -303,7 +327,7 @@ function connectedAccounts() {
         empty: 'Belum ada akun TikTok. Hubungkan akun yang mau menerima clip.',
         autoTitle: 'Jadwalkan ke TikTok saat clip di-approve',
         autoText: 'Clip masuk inbox TikTok akun utama di jam upload di bawah, lalu kamu selesaikan posting-nya di aplikasi TikTok.',
-        autoTextDirect: 'Clip diposting langsung ke akun utama di jam upload di bawah. Selama app belum diaudit TikTok, postingannya privat.',
+        autoTextDirect: 'Clip diposting langsung ke akun utama di jam upload di bawah, dengan privasi dan izin yang kamu pilih.',
       },
       youtube: {
         empty: 'Belum ada channel YouTube. Hubungkan channel yang mau menerima Shorts.',
@@ -335,6 +359,8 @@ function connectedAccounts() {
     platforms: [], logins: [], mediaProblem: null, loaded: false, error: '', confirming: null, flash: null,
     notice: { kind: '', text: '' },
     ap: {},
+    PRIVACY_LABELS: { PUBLIC_TO_EVERYONE: 'Publik', MUTUAL_FOLLOW_FRIENDS: 'Teman', FOLLOWER_OF_CREATOR: 'Follower', SELF_ONLY: 'Hanya saya' },
+    ttCreator: null, ttCreatorError: '', ttCreatorLoading: false, ttCreatorFor: null,
     picker: { loginId: null, pages: [], chosen: [], igChosen: [], loading: false, saving: false, error: '' },
 
     async init() {
@@ -382,11 +408,12 @@ function connectedAccounts() {
           const a = p.autopost;
           // Unsaved edits survive a reload of the list; slots follow the browser until saved once
           this.ap[p.id] = this.ap[p.id] && this.loaded ? { ...this.ap[p.id], enabled: a.enabled } : {
-            enabled: a.enabled, mode: a.mode, max_per_day: a.max_per_day, slot_times: [...a.slot_times],
+            enabled: a.enabled, mode: a.mode, direct: a.direct ? { ...a.direct } : null, max_per_day: a.max_per_day, slot_times: [...a.slot_times],
             timezone: a.saved ? a.timezone : (browserTz || a.timezone), saving: false, error: '', savedMsg: '',
           };
         });
         this.platforms = data.platforms;
+        this.loadTtCreator();
         this.logins = data.facebook_logins;
         this.mediaProblem = data.media_problem;
         this.error = '';
@@ -409,6 +436,30 @@ function connectedAccounts() {
       catch (e) { this.error = e.message; }
     },
 
+    get ttPrivacyOptions() {
+      return this.ttCreator?.privacy_level_options || Object.keys(this.PRIVACY_LABELS);
+    },
+    // Direct posting: what the default account allows, from TikTok's creator_info
+    async loadTtCreator() {
+      const id = this.ap.tiktok?.mode === 'direct' ? this.platforms.find(p => p.id === 'tiktok')?.default_id : null;
+      if (id === this.ttCreatorFor) return;
+      this.ttCreatorFor = id; this.ttCreator = null; this.ttCreatorError = '';
+      if (!id) return;
+      this.ttCreatorLoading = true;
+      try {
+        const data = await this.request(`/api/tiktok/accounts/${id}/creator-info`);
+        if (this.ttCreatorFor !== id) return;
+        this.ttCreator = data;
+        const d = this.ap.tiktok.direct;
+        if (data.comment_disabled) d.allow_comment = false;
+        if (data.duet_disabled) d.allow_duet = false;
+        if (data.stitch_disabled) d.allow_stitch = false;
+      } catch (e) {
+        if (this.ttCreatorFor === id) this.ttCreatorError = e.message;
+      } finally {
+        if (this.ttCreatorFor === id) this.ttCreatorLoading = false;
+      }
+    },
     autoText(p) {
       const info = this.INFO[p.id];
       return p.id === 'tiktok' && this.ap.tiktok?.mode === 'direct' ? info.autoTextDirect : info.autoText;
@@ -425,10 +476,11 @@ function connectedAccounts() {
       if (st.slot_times.some(t => !t)) { st.error = 'Ada jam upload yang masih kosong.'; return; }
       st.saving = true;
       try {
-        const body = { enabled, max_per_day: st.max_per_day, slot_times: st.slot_times, timezone: st.timezone, ...(p.id === 'tiktok' ? { mode: st.mode } : {}) };
+        const body = { enabled, max_per_day: st.max_per_day, slot_times: st.slot_times, timezone: st.timezone, ...(p.id === 'tiktok' ? { mode: st.mode, direct: st.direct } : {}) };
         const d = await this.request('/api/autopilot/' + p.id, { method: 'PUT', body: JSON.stringify(body) });
         st.enabled = d.enabled;
         if (d.mode) st.mode = d.mode;
+        if (d.direct) st.direct = { ...d.direct };
         if (d.slot_times) st.slot_times = [...d.slot_times];
         st.savedMsg = d.enabled ? 'Tersimpan, aktif.' : 'Tersimpan, nonaktif.';
       } catch (e) { st.error = e.message; }

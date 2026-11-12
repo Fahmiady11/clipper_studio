@@ -251,7 +251,7 @@ class McpController extends Controller
                     'privacy' => ['type' => 'string', 'enum' => ['public', 'unlisted', 'private'], 'description' => 'YouTube privacy'],
                     'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'YouTube tags'],
                     'mode' => ['type' => 'string', 'enum' => ['inbox', 'direct'], 'description' => 'TikTok mode'],
-                    'privacy_level' => ['type' => 'string', 'enum' => ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'], 'description' => 'TikTok privacy level, required with mode direct. Currently forced to SELF_ONLY (TikTok app unaudited).'],
+                    'privacy_level' => ['type' => 'string', 'enum' => ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'], 'description' => 'TikTok privacy level, required with mode direct. Must be one the account allows (creator_info privacy_level_options); branded content cannot be SELF_ONLY.'],
                 ]],
                 'route' => fn ($a) => [
                     'POST',

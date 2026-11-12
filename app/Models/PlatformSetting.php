@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\TikTokService;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -18,7 +19,10 @@ class PlatformSetting extends Model
 
     public const TIKTOK_MODES = ['inbox', 'direct'];
 
-    protected $fillable = ['user_id', 'platform', 'account_id', 'enabled', 'max_per_day', 'slot_times', 'timezone', 'tiktok_mode'];
+    /** What autopilot's TikTok direct posts use until the user changes it */
+    public const TIKTOK_DIRECT_DEFAULTS = ['privacy_level' => 'PUBLIC_TO_EVERYONE', 'allow_comment' => false, 'allow_duet' => false, 'allow_stitch' => false];
+
+    protected $fillable = ['user_id', 'platform', 'account_id', 'enabled', 'max_per_day', 'slot_times', 'timezone', 'tiktok_mode', 'tiktok_direct'];
 
     protected function casts(): array
     {
@@ -27,6 +31,7 @@ class PlatformSetting extends Model
             'max_per_day' => 'integer',
             'account_id' => 'integer',
             'slot_times' => 'array',
+            'tiktok_direct' => 'array',
         ];
     }
 
@@ -46,5 +51,19 @@ class PlatformSetting extends Model
     public function tiktokMode(): string
     {
         return $this->tiktok_mode === 'direct' ? 'direct' : 'inbox';
+    }
+
+    /** @return array{privacy_level: string, allow_comment: bool, allow_duet: bool, allow_stitch: bool} */
+    public function tiktokDirect(): array
+    {
+        $saved = $this->tiktok_direct ?? [];
+        $privacy = $saved['privacy_level'] ?? null;
+
+        return [
+            'privacy_level' => in_array($privacy, TikTokService::PRIVACY_LEVELS, true) ? $privacy : self::TIKTOK_DIRECT_DEFAULTS['privacy_level'],
+            'allow_comment' => (bool) ($saved['allow_comment'] ?? self::TIKTOK_DIRECT_DEFAULTS['allow_comment']),
+            'allow_duet' => (bool) ($saved['allow_duet'] ?? self::TIKTOK_DIRECT_DEFAULTS['allow_duet']),
+            'allow_stitch' => (bool) ($saved['allow_stitch'] ?? self::TIKTOK_DIRECT_DEFAULTS['allow_stitch']),
+        ];
     }
 }

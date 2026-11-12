@@ -50,6 +50,7 @@ class AccountsController extends Controller
                         'slot_times' => $setting->slot_times,
                         'timezone' => $setting->timezone,
                         'mode' => $platform === 'tiktok' ? $setting->tiktokMode() : null,
+                        'direct' => $platform === 'tiktok' ? $setting->tiktokDirect() : null,
                         'saved' => $setting->exists,
                     ],
                 ];

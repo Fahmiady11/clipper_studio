@@ -134,8 +134,20 @@
                     <p class="rs-error" x-show="tiktokCreatorError" x-text="tiktokCreatorError"></p>
                     <template x-if="tiktokCreator">
                       <div class="rs-fields">
-                        <p class="rs-muted">Posting sebagai <b x-text="tiktokCreator.creator_nickname || tiktokCreator.creator_username"></b>, hanya terlihat oleh kamu (Hanya saya) sampai app TikTok lolos audit.</p>
+                        <p class="rs-muted">Posting sebagai <b x-text="tiktokCreator.creator_nickname || tiktokCreator.creator_username"></b>. Setelah dikirim, TikTok butuh beberapa menit memproses video sebelum muncul di profil.</p>
                         <p class="rs-error" x-show="tiktokTooLong" x-text="`Clip ini ${Math.round(tiktokClipSeconds)} detik, akun TikTok ini maksimal ${tiktokCreator.max_video_post_duration_sec} detik.`"></p>
+                        <label class="rs-field">
+                          <span class="rs-label">Siapa yang bisa menonton</span>
+                          <select class="select" x-model="tiktokPrivacy">
+                            <option value="">Pilih</option>
+                            <template x-for="level in tiktokCreator.privacy_level_options || []" :key="level">
+                              <option :value="level" :disabled="level === 'SELF_ONLY' && tiktokBrandContent" :selected="level === tiktokPrivacy"
+                                      x-text="PRIVACY_LABELS[level] || level"></option>
+                            </template>
+                          </select>
+                        </label>
+                        <p class="rs-warn" x-show="!tiktokPrivacy">Pilih siapa yang bisa menonton sebelum mengirim.</p>
+                        <p class="rs-dim" x-show="tiktokBrandContent">Branded content tidak bisa diposting sebagai Hanya saya.</p>
                         <div class="rs-checks">
                           <label :class="{ off: tiktokCreator.comment_disabled }"><input type="checkbox" x-model="tiktokAllowComment" :disabled="tiktokCreator.comment_disabled"> Izinkan komentar</label>
                           <label :class="{ off: tiktokCreator.duet_disabled }"><input type="checkbox" x-model="tiktokAllowDuet" :disabled="tiktokCreator.duet_disabled"> Izinkan duet</label>
@@ -148,9 +160,9 @@
                           </label>
                           <div x-show="tiktokDisclose" class="rs-fields" style="margin:10px 0 0 30px">
                             <label class="rs-check-row"><input type="checkbox" x-model="tiktokBrandOrganic"><span>Brand kamu sendiri<span class="rs-dim">Kamu mempromosikan diri sendiri atau bisnismu.</span></span></label>
-                            <label class="rs-check-row"><input type="checkbox" x-model="tiktokBrandContent"><span>Branded content<span class="rs-dim">Kamu mempromosikan brand lain atau pihak ketiga.</span></span></label>
+                            <label class="rs-check-row"><input type="checkbox" x-model="tiktokBrandContent" @change="if (tiktokBrandContent && tiktokPrivacy === 'SELF_ONLY') tiktokPrivacy = ''"><span>Branded content<span class="rs-dim">Kamu mempromosikan brand lain atau pihak ketiga.</span></span></label>
                             <p class="rs-warn" x-show="!tiktokBrandOrganic && !tiktokBrandContent">Pilih minimal satu jenis promosi.</p>
-                            <p class="rs-dim" x-show="tiktokBrandLabel" x-text="`Video kamu akan diberi label '${tiktokBrandLabel}'. Konten branded belum bisa diposting selama app TikTok menunggu audit.`"></p>
+                            <p class="rs-dim" x-show="tiktokBrandLabel" x-text="`Video kamu akan diberi label '${tiktokBrandLabel}'.`"></p>
                           </div>
                         </div>
                         <p class="rs-dim">

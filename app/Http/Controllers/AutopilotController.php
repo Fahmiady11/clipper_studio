@@ -18,6 +18,7 @@ use App\Services\ConnectedAccounts;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
 use App\Services\StorageCleanup;
+use App\Services\TikTokService;
 use App\Support\CaptionCredit;
 use App\Support\ClipSettings;
 use App\Support\YoutubeUrl;
@@ -293,7 +294,7 @@ class AutopilotController extends Controller
         return response()->json($this->presentAutopost(PlatformSetting::for(Auth::id(), $platform), $autopost, $connected));
     }
 
-    /** A platform's switch and slots. account_id, when given, becomes the default. mode (tiktok only): inbox or direct. */
+    /** A platform's switch and slots. account_id, when given, becomes the default. TikTok only: mode (inbox or direct) and direct (privacy_level, allow_*). */
     public function updateAutopostSettings(Request $request, string $platform, Autopost $autopost, ConnectedAccounts $connected): JsonResponse
     {
         $data = $request->validate([
@@ -304,6 +305,13 @@ class AutopilotController extends Controller
             'slot_times.*' => ['required', 'string', 'distinct', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
             'timezone' => ['required', 'timezone:all'],
             'mode' => $platform === 'tiktok' ? ['nullable', Rule::in(PlatformSetting::TIKTOK_MODES)] : [],
+            ...($platform === 'tiktok' ? [
+                'direct' => ['sometimes', 'array'],
+                'direct.privacy_level' => ['sometimes', Rule::in(TikTokService::PRIVACY_LEVELS)],
+                'direct.allow_comment' => ['sometimes', 'boolean'],
+                'direct.allow_duet' => ['sometimes', 'boolean'],
+                'direct.allow_stitch' => ['sometimes', 'boolean'],
+            ] : []),
         ], [
             'slot_times.*.regex' => 'Jam upload harus format JJ:MM, misalnya 09:00.',
             'slot_times.*.distinct' => 'Ada jam upload yang sama.',
@@ -322,6 +330,7 @@ class AutopilotController extends Controller
             'slot_times' => collect($data['slot_times'])->sort()->values()->all(),
             'timezone' => $data['timezone'],
             ...($platform === 'tiktok' && isset($data['mode']) ? ['tiktok_mode' => $data['mode']] : []),
+            ...($platform === 'tiktok' && isset($data['direct']) ? ['tiktok_direct' => array_intersect_key($data['direct'], PlatformSetting::TIKTOK_DIRECT_DEFAULTS) + $settings->tiktokDirect()] : []),
         ])->save();
 
         return response()->json($this->presentAutopost($settings, $autopost, $connected));
@@ -453,6 +462,7 @@ class AutopilotController extends Controller
             'slot_times' => $settings->slot_times,
             'timezone' => $settings->timezone,
             'mode' => $platform === 'tiktok' ? $settings->tiktokMode() : null,
+            'direct' => $platform === 'tiktok' ? $settings->tiktokDirect() : null,
             'saved' => $settings->exists,
         ];
     }

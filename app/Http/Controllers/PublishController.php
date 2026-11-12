@@ -11,9 +11,11 @@ use App\Services\ConnectedAccounts;
 use App\Services\MetaPublishing;
 use App\Services\PostOptions;
 use App\Services\ScheduledPublisher;
+use App\Services\TikTokService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -53,14 +55,12 @@ class PublishController extends Controller
             'tiktok_allow_comment' => ['sometimes', 'boolean'],
             'tiktok_allow_duet' => ['sometimes', 'boolean'],
             'tiktok_allow_stitch' => ['sometimes', 'boolean'],
-            'tiktok_branded' => ['sometimes', 'boolean'],
+            'tiktok_privacy_level' => ['nullable', Rule::in(TikTokService::PRIVACY_LEVELS)],
+            'tiktok_brand_organic' => ['sometimes', 'boolean'],
+            'tiktok_brand_content' => ['sometimes', 'boolean'],
         ], ['platforms.required' => 'Centang minimal satu platform.']);
         $clip = $this->ownedClip($clipId);
         abort_if($clip->status !== 'done' || ! $clip->output_path, 422, 'Clip belum selesai dirender.');
-        if (! empty($data['tiktok_branded']) && in_array('tiktok', $data['platforms'], true)) {
-            // TikTok rejects branded content from an unaudited app (only private posts are allowed)
-            throw ValidationException::withMessages(['platforms.tiktok' => 'Konten branded/bisnis belum tersedia, app TikTok masih menunggu audit konten.']);
-        }
         $when = isset($data['scheduled_at']) ? $this->posts->scheduledTime($data['scheduled_at']) : null;
 
         // Check every platform first: nothing is sent unless all of them can go
@@ -142,6 +142,9 @@ class PublishController extends Controller
                 'allow_comment' => $data['tiktok_allow_comment'] ?? false,
                 'allow_duet' => $data['tiktok_allow_duet'] ?? false,
                 'allow_stitch' => $data['tiktok_allow_stitch'] ?? false,
+                'privacy_level' => $data['tiktok_privacy_level'] ?? null,
+                'brand_organic_toggle' => $data['tiktok_brand_organic'] ?? false,
+                'brand_content_toggle' => $data['tiktok_brand_content'] ?? false,
             ],
         };
         $options = $this->posts->build($platform, $fields, $clip);

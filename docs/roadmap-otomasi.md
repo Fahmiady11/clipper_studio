@@ -62,7 +62,8 @@ Teknis:
 Mode **Posting langsung (Direct Post)** — selesai:
 - Aktifkan scope `video.publish` di app TikTok, set `TIKTOK_SCOPES=user.info.basic,video.upload,video.publish` di `.env`, lalu hubungkan ulang akun.
 - Form mengikuti syarat TikTok: nama akun dari `creator_info`, pilihan privasi tanpa default, toggle komentar/duet/stitch (mati jika dimatikan creator), caption (diisi dari caption Gemini, bisa diedit), teks persetujuan musik.
-- Sebelum app lolos audit TikTok, hanya privasi **Hanya saya** (`SELF_ONLY`) yang diterima.
+- App sudah lolos audit konten TikTok: semua privasi yang diizinkan akun (`privacy_level_options` dari `creator_info`) bisa dipakai, termasuk Publik, plus pengungkapan konten bisnis (brand sendiri / branded content; branded content tidak bisa Hanya saya). Berlaku di Studio, kalender, dan autopilot.
+- Autopilot mode posting langsung menyimpan privasi dan izin komentar/duet/stitch di `platform_settings.tiktok_direct` (JSON, null = default Publik, interaksi mati). Jadwal lama tanpa `privacy_level` tetap diposting sebagai Hanya saya.
 
 ## Fase 3 — Autopilot: discovery otomatis + antrian review (selesai)
 

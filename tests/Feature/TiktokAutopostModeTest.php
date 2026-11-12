@@ -115,7 +115,8 @@ class TiktokAutopostModeTest extends TestCase
         $setting = PlatformSetting::firstOrFail();
         $this->assertSame('inbox', $setting->tiktokMode());
         $this->assertSame('inbox', app(TiktokAutopost::class)->options($this->reviewClip($user), 'Cap', [], null, $setting)['mode']);
-        $this->actingAs($user)->getJson('/api/autopilot/tiktok')->assertJson(['mode' => 'inbox']);
+        $this->assertNull($setting->tiktok_direct);
+        $this->actingAs($user)->getJson('/api/autopilot/tiktok')->assertJson(['mode' => 'inbox', 'direct' => PlatformSetting::TIKTOK_DIRECT_DEFAULTS]);
     }
 
     public function test_options_shape_per_mode(): void
@@ -128,12 +129,26 @@ class TiktokAutopostModeTest extends TestCase
         $this->assertSame($shape('inbox'), $tiktok->options($clip, 'Cap', ['#a', '#b']));
         $this->assertSame($shape('inbox'), $tiktok->options($clip, 'Cap', ['#a', '#b'], null, PlatformSetting::for($user->id, 'tiktok')));
 
+        // Direct without saved choices: the defaults the settings page shows
         $direct = $tiktok->options($clip, 'Cap', ['#a', '#b'], null, new PlatformSetting(['tiktok_mode' => 'direct']));
-        $this->assertSame($shape('direct'), $direct);
         $this->assertSame([
-            'title' => "Cap\n\n#a #b", 'privacy_level' => 'SELF_ONLY', 'disable_comment' => true, 'disable_duet' => true,
+            'mode' => 'direct', 'title' => "Cap\n\n#a #b", 'allow_comment' => false, 'allow_duet' => false, 'allow_stitch' => false,
+            'privacy_level' => 'PUBLIC_TO_EVERYONE', 'autopilot' => true,
+        ], $direct);
+        $this->assertSame([
+            'title' => "Cap\n\n#a #b", 'privacy_level' => 'PUBLIC_TO_EVERYONE', 'disable_comment' => true, 'disable_duet' => true,
             'disable_stitch' => true, 'brand_organic_toggle' => false, 'brand_content_toggle' => false,
         ], ScheduledPublisher::tiktokPostInfo($direct));
+
+        $chosen = new PlatformSetting(['tiktok_mode' => 'direct', 'tiktok_direct' => ['privacy_level' => 'FOLLOWER_OF_CREATOR', 'allow_comment' => true, 'allow_stitch' => true]]);
+        $this->assertSame(
+            ['allow_comment' => true, 'allow_duet' => false, 'allow_stitch' => true, 'privacy_level' => 'FOLLOWER_OF_CREATOR'],
+            array_intersect_key($tiktok->options($clip, 'Cap', [], null, $chosen), PlatformSetting::TIKTOK_DIRECT_DEFAULTS),
+        );
+
+        // Inbox ignores saved direct choices
+        $inbox = new PlatformSetting(['tiktok_mode' => 'inbox', 'tiktok_direct' => ['privacy_level' => 'FOLLOWER_OF_CREATOR', 'allow_comment' => true]]);
+        $this->assertSame($shape('inbox'), $tiktok->options($clip, 'Cap', ['#a', '#b'], null, $inbox));
     }
 
     public function test_approve_books_a_direct_post_that_goes_out_as_direct(): void
@@ -156,8 +171,56 @@ class TiktokAutopostModeTest extends TestCase
 
         Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->mode === 'direct'
             && $job->postInfo['title'] === "Dengar ini sampai habis.\n\n#bisnis #umkm"
-            && $job->postInfo['privacy_level'] === 'SELF_ONLY');
+            && $job->postInfo['privacy_level'] === 'PUBLIC_TO_EVERYONE');
         $this->assertSame('queued', $clip->fresh()->tiktok_status);
+    }
+
+    public function test_saved_direct_choices_reach_the_upload(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->account($user);
+        $this->setting($user, $account, ['tiktok_mode' => 'direct', 'tiktok_direct' => [
+            'privacy_level' => 'MUTUAL_FOLLOW_FRIENDS', 'allow_comment' => true, 'allow_duet' => true, 'allow_stitch' => false,
+        ]]);
+        $clip = $this->reviewClip($user);
+
+        $this->actingAs($user)->postJson("/api/autopilot/review/{$clip->id}/approve")->assertOk();
+        $this->travelTo(CarbonImmutable::parse('2026-11-10 15:01', 'Asia/Jakarta'));
+        app(ScheduledPublisher::class)->publishDue();
+
+        Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->accountId === $account->id && $job->postInfo === [
+            'title' => "Dengar ini sampai habis.\n\n#bisnis #umkm", 'privacy_level' => 'MUTUAL_FOLLOW_FRIENDS', 'disable_comment' => false,
+            'disable_duet' => false, 'disable_stitch' => true, 'brand_organic_toggle' => false, 'brand_content_toggle' => false,
+        ]);
+    }
+
+    public function test_direct_choices_save_load_and_validate(): void
+    {
+        $user = User::factory()->create();
+        $this->account($user);
+        $defaults = ['privacy_level' => 'PUBLIC_TO_EVERYONE', 'allow_comment' => false, 'allow_duet' => false, 'allow_stitch' => false];
+
+        $this->actingAs($user)->getJson('/api/autopilot/tiktok')->assertJson(['direct' => $defaults]);
+        $this->actingAs($user)->getJson('/api/accounts')->assertJsonPath('platforms.0.autopost.direct', $defaults);
+
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', self::SETTINGS + ['mode' => 'direct', 'direct' => [
+            'privacy_level' => 'FOLLOWER_OF_CREATOR', 'allow_comment' => true, 'allow_duet' => false, 'allow_stitch' => true,
+        ]])->assertOk()->assertJson(['mode' => 'direct', 'direct' => ['privacy_level' => 'FOLLOWER_OF_CREATOR', 'allow_comment' => true, 'allow_duet' => false, 'allow_stitch' => true]]);
+
+        // A partial update keeps the rest; a save without direct leaves it alone
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', self::SETTINGS + ['direct' => ['allow_comment' => false]])
+            ->assertOk()->assertJsonPath('direct', ['privacy_level' => 'FOLLOWER_OF_CREATOR', 'allow_comment' => false, 'allow_duet' => false, 'allow_stitch' => true]);
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', self::SETTINGS)->assertOk()->assertJsonPath('direct.privacy_level', 'FOLLOWER_OF_CREATOR');
+        $this->actingAs($user)->getJson('/api/accounts')->assertJsonPath('platforms.0.autopost.direct.privacy_level', 'FOLLOWER_OF_CREATOR');
+
+        $this->actingAs($user)->putJson('/api/autopilot/tiktok', self::SETTINGS + ['direct' => ['privacy_level' => 'EVERYONE', 'allow_duet' => 'maybe']])
+            ->assertUnprocessable()->assertJsonValidationErrors(['direct.privacy_level', 'direct.allow_duet']);
+        $this->assertSame('FOLLOWER_OF_CREATOR', PlatformSetting::sole()->tiktokDirect()['privacy_level']);
+
+        // Other platforms carry no TikTok choices
+        $this->actingAs($user)->putJson('/api/autopilot/youtube', ['enabled' => false] + self::SETTINGS + ['direct' => ['privacy_level' => 'SELF_ONLY']])
+            ->assertOk()->assertJson(['direct' => null]);
+        $this->assertNull(PlatformSetting::where('platform', 'youtube')->value('tiktok_direct'));
     }
 
     public function test_inbox_booking_keeps_the_inbox_mode(): void

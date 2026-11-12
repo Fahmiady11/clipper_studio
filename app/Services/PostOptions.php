@@ -8,6 +8,7 @@ use App\Models\MetaTarget;
 use App\Models\TiktokAccount;
 use App\Models\YoutubeAccount;
 use Carbon\CarbonImmutable;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -38,6 +39,9 @@ class PostOptions
             'allow_comment' => ['sometimes', 'boolean'],
             'allow_duet' => ['sometimes', 'boolean'],
             'allow_stitch' => ['sometimes', 'boolean'],
+            'privacy_level' => ['nullable', Rule::in(TikTokService::PRIVACY_LEVELS)],
+            'brand_organic_toggle' => ['sometimes', 'boolean'],
+            'brand_content_toggle' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -132,12 +136,31 @@ class PostOptions
 
     private function tiktok(array $data): array
     {
-        return [
+        $options = [
             'mode' => $data['mode'] ?? 'inbox',
             'title' => (string) ($data['title'] ?? ''),
             'allow_comment' => (bool) ($data['allow_comment'] ?? false),
             'allow_duet' => (bool) ($data['allow_duet'] ?? false),
             'allow_stitch' => (bool) ($data['allow_stitch'] ?? false),
+        ];
+        if ($options['mode'] !== 'direct') {
+            return $options;
+        }
+
+        // TikTok wants the viewer audience chosen by the user, never preset
+        $privacy = $data['privacy_level'] ?? null;
+        if (! in_array($privacy, TikTokService::PRIVACY_LEVELS, true)) {
+            throw ValidationException::withMessages(['privacy_level' => 'Pilih siapa yang bisa menonton video ini di TikTok.']);
+        }
+        $branded = (bool) ($data['brand_content_toggle'] ?? false);
+        if ($branded && $privacy === 'SELF_ONLY') {
+            throw ValidationException::withMessages(['privacy_level' => TikTokService::BRANDED_SELF_ONLY]);
+        }
+
+        return $options + [
+            'privacy_level' => $privacy,
+            'brand_organic_toggle' => (bool) ($data['brand_organic_toggle'] ?? false),
+            'brand_content_toggle' => $branded,
         ];
     }
 }

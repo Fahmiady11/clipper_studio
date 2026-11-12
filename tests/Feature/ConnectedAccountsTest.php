@@ -90,7 +90,7 @@ class ConnectedAccountsTest extends TestCase
             ->assertJsonPath('platforms.0.connect_url', '/tiktok/connect')
             ->assertJsonPath('platforms.0.default_id', $first->id) // nothing chosen yet: the oldest
             ->assertJsonPath('platforms.0.accounts.1.name', 'Dua')
-            ->assertJsonPath('platforms.0.autopost', ['enabled' => false, 'max_per_day' => 3, 'slot_times' => ['09:00', '15:00', '20:00'], 'timezone' => 'Asia/Jakarta', 'mode' => 'inbox', 'saved' => false])
+            ->assertJsonPath('platforms.0.autopost', ['enabled' => false, 'max_per_day' => 3, 'slot_times' => ['09:00', '15:00', '20:00'], 'timezone' => 'Asia/Jakarta', 'mode' => 'inbox', 'direct' => PlatformSetting::TIKTOK_DIRECT_DEFAULTS, 'saved' => false])
             ->assertJsonPath('platforms.2.configured', false)
             ->assertJsonPath('platforms.3.connect_url', '/facebook/connect')
             ->assertJsonMissingPath('platforms.0.accounts.0.access_token');

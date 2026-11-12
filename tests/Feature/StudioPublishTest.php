@@ -175,7 +175,7 @@ class StudioPublishTest extends TestCase
         Queue::assertNothingPushed();
 
         $this->send($long, ['platforms' => []])->assertUnprocessable()->assertJsonPath('errors.platforms.0', 'Centang minimal satu platform.');
-        $this->send($long, ['platforms' => ['youtube'], 'tiktok_branded' => true])->assertOk(); // branded only matters for TikTok
+        $this->send($long, ['platforms' => ['youtube'], 'tiktok_brand_content' => true, 'tiktok_privacy_level' => 'SELF_ONLY'])->assertOk(); // branded only matters for TikTok
         $this->actingAs(User::factory()->create())->postJson("/api/clips/{$long->id}/publish", ['platforms' => ['youtube']])->assertForbidden();
     }
 
@@ -185,11 +185,10 @@ class StudioPublishTest extends TestCase
         $first = $this->clip();
         $this->actingAs($this->user)->getJson("/api/clips/{$first->id}/publish")->assertJsonPath('tiktok_mode', 'inbox');
 
-        $this->send($first, ['platforms' => ['tiktok'], 'tiktok_mode' => 'direct', 'tiktok_allow_comment' => true])->assertOk()
+        $this->send($first, ['platforms' => ['tiktok'], 'tiktok_mode' => 'direct', 'tiktok_privacy_level' => 'PUBLIC_TO_EVERYONE', 'tiktok_allow_comment' => true])->assertOk()
             ->assertJsonPath('tiktok_mode', 'direct');
-        // Still TikTok's private-only direct post, with the creator's choices
         Queue::assertPushed(UploadToTikTokJob::class, fn ($job) => $job->mode === 'direct'
-            && $job->postInfo['privacy_level'] === 'SELF_ONLY' && $job->postInfo['disable_comment'] === false && $job->postInfo['disable_duet'] === true);
+            && $job->postInfo['privacy_level'] === 'PUBLIC_TO_EVERYONE' && $job->postInfo['disable_comment'] === false && $job->postInfo['disable_duet'] === true);
 
         // A send without TikTok leaves the remembered mode alone
         $this->send($this->clip(), ['platforms' => ['youtube']])->assertOk()->assertJsonPath('tiktok_mode', 'direct');
