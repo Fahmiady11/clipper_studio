@@ -48,13 +48,14 @@ final class Cancellation
     /**
      * Run a shell command like exec(), but stop it when the watched job is cancelled.
      *
+     * @param  array<string, string>  $env  variables added to the inherited environment
      * @return array{0: int, 1: list<string>} exit code and output lines
      */
-    public static function exec(string $command): array
+    public static function exec(string $command, array $env = []): array
     {
         set_time_limit(0); // encodes/downloads outlast PHP max_execution_time
 
-        $process = Process::fromShellCommandline($command, null, null, null, null);
+        $process = Process::fromShellCommandline($command, null, $env ?: null, null, null);
         $process->start();
 
         $lastCheck = microtime(true);

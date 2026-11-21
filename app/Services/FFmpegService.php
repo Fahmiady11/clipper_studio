@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Support\Cancellation;
 use App\Support\ClipSettings;
 use App\Support\EmojiCues;
+use App\Support\FilterExpr;
 use App\Support\FontMetrics;
 use App\Support\SfxCues;
 use RuntimeException;
@@ -218,7 +219,7 @@ class FFmpegService
     {
         $w = (int) round(1080 * SmartCut::ZOOM / 2) * 2;
         $h = (int) round($height * SmartCut::ZOOM / 2) * 2;
-        $on = implode('+', array_map(fn ($s) => sprintf('between(t,%.3f,%.3f)', $s[0], $s[1] - 0.001), $spans));
+        $on = FilterExpr::sum(array_map(fn ($s) => sprintf('between(t,%.3f,%.3f)', $s[0], $s[1] - 0.001), $spans));
 
         return "{$video}split=2[zbase][zsrc];"
             ."[zsrc]scale={$w}:{$h}:flags=bicubic,crop=1080:{$height}:(iw-ow)/2:(ih-oh)*0.4[zin];"
@@ -956,7 +957,9 @@ class FFmpegService
 
     private function exec(string $cmd, string $context): void
     {
-        [$code, $output] = Cancellation::exec($cmd);
+        // libass asks fontconfig for a cache dir; the web user's home is not writable
+        // ("Fontconfig error: No writable cache directories"), so it gets one in storage
+        [$code, $output] = Cancellation::exec($cmd, ['XDG_CACHE_HOME' => storage_path('framework/cache')]);
         if ($code !== 0) {
             throw new RuntimeException("FFmpeg {$context} failed:\n".implode("\n", $output));
         }

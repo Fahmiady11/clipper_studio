@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\FilterExpr;
+
 class VideoLayoutService
 {
     /**
@@ -64,7 +66,7 @@ class VideoLayoutService
             $terms[] = $span.'*'.$value;
         }
 
-        return 'clip(('.implode('+', $terms).')*iw-ow/2,0,iw-ow)';
+        return 'clip(('.FilterExpr::sum($terms).')*iw-ow/2,0,iw-ow)';
     }
 
     public function fontsDir(): string
