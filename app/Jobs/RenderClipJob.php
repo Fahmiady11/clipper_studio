@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\FFmpegFailed;
 use App\Models\BrandKit;
 use App\Models\GeneratedClip;
 use App\Services\EditPlanner;
@@ -36,7 +37,11 @@ class RenderClipJob implements ShouldQueue
 
     public int $timeout = 1800; // two libx264 "slow" passes on long clips can take >10 min
 
-    public function __construct(public string $clipId) {}
+    public function __construct(public string $clipId)
+    {
+        // Own queue and worker: a short render never waits behind an hour-long analysis
+        $this->onQueue('render');
+    }
 
     /**
      * Never run the same clip twice in parallel: a stale copy handed out
@@ -69,6 +74,13 @@ class RenderClipJob implements ShouldQueue
             $this->cleanupTemp($tempDir, $this->clipId);
             app(RenderQuota::class)->release($this->clipId);
             Log::channel('clipper_jobs')->info('RenderClipJob cancelled', ['clip_id' => $this->clipId]);
+        } catch (FFmpegFailed $e) {
+            // A second attempt renders the same command into the same error and can run
+            // into the watchdog's timeout message instead, so fail now with ffmpeg's own
+            if (! $this->job) {
+                throw $e;
+            }
+            $this->fail($e);
         }
     }
 

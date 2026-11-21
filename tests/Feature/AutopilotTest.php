@@ -103,6 +103,7 @@ class AutopilotTest extends TestCase
         $this->assertSame('Chan', $project->source_channel);
         $this->assertNotNull($project->subtitleSetting);
         Queue::assertPushed(AnalyzeVideoJob::class, 2);
+        Queue::assertPushedOn('analyze', AnalyzeVideoJob::class);
         $this->assertNotNull($source->fresh()->last_run_at);
 
         // Second run: nothing new
@@ -144,7 +145,7 @@ class AutopilotTest extends TestCase
         $clip = GeneratedClip::where('clip_project_id', $project->id)->firstOrFail();
         $this->assertSame('pending', $clip->review_status);
         $this->assertSame([['time' => 12.5, 'query' => 'counting money']], $clip->broll_json); // ready for the render, no extra AI call
-        Queue::assertPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
+        Queue::assertPushedOn('render', RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
         exec('rm -rf '.escapeshellarg(storage_path('app/temp/'.$project->id)));
     }
 

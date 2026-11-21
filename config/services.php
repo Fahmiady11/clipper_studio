@@ -58,6 +58,8 @@ return [
 
     'ffmpeg' => [
         'path' => env('FFMPEG_PATH', 'ffmpeg'),
+        // libx264 threads per encode; unset = ffmpeg uses every core
+        'threads' => env('FFMPEG_THREADS'),
     ],
 
     // Python with opencv-python-headless for face-following reframe; '' = centre crop only

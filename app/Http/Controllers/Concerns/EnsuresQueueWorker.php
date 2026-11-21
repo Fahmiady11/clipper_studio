@@ -31,6 +31,9 @@ trait EnsuresQueueWorker
         $log = storage_path('logs/queue-worker.log');
 
         // --timeout covers the longest job (AnalyzeVideoJob, 1h); jobs also set their own
-        exec("nohup {$php} {$artisan} queue:work --timeout=3600 --memory=512 --sleep=1 >> {$log} 2>&1 &");
+        // One worker per heavy queue, like production, so a render does not wait for an analysis
+        foreach (['analyze,default --timeout=3600', 'render,default --timeout=1800'] as $queue) {
+            exec("nohup {$php} {$artisan} queue:work --queue={$queue} --memory=512 --sleep=1 >> {$log} 2>&1 &");
+        }
     }
 }

@@ -38,7 +38,7 @@ class RenderQuotaTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/clips/{$clip->id}/render")->assertOk();
 
-        Queue::assertPushed(RenderClipJob::class);
+        Queue::assertPushedOn('render', RenderClipJob::class);
         $this->assertSame(90, app(RenderQuota::class)->usedSeconds($user));
     }
 

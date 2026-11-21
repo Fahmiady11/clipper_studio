@@ -115,7 +115,7 @@ class HookTestTest extends TestCase
         $this->assertSame(4, HookTest::sole()->variant_count);
         // No render yet, so the control renders too: 3 variants + the original, each its own reservation of 60 s
         Queue::assertPushed(RenderClipJob::class, 4);
-        Queue::assertPushed(RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
+        Queue::assertPushedOn('render', RenderClipJob::class, fn ($job) => $job->clipId === $clip->id);
         $this->assertSame(4, RenderUsage::where('status', 'reserved')->count());
         $this->assertSame(240, (int) RenderUsage::where('user_id', $user->id)->sum('seconds'));
         $this->assertSame('processing', $clip->fresh()->status);

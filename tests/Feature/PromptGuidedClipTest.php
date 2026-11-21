@@ -222,7 +222,7 @@ class PromptGuidedClipTest extends TestCase
         $this->assertSame('reserved', RenderUsage::where('generated_clip_id', $clip->id)->value('status'));
         Bus::assertChained([
             fn (DescribeClipJob $job) => $job->clipId === $clip->id,
-            fn (RenderClipJob $job) => $job->clipId === $clip->id,
+            fn (RenderClipJob $job) => $job->clipId === $clip->id && $job->queue === 'render',
         ]);
     }
 

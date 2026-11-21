@@ -32,13 +32,24 @@ services:
       start_period: 30s
       retries: 3
 
+  # Two workers so a short render never waits behind an hour-long analysis.
+  # Each takes its own queue first, then the short default jobs (describe, upload,
+  # publish, discovery). Every job sets its own $tries/$timeout, which win over the
+  # flags; --timeout is only the fallback and matches the queue's job
+  # (retry_after=3700 in config/queue.php is above both).
   queue:
     <<: *app
     pull_policy: never
-    # No --tries/--timeout: per-job $tries/$timeout apply (retry_after=3700 in config/queue.php).
-    command: ["php", "artisan", "queue:work", "--sleep=3"]
+    command: ["php", "artisan", "queue:work", "--queue=analyze,default", "--timeout=3600", "--sleep=3"]
     stop_signal: SIGTERM
     stop_grace_period: 65m
+
+  queue-render:
+    <<: *app
+    pull_policy: never
+    command: ["php", "artisan", "queue:work", "--queue=render,default", "--timeout=1800", "--sleep=3"]
+    stop_signal: SIGTERM
+    stop_grace_period: 35m
 
   scheduler:
     <<: *app

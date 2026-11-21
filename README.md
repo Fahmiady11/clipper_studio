@@ -98,7 +98,7 @@ Jalankan semuanya:
 composer dev
 ```
 
-`composer dev` menjalankan `php artisan serve`, `queue:work --timeout=3600 --memory=512`, `schedule:work`, `pail`, dan `npm run dev` sekaligus. Buka `http://localhost:8000` dan daftarkan akun pertama (otomatis jadi admin). Tanpa queue worker, project berhenti di "Menunggu antrian"; tanpa scheduler, Autopilot, kalender, dan polling status tidak jalan.
+`composer dev` menjalankan `php artisan serve`, dua worker (`queue:work --queue=analyze,default` dan `queue:work --queue=render,default`), `schedule:work`, `pail`, dan `npm run dev` sekaligus. Buka `http://localhost:8000` dan daftarkan akun pertama (otomatis jadi admin). Tanpa queue worker, project berhenti di "Menunggu antrian"; tanpa scheduler, Autopilot, kalender, dan polling status tidak jalan.
 
 Perintah lain: `composer lint` (Pint), `composer test`.
 
@@ -106,7 +106,14 @@ Instagram dan Threads mengambil video dari server lewat link bertanda tangan, ja
 
 ## Queue worker dan scheduler
 
-Worker: `php artisan queue:work --timeout=3600 --memory=512` (di produksi 2 proses, lihat `deploy/supervisor.conf` atau service `queue` di `docker-compose.prod.yml`). Scheduler: `php artisan schedule:work` (atau cron `schedule:run` tiap menit).
+Worker: dua proses, satu untuk analisis dan satu untuk render, supaya render pendek tidak antre di belakang analisis yang panjang:
+
+```bash
+php artisan queue:work --queue=analyze,default --timeout=3600 --memory=512
+php artisan queue:work --queue=render,default --timeout=1800 --memory=512
+```
+
+Di produksi: service `queue` dan `queue-render` di `docker-compose.prod.yml` (atau `deploy/supervisor.conf`). Worker yang hanya membaca `default` tidak pernah mengambil analisis atau render. `FFMPEG_THREADS` membatasi thread libx264 per encode agar keduanya bisa jalan bersamaan. Scheduler: `php artisan schedule:work` (atau cron `schedule:run` tiap menit).
 
 Jadwal di `routes/console.php`:
 
@@ -287,7 +294,7 @@ Issue tracking memakai [beads](https://github.com/gastownhall/beads): `bd ready`
 
 | Gejala | Penyebab dan solusi |
 |---|---|
-| Project berhenti di "Menunggu antrian" | Queue worker tidak jalan. Lokal: `composer dev`. Produksi: restart service `queue` |
+| Project berhenti di "Menunggu antrian" | Queue worker tidak jalan. Lokal: `composer dev`. Produksi: restart service `queue` dan `queue-render` |
 | Autopilot, kalender, atau status upload tidak bergerak | Scheduler tidak jalan (`schedule:work` atau cron `schedule:run`) |
 | Kuota Gemini habis atau 503 | Isi `LLM_GATEWAY_*` atau key berbayar, lalu coba lagi dari project |
 | "Sign in to confirm you're not a bot" | Isi `YTDLP_COOKIES_BROWSER` atau `YTDLP_COOKIES`, perbarui yt-dlp |

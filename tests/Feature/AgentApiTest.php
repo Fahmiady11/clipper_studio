@@ -79,7 +79,7 @@ class AgentApiTest extends TestCase
         $this->assertDatabaseHas('clip_projects', [
             'id' => $res->json('project_id'), 'user_id' => $this->user->id, 'layout_type' => 'reframe', 'clip_count' => 3,
         ]);
-        Queue::assertPushed(AnalyzeVideoJob::class);
+        Queue::assertPushedOn('analyze', AnalyzeVideoJob::class);
     }
 
     public function test_agent_lists_clips_and_gets_download_url_when_done(): void

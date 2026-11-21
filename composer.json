@@ -42,7 +42,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#86efac,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:work --timeout=3600 --memory=512\" \"php artisan schedule:work\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,schedule,logs,vite --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#a5b4fc,#86efac,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:work --queue=analyze,default --timeout=3600 --memory=512\" \"php artisan queue:work --queue=render,default --timeout=1800 --memory=512\" \"php artisan schedule:work\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,analyze,render,schedule,logs,vite --kill-others"
         ],
         "lint": [
             "pint"

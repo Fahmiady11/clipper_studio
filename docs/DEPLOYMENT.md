@@ -30,7 +30,8 @@ VPS /srv/clipper  (git clone, owner: deploy)
    v
 docker compose -p clipper -f docker-compose.prod.yml
    app        nginx + php-fpm (supervisord)   127.0.0.1:8095 -> :80
-   queue      php artisan queue:work          stop_grace_period 65m
+   queue          queue:work --queue=analyze,default   stop_grace_period 65m
+   queue-render   queue:work --queue=render,default    stop_grace_period 35m
    scheduler  php artisan schedule:work
    postgres   postgres:17, tanpa port ke host
    |
@@ -38,7 +39,9 @@ docker compose -p clipper -f docker-compose.prod.yml
 Nginx di host  clipper.asfahmidev.com:443 -> http://127.0.0.1:8095
 ```
 
-`app`, `queue`, dan `scheduler` memakai **image yang sama**: `clipper-app:<sha>`. Image dibangun di VPS (tidak ada registry).
+Analisis video (`AnalyzeVideoJob`, antrean `analyze`) dan render klip (`RenderClipJob`, antrean `render`) punya worker sendiri, jadi render pendek tidak menunggu analisis yang bisa sampai sejam. Job pendek lain (deskripsi klip, upload TikTok/YouTube, publish Meta, discovery Autopilot) ada di antrean `default` dan diambil worker mana pun yang sedang kosong. Supaya dua encode bisa jalan bersamaan tanpa rebutan CPU, isi `FFMPEG_THREADS` di `.env` (kira-kira setengah jumlah core).
+
+`app`, `queue`, `queue-render`, dan `scheduler` memakai **image yang sama**: `clipper-app:<sha>`. Image dibangun di VPS (tidak ada registry).
 
 Aturan pemicu:
 
@@ -65,7 +68,7 @@ Aturan pemicu:
    8. `up -d app scheduler` (web langsung versi baru);
    9. `php artisan migrate --force`;
    10. health check `http://127.0.0.1:8095/up` maksimal 30 detik; gagal = tampilkan 50 baris log `app`, workflow merah;
-   11. `up -d queue`, yang me-restart worker dan **menunggu job video yang sedang jalan selesai** (sampai 65 menit);
+   11. `up -d queue queue-render`, yang me-restart kedua worker dan **menunggu job video yang sedang jalan selesai** (sampai 65 menit);
    12. hapus image lama (simpan 3 tag `clipper-app` terbaru) dan cache build Docker yang lebih tua dari 7 hari. **Catatan:** cache build tidak bisa dipilah per project, jadi pembersihan ini berlaku untuk **seluruh VPS** (project lain juga). Yang dihapus hanya cache build lama yang tidak terpakai — bukan image, container, atau volume — paling buruk build project lain jadi sedikit lebih lama sekali.
 6. Workflow hijau = versi baru live.
 
@@ -78,7 +81,7 @@ Aturan pemicu:
 | `docker/entrypoint.sh` | Dijalankan setiap container start: buat folder `storage/`, `chown` ke `www-data`, lalu `config:cache`, `route:cache`, `view:cache`, `event:cache`. | Volume `storage` bisa kosong/milik root saat pertama kali. **Karena config di-cache saat container start, mengubah `.env` baru berlaku setelah container dibuat ulang.** Migrasi sengaja *tidak* di sini supaya 3 container tidak migrate bersamaan. |
 | `docker/nginx.conf` | Nginx di dalam container `app`: root `public/`, teruskan `.php` ke php-fpm `127.0.0.1:9000`, upload sampai 2 GB, timeout 300 detik. | Ini Nginx *kedua*, bukan Nginx host. Yang di host hanya reverse proxy + TLS. Karena app hanya mempercayai proxy `127.0.0.1` sedangkan request tiba dari gateway Docker (`172.x.0.1`), Nginx ini yang membaca `X-Forwarded-For` (IP klien asli, `real_ip`) dan mengirim `HTTPS=on` ke PHP bila `X-Forwarded-Proto: https`. Tanpa itu app membuat URL `http://` (form login diblokir, tanpa HSTS) dan semua pengguna terlihat dengan satu IP. |
 | `docker/supervisord.conf` | Menjalankan `php-fpm` dan `nginx` bersamaan dalam satu container, log ke stdout/stderr. | Docker idealnya satu proses per container; supervisor adalah jalan pintas praktis agar `app` berisi web server lengkap. Log ke stdout supaya terbaca lewat `docker compose logs`. |
-| `docker-compose.prod.yml` | Mendefinisikan 4 service (`app`, `queue`, `scheduler`, `postgres`), 3 volume (`storage`, `whisper-models`, `pgdata`), port `127.0.0.1:8095`. Ada service bantu `whisper-model` (profile `tools`) yang hanya dipakai `deploy.sh`. | Port hanya di `127.0.0.1` sehingga tidak terbuka ke internet; hanya Nginx host yang bisa mengakses. `queue` punya `stop_grace_period: 65m` agar job yang berjalan tidak dibunuh. Data hidup di *volume*, terpisah dari container. |
+| `docker-compose.prod.yml` | Mendefinisikan 5 service (`app`, `queue`, `queue-render`, `scheduler`, `postgres`), 3 volume (`storage`, `whisper-models`, `pgdata`), port `127.0.0.1:8095`. Ada service bantu `whisper-model` (profile `tools`) yang hanya dipakai `deploy.sh`. | Port hanya di `127.0.0.1` sehingga tidak terbuka ke internet; hanya Nginx host yang bisa mengakses. `queue` punya `stop_grace_period: 65m` (analisis) dan `queue-render` 35m (render) agar job yang berjalan tidak dibunuh. Data hidup di *volume*, terpisah dari container. |
 | `deploy.sh` | Skrip deploy yang diuraikan di bagian 2. Argumen wajib: SHA 40 karakter. | Dipakai oleh CI **dan** untuk deploy/rollback manual: satu jalur untuk keduanya. Seluruh isi dibungkus fungsi `main()` supaya aman saat `git checkout` mengganti file ini di tengah jalan. Aman dijalankan ulang dengan SHA yang sama. Deploy berjalan terlepas dari sesi SSH (log per deploy di `logs/`, 20 terakhir), menolak dijalankan sebagai root, dan kuncinya di `/srv/clipper/.git/deploy.lock`. |
 | `.dockerignore` | Daftar file yang tidak boleh masuk ke image: `.git`, `.env`, `vendor`, `node_modules`, `tests`, `docs`, `deploy`, `backups`, `logs`, `audit-context`, dll. | Mencegah `.env` (rahasia) ikut tertanam di image, dan mempercepat build. |
 | `docs/superpowers/feedback/2026-10-10-app-feedback.md` | Catatan masalah di kode aplikasi yang ditemukan saat menyiapkan CI/CD. | Kode app tidak diubah oleh pekerjaan CI/CD ini; masalahnya dicatat untuk kamu perbaiki. |
@@ -304,7 +307,7 @@ cd /srv/clipper && export APP_SHA=$(docker inspect -f '{{.Config.Image}}' clippe
 dc() { docker compose -p clipper -f /srv/clipper/docker-compose.prod.yml --env-file /srv/clipper/.env "$@"; }
 
 # 1. hentikan yang memakai DB (queue menunggu job selesai, bisa lama; tambahkan -t 10 kalau ikhlas job dibatalkan)
-dc stop app queue scheduler
+dc stop app queue queue-render scheduler
 
 # 2. kosongkan skema (dump tidak berisi DROP, jadi harus dikosongkan dulu)
 dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"'
@@ -334,7 +337,7 @@ Nama service di compose adalah `postgres`; user dan nama database dibaca dari en
    Lalu, sebagai perintah **terpisah**:
 
    ```bash
-   dc up -d --no-deps --force-recreate queue
+   dc up -d --no-deps --force-recreate queue queue-render
    ```
 
    Perintah kedua menunggu job video yang sedang jalan selesai, **bisa sampai 65 menit. Jangan Ctrl+C** dan jangan tutup SSH sampai selesai: kalau terputus di tengah, container `queue` lama bisa sudah berhenti sementara yang baru belum jalan (lihat 7.3, "queue mati"). Kalau ragu, pakai `tmux`/`screen`. Alternatif: deploy ulang SHA yang sama dengan `/srv/clipper/deploy.sh $APP_SHA` (di sesi `deploy`); compose otomatis membuat ulang container yang config/env-nya berubah.
@@ -394,7 +397,7 @@ dc exec app deno --version
 
 ### 6.7 Kenapa deploy bisa sampai ~65 menit
 
-Itu **disengaja**. Pada langkah terakhir, `docker compose up -d queue` mengganti container `queue` lama. Compose mengirim `SIGTERM`; worker Laravel menyelesaikan job yang sedang berjalan baru berhenti (butuh ekstensi `pcntl`, sudah ada). `stop_grace_period: 65m` memberi waktu sampai 65 menit sebelum dibunuh paksa, karena job pemrosesan video (unduh, transkripsi, render) bisa sangat lama dan dikembalikan ke antrean kalau terpotong (`retry_after` = 3700 detik). Lalu workflow diberi `timeout-minutes: 100`. Kalau job workflow tetap timeout atau dibatalkan, deploy di VPS tetap jalan sampai selesai (berjalan terlepas dari sesi SSH); hasilnya ada di `/srv/clipper/logs/`. Selama menunggu, web sudah versi baru; hanya worker lama yang menyelesaikan pekerjaannya. Jika tidak ada job aktif, deploy selesai dalam hitungan menit.
+Itu **disengaja**. Pada langkah terakhir, `docker compose up -d queue queue-render` mengganti container worker lama. Compose mengirim `SIGTERM`; worker Laravel menyelesaikan job yang sedang berjalan baru berhenti (butuh ekstensi `pcntl`, sudah ada). `stop_grace_period: 65m` memberi waktu sampai 65 menit sebelum dibunuh paksa, karena job pemrosesan video (unduh, transkripsi, render) bisa sangat lama dan dikembalikan ke antrean kalau terpotong (`retry_after` = 3700 detik). Lalu workflow diberi `timeout-minutes: 100`. Kalau job workflow tetap timeout atau dibatalkan, deploy di VPS tetap jalan sampai selesai (berjalan terlepas dari sesi SSH); hasilnya ada di `/srv/clipper/logs/`. Selama menunggu, web sudah versi baru; hanya worker lama yang menyelesaikan pekerjaannya. Jika tidak ada job aktif, deploy selesai dalam hitungan menit.
 
 ### 6.8 TikTok Production Setup
 
@@ -410,7 +413,7 @@ Setelah app TikTok di-*approve* untuk production (dashboard developers.tiktok.co
    TIKTOK_SCOPES=user.info.basic,video.upload,video.publish,video.list
    ```
    `video.list` dipakai untuk membaca views klip yang diposting (tes hook A/B, learning loop Autopilot). Aktifkan scope ini di app TikTok dulu; scope yang belum disetujui membuat login TikTok gagal.
-4. **Buat ulang container** (6.4) agar env baru terbaca: `docker compose -p clipper -f docker-compose.prod.yml up -d app queue scheduler`.
+4. **Buat ulang container** (6.4) agar env baru terbaca: `docker compose -p clipper -f docker-compose.prod.yml up -d app queue queue-render scheduler`.
 5. **Hubungkan ulang akun TikTok** — semua token OAuth yang lama masih milik app sandbox dan **tidak valid** untuk production. Setiap pengguna harus klik *Hubungkan TikTok* lagi dari halaman Studio.
 
 ## 7. Troubleshooting
@@ -421,7 +424,8 @@ Setelah app TikTok di-*approve* untuk production (dashboard developers.tiktok.co
 cd /srv/clipper && export APP_SHA=$(docker inspect -f '{{.Config.Image}}' clipper-app-1 | cut -d: -f2)
 dc ps                                   # status semua service (app harus healthy)
 dc logs --tail 100 app                  # nginx + php-fpm
-dc logs --tail 100 queue                # worker (job video)
+dc logs --tail 100 queue                # worker analisis (+ job default)
+dc logs --tail 100 queue-render         # worker render (+ job default)
 dc logs --tail 100 scheduler
 dc logs --tail 100 postgres
 dc logs -f queue                        # ikuti log langsung (Ctrl+C untuk keluar)
@@ -463,7 +467,7 @@ curl -i https://clipper.asfahmidev.com/up # lewat Nginx host + TLS
 | `deploy.sh: No such file` | Bootstrap belum dikerjakan | - | Lihat bagian 5, langkah 4. |
 | `another deploy of clipper is running` | Ada deploy lain yang masih jalan (mis. deploy sebelumnya yang SSH-nya terputus, tetap jalan di latar) | - | Tunggu sampai selesai: pantau log terbaru di `/srv/clipper/logs/`. Kunci tidak bisa macet: `flock` lepas otomatis saat proses berakhir, jadi **jangan hapus** `.git/deploy.lock`. |
 | `refusing to run as root` | `deploy.sh` dijalankan sebagai root | Tidak berubah | Jalankan sebagai `deploy` (6.1). |
-| queue mati setelah deploy terputus (`dc ps` tidak menampilkan `queue` jalan) | `dc up ... queue` manual (6.4) terputus/Ctrl+C di tengah; container lama sudah berhenti, yang baru belum jalan (`unless-stopped` tidak menyalakannya lagi) | Web jalan, job video tidak diproses | Di sesi `deploy`: `dc up -d queue`. Untuk deploy lewat `deploy.sh` ini tidak terjadi lagi (deploy jalan terlepas); cek hasilnya di log deploy terbaru `/srv/clipper/logs/deploy-*.log` dan file `.status`-nya. |
+| queue mati setelah deploy terputus (`dc ps` tidak menampilkan `queue` jalan) | `dc up ... queue` manual (6.4) terputus/Ctrl+C di tengah; container lama sudah berhenti, yang baru belum jalan (`unless-stopped` tidak menyalakannya lagi) | Web jalan, job video tidak diproses | Di sesi `deploy`: `dc up -d queue queue-render`. Untuk deploy lewat `deploy.sh` ini tidak terjadi lagi (deploy jalan terlepas); cek hasilnya di log deploy terbaru `/srv/clipper/logs/deploy-*.log` dan file `.status`-nya. |
 | `dubious ownership` | `deploy.sh` pernah dijalankan sebagai root | - | `chown -R deploy:deploy /srv/clipper` |
 | job `deploy` timeout 100 menit / dibatalkan | Job video panjang | Deploy di VPS **tetap jalan** sampai selesai | Wajar bila ada job aktif; periksa log deploy terbaru di `/srv/clipper/logs/` dan `dc logs queue`. |
 

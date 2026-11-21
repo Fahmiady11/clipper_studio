@@ -76,7 +76,7 @@ class ProjectCreator
             'background_style' => $hook['background_style'] ?? 'semi',
         ]);
 
-        AnalyzeVideoJob::dispatch($project->id);
+        AnalyzeVideoJob::dispatch($project->id)->onQueue('analyze');
 
         return $project;
     }

@@ -107,8 +107,8 @@ main() {
 
     health_check
 
-    log "start queue (waits for a running job to finish, up to 65m)"
-    dc up -d queue
+    log "start queue workers (wait for running jobs to finish, up to 65m)"
+    dc up -d queue queue-render
 
     prune_images "$keep_images"
     if [[ ${CLIPPER_DEPLOY_SKIP_BUILDER_PRUNE:-} != 1 ]]; then

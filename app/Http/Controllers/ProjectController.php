@@ -142,7 +142,7 @@ class ProjectController extends Controller
             'error_msg' => null,
             'cancelled_at' => null,
         ]);
-        AnalyzeVideoJob::dispatch($project->id);
+        AnalyzeVideoJob::dispatch($project->id)->onQueue('analyze');
         $this->ensureQueueWorkerRunning();
 
         return response()->json(['project_id' => $project->id, 'status' => 'processing']);

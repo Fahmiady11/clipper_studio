@@ -187,4 +187,28 @@ class SmartCutTest extends TestCase
         $this->assertEqualsWithDelta(-14, $lufs($dir.'/out.mp4'), 2.5);
         exec('rm -rf '.escapeshellarg($dir));
     }
+
+    /** ffmpeg 5.1 (Debian 12) could not pick an aac channel layout after loudnorm, whatever the source had */
+    public function test_voice_from_any_channel_layout_comes_out_stereo_48k_aac(): void
+    {
+        $dir = sys_get_temp_dir().'/clipper-layout-'.getmypid();
+        @mkdir($dir);
+        $ffmpeg = escapeshellarg(config('services.ffmpeg.path', 'ffmpeg'));
+
+        foreach (['mono', '5.1', '5.1(side)'] as $layout) {
+            $src = $dir.'/src.mp4';
+            exec(sprintf('%s -v error -y -f lavfi -i color=c=black:s=320x240:r=25:d=2 -f lavfi -i %s -shortest -pix_fmt yuv420p -c:a aac %s 2>&1',
+                $ffmpeg, escapeshellarg("sine=f=300:d=2,aformat=channel_layouts={$layout}"), escapeshellarg($src)), $o, $code);
+            if ($code !== 0) {
+                $this->markTestSkipped('ffmpeg not available');
+            }
+
+            $out = $dir.'/out.mp4';
+            $this->assertTrue((new FFmpegService)->normalizeVoice($src, $out), $layout);
+            $this->assertSame('aac,48000,2', trim((string) shell_exec(sprintf(
+                'ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 %s', escapeshellarg($out)
+            ))), $layout);
+        }
+        exec('rm -rf '.escapeshellarg($dir));
+    }
 }

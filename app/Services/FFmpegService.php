@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\FFmpegFailed;
 use App\Support\Cancellation;
 use App\Support\ClipSettings;
 use App\Support\EmojiCues;
@@ -163,7 +164,7 @@ class FFmpegService
         }
 
         $cmd = sprintf(
-            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.($overlay !== null ? self::ENCODE_FINAL : self::ENCODE_INTERMEDIATE).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.$this->encode($overlay !== null ? self::ENCODE_FINAL : self::ENCODE_INTERMEDIATE).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             $trim,
             escapeshellarg($input),
@@ -232,7 +233,7 @@ class FFmpegService
         $assFilter = 'ass='.$assPath.':fontsdir='.$fontsdir;
 
         $cmd = sprintf(
-            '%s -y -i %s -vf %s '.self::ENCODE_FINAL.' -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y -i %s -vf %s '.$this->encode(self::ENCODE_FINAL).' -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($input),
             escapeshellarg($assFilter),
@@ -708,7 +709,7 @@ class FFmpegService
         $inputs = '-i '.escapeshellarg($input).$extraInputs;
 
         $cmd = sprintf(
-            '%s -y %s -filter_complex %s -map %s -map 0:a? '.self::ENCODE_FINAL.' -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y %s -filter_complex %s -map %s -map 0:a? '.$this->encode(self::ENCODE_FINAL).' -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
             $inputs,
             escapeshellarg($filter),
@@ -831,8 +832,9 @@ class FFmpegService
             '%s -y -i %s -map 0:v -map 0:a -c:v copy -af %s -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($input),
-            // loudnorm works at 192 kHz internally; bring it back to 48 kHz
-            escapeshellarg('loudnorm=I='.self::VOICE_LUFS.':TP=-1.5:LRA=11,aresample=48000'),
+            // loudnorm works at 192 kHz internally; bring it back to 48 kHz. ffmpeg 5.1 cannot
+            // pick a channel layout for aac after loudnorm+aresample on any input, so name one
+            escapeshellarg('loudnorm=I='.self::VOICE_LUFS.':TP=-1.5:LRA=11,aresample=48000,aformat=channel_layouts=stereo'),
             escapeshellarg($output)
         );
         $this->exec($cmd, 'normalizeVoice');
@@ -926,6 +928,14 @@ class FFmpegService
         return $code === 0 && trim(implode('', $out)) !== '';
     }
 
+    /** libx264 settings, capped to FFMPEG_THREADS so a render and an analysis can share the CPU */
+    private function encode(string $settings): string
+    {
+        $threads = (int) config('services.ffmpeg.threads');
+
+        return $threads > 0 ? $settings.' -threads '.$threads : $settings;
+    }
+
     private function probeBin(): string
     {
         // ffprobe ships next to ffmpeg; FFMPEG_PATH may be an absolute path
@@ -942,7 +952,7 @@ class FFmpegService
         file_put_contents($listFile, $content);
 
         $cmd = sprintf(
-            '%s -y -f concat -safe 0 -i %s '.self::ENCODE_FINAL.' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y -f concat -safe 0 -i %s '.$this->encode(self::ENCODE_FINAL).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($listFile),
             escapeshellarg($output)
@@ -961,7 +971,9 @@ class FFmpegService
         // ("Fontconfig error: No writable cache directories"), so it gets one in storage
         [$code, $output] = Cancellation::exec($cmd, ['XDG_CACHE_HOME' => storage_path('framework/cache')]);
         if ($code !== 0) {
-            throw new RuntimeException("FFmpeg {$context} failed:\n".implode("\n", $output));
+            $message = "FFmpeg {$context} failed:\n".implode("\n", $output);
+            // Killed by a signal (OOM killer, shutdown; ffmpeg itself exits 255 on SIGTERM): worth another try
+            throw in_array($code, [130, 137, 143, 255], true) ? new RuntimeException($message) : new FFmpegFailed($message);
         }
     }
 
