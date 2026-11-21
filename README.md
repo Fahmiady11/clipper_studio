@@ -113,7 +113,7 @@ php artisan queue:work --queue=analyze,default --timeout=3600 --memory=512
 php artisan queue:work --queue=render,default --timeout=1800 --memory=512
 ```
 
-Di produksi: service `queue` dan `queue-render` di `docker-compose.prod.yml` (atau `deploy/supervisor.conf`). Worker yang hanya membaca `default` tidak pernah mengambil analisis atau render. `FFMPEG_THREADS` membatasi thread libx264 per encode agar keduanya bisa jalan bersamaan. Scheduler: `php artisan schedule:work` (atau cron `schedule:run` tiap menit).
+Di produksi: service `queue` dan `queue-render` di `docker-compose.prod.yml` (atau `deploy/supervisor.conf`). Worker yang hanya membaca `default` tidak pernah mengambil analisis atau render. `FFMPEG_THREADS` membatasi thread libx264 per encode agar keduanya bisa jalan bersamaan; `FFMPEG_PRESET`/`FFMPEG_CRF` mengatur encode akhir (default `veryfast`/`20`). Waktu antre dan durasi tiap langkah render tercatat di `storage/logs/clipper/jobs-*.log` (`RenderClipJob timings`). Scheduler: `php artisan schedule:work` (atau cron `schedule:run` tiap menit).
 
 Jadwal di `routes/console.php`:
 

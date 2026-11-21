@@ -60,6 +60,10 @@ return [
         'path' => env('FFMPEG_PATH', 'ffmpeg'),
         // libx264 threads per encode; unset = ffmpeg uses every core
         'threads' => env('FFMPEG_THREADS'),
+        // Final libx264 encode. TikTok/Shorts/Reels re-encode every upload, so a faster
+        // preset at a slightly lower CRF looks the same there and renders ~2.5x faster
+        'preset' => env('FFMPEG_PRESET', 'veryfast'),
+        'crf' => env('FFMPEG_CRF', 20),
     ],
 
     // Python with opencv-python-headless for face-following reframe; '' = centre crop only

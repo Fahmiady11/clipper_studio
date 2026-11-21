@@ -35,7 +35,7 @@ class RenderClipJob implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 1800; // two libx264 "slow" passes on long clips can take >10 min
+    public int $timeout = 1800; // one libx264 pass plus audio passes; slow presets on long clips can take >10 min
 
     public function __construct(public string $clipId)
     {
@@ -90,11 +90,26 @@ class RenderClipJob implements ShouldQueue
         $project = $clip->clipProject;
         $startedAt = microtime(true);
         $aiCostUsd = 0.0;
+        // Seconds per step, logged with the queue wait once the clip is done
+        $steps = [];
+        $timed = function (string $step, callable $work) use (&$steps) {
+            $t = microtime(true);
+            try {
+                return $work();
+            } finally {
+                $steps[$step] = round(($steps[$step] ?? 0) + microtime(true) - $t, 2);
+            }
+        };
+
+        // Dispatch to start; a retry keeps the payload's first push time, so it counts the first attempt too
+        $createdAt = $this->job?->payload()['createdAt'] ?? null;
+        $queueWait = $createdAt !== null ? now()->getTimestamp() - (int) $createdAt : null;
 
         $clip->update(['status' => 'processing']);
 
         $log->info('RenderClipJob started', [
             'clip_id' => $this->clipId,
+            'queue_wait_s' => $queueWait,
             'project_id' => $project->id,
             'layout' => $project->layout_type,
             'start' => $clip->start_seconds,
@@ -108,7 +123,7 @@ class RenderClipJob implements ShouldQueue
             // Source removed by clipper:cleanup — fetch it again (served from video_cache when still there)
             $log->info('Source video missing, re-downloading', ['project_id' => $project->id]);
             @mkdir($tempDir, 0755, true);
-            $ytdlp->download($project->youtube_url, $srcVideo);
+            $timed('download', fn () => $ytdlp->download($project->youtube_url, $srcVideo));
         }
 
         $step2 = $tempDir.'/layout_'.$this->clipId.'.mp4';
@@ -130,7 +145,7 @@ class RenderClipJob implements ShouldQueue
 
         $track = null;
         if (in_array($layoutType, ['reframe', 'gameplay'], true)) {
-            $track = app(FaceTracker::class)->plan($srcVideo, (float) $clip->start_seconds, (float) $clip->end_seconds);
+            $track = $timed('face_track', fn () => app(FaceTracker::class)->plan($srcVideo, (float) $clip->start_seconds, (float) $clip->end_seconds));
             $log->info('Face tracking', ['pieces' => $track ? count($track) : 0]);
         }
 
@@ -146,7 +161,7 @@ class RenderClipJob implements ShouldQueue
         $pieces = [[0.0, (float) $clip->end_seconds - $clipStart]];
         if ($project->jump_cut) {
             $words = array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments));
-            $pieces = app(SmartCut::class)->pieces($srcVideo, $clipStart, (float) $clip->end_seconds, $words);
+            $pieces = $timed('smart_cut', fn () => app(SmartCut::class)->pieces($srcVideo, $clipStart, (float) $clip->end_seconds, $words));
             $clipSegments = SmartCut::remapSegments($clipSegments, $pieces, $clipStart);
         }
         $clipDuration = SmartCut::outputDuration($pieces);
@@ -223,7 +238,7 @@ class RenderClipJob implements ShouldQueue
         $wantsEmoji = $assPath && $subtitle->emoji;
         $moments = ['broll' => null, 'emoji' => null, 'punch' => []];
         if ($wantsBroll || $wantsEmoji || $project->sfx) {
-            [$plan, $asked] = app(EditPlanner::class)->plan($clip, $sourceSegments, $hookDuration);
+            [$plan, $asked] = $timed('edit_plan', fn () => app(EditPlanner::class)->plan($clip, $sourceSegments, $hookDuration));
             if ($asked) {
                 $aiCostUsd += config('billing.gemini_usd_per_call');
             }
@@ -261,7 +276,7 @@ class RenderClipJob implements ShouldQueue
 
                     return app(GeminiService::class)->pickFootage($cue['query'], $cue['phrase'] ?: $cue['query'], $images);
                 };
-                $footage = $stock->clip($cue['query'], $used, $cue['alt'], $cue['must'], $judge);
+                $footage = $timed('broll', fn () => $stock->clip($cue['query'], $used, $cue['alt'], $cue['must'], $judge));
                 if ($footage) {
                     $used[] = $footage['id'];
                     $broll[] = ['path' => $footage['path'], 'start' => $cue['time'], 'duration' => $cue['duration'], 'offset' => $footage['offset']];
@@ -274,10 +289,10 @@ class RenderClipJob implements ShouldQueue
         $logoPath = $logo && Storage::disk('local')->exists($logo) ? Storage::disk('local')->path($logo) : null;
 
         $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => array_map(fn ($e) => round($e['start'], 1), $emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
-        $ffmpeg->applyLayout($srcVideo, $layoutType, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
+        $timed('apply_layout', fn () => $ffmpeg->applyLayout($srcVideo, $layoutType, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
             'title' => $titlePath, 'progress' => $progress, 'broll' => $broll, 'logo' => $logoPath, 'gameplay' => $gameplay,
-        ]);
+        ]));
         $current = $step2;
         Cancellation::throwIfCancelled();
 
@@ -289,7 +304,7 @@ class RenderClipJob implements ShouldQueue
             if ($track) {
                 $log->info('Mixing music', ['mood' => $mood, 'track' => basename($track), 'volume' => $project->music_volume]);
                 $withMusic = $tempDir.'/music_'.$this->clipId.'.mp4';
-                $ffmpeg->mixMusic($current, $track, (int) $project->music_volume, $withMusic);
+                $timed('mix_music', fn () => $ffmpeg->mixMusic($current, $track, (int) $project->music_volume, $withMusic));
                 $current = $withMusic;
                 $musicTrack = $music->relative($track); // "mood/file.mp3" — keys the credit row
             } else {
@@ -299,7 +314,7 @@ class RenderClipJob implements ShouldQueue
         // Without music nothing levelled the voice yet
         if (! $musicTrack) {
             $levelled = $tempDir.'/loud_'.$this->clipId.'.mp4';
-            if ($ffmpeg->normalizeVoice($current, $levelled)) {
+            if ($timed('normalize_voice', fn () => $ffmpeg->normalizeVoice($current, $levelled))) {
                 $current = $levelled;
             }
         }
@@ -312,7 +327,7 @@ class RenderClipJob implements ShouldQueue
             if ($cues) {
                 $log->info('Mixing sfx', ['cues' => array_map(fn ($c) => $c['sound'].'@'.$c['at'], $cues)]);
                 $withSfx = $tempDir.'/sfx_'.$this->clipId.'.mp4';
-                $ffmpeg->mixSfx($current, $cues, $withSfx);
+                $timed('mix_sfx', fn () => $ffmpeg->mixSfx($current, $cues, $withSfx));
                 $current = $withSfx;
             }
         }
@@ -321,7 +336,7 @@ class RenderClipJob implements ShouldQueue
         $outDir = 'clips/'.$project->user_id.'/'.$project->id;
         Storage::makeDirectory($outDir);
         $outPath = $outDir.'/'.$this->clipId.'.mp4';
-        Storage::put($outPath, file_get_contents($current));
+        $timed('store', fn () => Storage::put($outPath, file_get_contents($current)));
 
         $this->cleanupTemp($tempDir, $this->clipId);
 
@@ -334,6 +349,15 @@ class RenderClipJob implements ShouldQueue
             'clip_id' => $this->clipId,
             'output' => $outPath,
             'size_mb' => round(Storage::size($outPath) / 1048576, 2),
+        ]);
+        $log->info('RenderClipJob timings', [
+            'clip_id' => $this->clipId,
+            'attempt' => $this->attempts(),
+            'queue_wait_s' => $queueWait,
+            'total_s' => round(microtime(true) - $startedAt, 2),
+            'clip_s' => round($clipDuration, 2),
+            'encode' => config('services.ffmpeg.preset').'/'.config('services.ffmpeg.crf').' threads='.(config('services.ffmpeg.threads') ?: 'auto'),
+            'steps' => $steps,
         ]);
     }
 

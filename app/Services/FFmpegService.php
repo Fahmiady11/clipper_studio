@@ -28,13 +28,16 @@ class FFmpegService
     private const VOICE_LUFS = -14; // speech loudness after mixing music (TikTok/Reels level)
 
     /**
-     * The layout pass only feeds the subtitle pass, so it encodes fast at near
-     * transparent quality; the final pass spends the effort. 60fps sources are
-     * capped at 30 (what TikTok plays): half the frames to filter and encode.
+     * A layout pass without overlays only feeds a later subtitle pass, so it
+     * encodes fast at near transparent quality. 60fps sources are capped at 30
+     * (what TikTok plays): half the frames to filter and encode.
      */
     private const ENCODE_INTERMEDIATE = '-fpsmax 30 -c:v libx264 -preset veryfast -crf 14 -pix_fmt yuv420p';
 
-    private const ENCODE_FINAL = '-fpsmax 30 -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p';
+    private const X264_PRESETS = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'];
+
+    /** Caps bitrate spikes on busy scenes (1080x1920 at 30fps is ~2-5 Mbps at CRF 20) */
+    private const MAX_RATE = '-maxrate 8M -bufsize 16M';
 
     private string $bin;
 
@@ -164,7 +167,7 @@ class FFmpegService
         }
 
         $cmd = sprintf(
-            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.$this->encode($overlay !== null ? self::ENCODE_FINAL : self::ENCODE_INTERMEDIATE).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y%s -i %s%s -filter_complex %s -map %s%s '.$this->encode($overlay !== null ? $this->finalEncode() : self::ENCODE_INTERMEDIATE).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             $trim,
             escapeshellarg($input),
@@ -233,7 +236,7 @@ class FFmpegService
         $assFilter = 'ass='.$assPath.':fontsdir='.$fontsdir;
 
         $cmd = sprintf(
-            '%s -y -i %s -vf %s '.$this->encode(self::ENCODE_FINAL).' -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y -i %s -vf %s '.$this->encode($this->finalEncode()).' -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($input),
             escapeshellarg($assFilter),
@@ -709,7 +712,7 @@ class FFmpegService
         $inputs = '-i '.escapeshellarg($input).$extraInputs;
 
         $cmd = sprintf(
-            '%s -y %s -filter_complex %s -map %s -map 0:a? '.$this->encode(self::ENCODE_FINAL).' -c:a copy -movflags +faststart %s 2>&1',
+            '%s -y %s -filter_complex %s -map %s -map 0:a? '.$this->encode($this->finalEncode()).' -c:a copy -movflags +faststart %s 2>&1',
             $this->bin,
             $inputs,
             escapeshellarg($filter),
@@ -928,6 +931,18 @@ class FFmpegService
         return $code === 0 && trim(implode('', $out)) !== '';
     }
 
+    /** The one libx264 encode a rendered clip goes through: FFMPEG_PRESET / FFMPEG_CRF, defaults veryfast / 20 */
+    private function finalEncode(): string
+    {
+        $preset = (string) config('services.ffmpeg.preset');
+        $crf = config('services.ffmpeg.crf');
+
+        return sprintf('-fpsmax 30 -c:v libx264 -preset %s -crf %s %s -pix_fmt yuv420p',
+            in_array($preset, self::X264_PRESETS, true) ? $preset : 'veryfast',
+            is_numeric($crf) && $crf >= 0 && $crf <= 51 ? $crf + 0 : 20,
+            self::MAX_RATE);
+    }
+
     /** libx264 settings, capped to FFMPEG_THREADS so a render and an analysis can share the CPU */
     private function encode(string $settings): string
     {
@@ -952,7 +967,7 @@ class FFmpegService
         file_put_contents($listFile, $content);
 
         $cmd = sprintf(
-            '%s -y -f concat -safe 0 -i %s '.$this->encode(self::ENCODE_FINAL).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
+            '%s -y -f concat -safe 0 -i %s '.$this->encode($this->finalEncode()).' -c:a aac -b:a 192k -movflags +faststart %s 2>&1',
             $this->bin,
             escapeshellarg($listFile),
             escapeshellarg($output)
