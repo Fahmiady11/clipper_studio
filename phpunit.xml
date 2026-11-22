@@ -33,5 +33,7 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="FACE_TRACK_PYTHON" value=""/>
+        <env name="GEMINI_API_KEY" value=""/>
+        <env name="LLM_GATEWAY_URL" value=""/>
     </php>
 </phpunit>

@@ -198,6 +198,8 @@ class AutopilotTest extends TestCase
             'user_id' => $user->id, 'open_id' => 'o', 'access_token' => 'x', 'refresh_token' => 'y',
             'access_expires_at' => now()->addDay(), 'scope' => 'user.info.basic,video.upload',
         ]);
+        // No caption stored yet, so approve asks the AI once (an unfaked call reached the real Gemini and took ~13 s)
+        $this->mock(GeminiService::class)->shouldReceive('generateCaption')->once()->andReturn(['caption' => 'Caption dari AI', 'hashtags' => ['#a']]);
 
         $this->actingAs($user)->getJson('/api/autopilot/review')->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('pending', 2);
 
@@ -207,6 +209,7 @@ class AutopilotTest extends TestCase
         Queue::assertNotPushed(UploadToTikTokJob::class);
         $post = ScheduledPost::where('generated_clip_id', $a->id)->sole();
         $this->assertSame(['tiktok', $account->id, 'scheduled', 'inbox'], [$post->platform, $post->account_id, $post->status, $post->options['mode']]);
+        $this->assertStringContainsString('Caption dari AI', $post->options['title']);
 
         $this->actingAs($user)->postJson("/api/autopilot/review/{$b->id}/reject")->assertOk();
         $this->assertSame('rejected', $b->fresh()->review_status);

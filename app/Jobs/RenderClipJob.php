@@ -347,9 +347,19 @@ class RenderClipJob implements ShouldQueue
         $this->cleanupTemp($tempDir, $this->clipId);
 
         // whereNull: a cancel that landed during the final copy wins over "done"
-        GeneratedClip::whereKey($this->clipId)->whereNull('cancelled_at')
+        $done = GeneratedClip::whereKey($this->clipId)->whereNull('cancelled_at')
             ->update(['output_path' => $outPath, 'status' => 'done', 'music_track' => $musicTrack]);
         app(RenderQuota::class)->settle($this->clipId, (int) ceil($clipDuration), microtime(true) - $startedAt, $aiCostUsd);
+
+        // Autopilot clips all reach the review page and approve needs their caption; studio clips keep asking lazily
+        if ($done && $clip->review_status !== null) {
+            try {
+                GenerateClipCaptionJob::dispatch($this->clipId);
+            } catch (Throwable $e) {
+                // The render is finished: a caption that can't be queued is fetched later
+                $log->warning('Caption job not queued', ['clip_id' => $this->clipId, 'error' => $e->getMessage()]);
+            }
+        }
 
         $log->info('RenderClipJob done', [
             'clip_id' => $this->clipId,
