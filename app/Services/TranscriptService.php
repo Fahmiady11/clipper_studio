@@ -10,7 +10,11 @@ class TranscriptService
 {
     private const MAX_WORD_SECONDS = 1.2;
 
-    public function fetch(string $youtubeUrl, ?string $videoPath = null): array
+    /**
+     * @param  (callable(): string)|null  $audioFile  returns a local file with the video's sound;
+     *                                                only called when there are no captions
+     */
+    public function fetch(string $youtubeUrl, ?callable $audioFile = null): array
     {
         $videoId = $this->extractVideoId($youtubeUrl);
 
@@ -36,9 +40,15 @@ class TranscriptService
 
         $log->warning('[TRANSCRIPT] PRIMARY failed (no subtitles), trying FALLBACK: Groq Whisper');
 
-        // Fallback: Groq Whisper on the downloaded video file
-        if ($videoPath && file_exists($videoPath)) {
-            $groqResult = $this->fallbackGroq($videoPath);
+        // Fallback: Groq Whisper on the sound, fetched only now. No key: nothing to fetch it for
+        if (! config('services.groq.api_key')) {
+            $log->warning('fallbackGroq: GROQ_API_KEY not set');
+
+            return ['language' => 'id', 'segments' => []];
+        }
+        $mediaPath = $audioFile ? $audioFile() : null;
+        if ($mediaPath && file_exists($mediaPath)) {
+            $groqResult = $this->fallbackGroq($mediaPath);
             if (! empty($groqResult['segments'])) {
                 $log->info('[TRANSCRIPT] FALLBACK used: Groq whisper-large-v3-turbo', [
                     'language' => $groqResult['language'],
@@ -51,7 +61,7 @@ class TranscriptService
             return $groqResult;
         }
 
-        $log->error('[TRANSCRIPT] All methods failed: no subtitles, no video file for Groq');
+        $log->error('[TRANSCRIPT] All methods failed: no subtitles, no audio file for Groq');
 
         return ['language' => 'id', 'segments' => []];
     }
@@ -203,24 +213,19 @@ class TranscriptService
         return $segments;
     }
 
-    private function fallbackGroq(string $videoPath): array
+    private function fallbackGroq(string $mediaPath): array
     {
         $log = Log::channel('clipper_jobs');
-
         $groqKey = config('services.groq.api_key');
-        if (! $groqKey) {
-            $log->warning('fallbackGroq: GROQ_API_KEY not set');
-
-            return ['language' => 'id', 'segments' => []];
-        }
 
         $ffmpeg = config('services.ffmpeg.path', 'ffmpeg');
         // MP3 at 32kbps mono ≈ 14MB/hr — fits Groq's 25MB limit even for long videos
         $tmpAudio = sys_get_temp_dir().'/ts_audio_'.uniqid().'.mp3';
 
-        $log->info('fallbackGroq: extracting audio', ['video' => $videoPath, 'tmp' => $tmpAudio]);
-        [$code, $out] = Cancellation::exec(sprintf('%s -i %s -ar 16000 -ac 1 -b:a 32k %s -y 2>&1',
-            $ffmpeg, escapeshellarg($videoPath), escapeshellarg($tmpAudio)));
+        $log->info('fallbackGroq: extracting audio', ['source' => $mediaPath, 'tmp' => $tmpAudio]);
+        // -vn: the HLS fallback of an audio download still carries a (tiny) picture
+        [$code, $out] = Cancellation::exec(sprintf('%s -i %s -vn -ar 16000 -ac 1 -b:a 32k %s -y 2>&1',
+            $ffmpeg, escapeshellarg($mediaPath), escapeshellarg($tmpAudio)));
 
         if ($code !== 0 || ! file_exists($tmpAudio)) {
             $log->error('fallbackGroq: ffmpeg failed', ['code' => $code, 'out' => implode("\n", $out)]);

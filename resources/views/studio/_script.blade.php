@@ -110,7 +110,7 @@ function studio() {
     HL_PRESETS:    ['#facc15','#2dd4bf','#a78bfa','#60a5fa','#fb7185','#22c55e','#ffffff','#f97316'],
     STAGES: [
       { msg:'AnalyzeVideoJob di-dispatch ke queue',           dur:600  },
-      { msg:'Mengunduh video via yt-dlp → storage/temp/',     dur:1400 },
+      { msg:'Mengambil info video via yt-dlp',                 dur:1400 },
       { msg:'Mengambil transcript YouTube (bahasa: id)',       dur:1000 },
       { msg:'Mengirim transcript ke Gemini · pilih N momen',  dur:1500 },
       { msg:'Menyusun segmen subtitle per kata',              dur:1100 },

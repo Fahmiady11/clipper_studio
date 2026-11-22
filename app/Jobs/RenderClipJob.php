@@ -123,7 +123,7 @@ class RenderClipJob implements ShouldQueue
         $srcOffset = 0.0;
 
         if (! file_exists($srcVideo)) {
-            // Source removed by clipper:cleanup: fetch it again, often only the clip's section
+            // Analysis downloads no video, and clipper:cleanup removes it: fetch it, often only the clip's section
             $source = $timed('download', fn () => $sources->fetch($clip, $tempDir));
             [$srcVideo, $srcOffset] = [$source['path'], $source['offset']];
         }

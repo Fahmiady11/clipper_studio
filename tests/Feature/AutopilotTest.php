@@ -129,10 +129,8 @@ class AutopilotTest extends TestCase
         ]);
 
         $ytdlp = $this->mock(YtDlpService::class);
-        $ytdlp->shouldReceive('download')->andReturnUsing(function ($url, $path) {
-            @mkdir(dirname($path), 0755, true);
-            file_put_contents($path, 'video');
-        });
+        $ytdlp->shouldReceive('getMetadata')->andReturn(['title' => 'V', 'duration_seconds' => 1800, 'thumbnail_url' => null, 'channel' => 'C', 'language' => 'id']);
+        $ytdlp->shouldNotReceive('download'); // captions came through: no video needed for analysis
         $this->mock(TranscriptService::class)->shouldReceive('fetch')
             ->andReturn(['language' => 'id', 'segments' => [['start' => 0, 'end' => 5, 'text' => 'halo']]]);
         $this->mock(GeminiService::class)->shouldReceive('analyzeWithTranscript')->andReturn([

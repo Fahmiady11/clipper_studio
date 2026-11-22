@@ -32,14 +32,14 @@ class AnalyzeVideoJob implements ShouldQueue
 
     public int $tries = 2;   // 2 allows recovery from worker restart mid-job (stale reserved attempt)
 
-    public int $timeout = 3600; // 1 hour — large videos (700MB+) take 15-30 min to download
+    public int $timeout = 3600; // 1 hour — a long video without captions downloads its audio and goes through Whisper
 
     public int $backoff = 30;  // wait 30s before retry (give Gemini 503 time to recover)
 
     // Stages match the frontend STAGES array (index 1–6, 0 = dispatched)
     private const STAGES = [
         1 => 'Job di-dispatch ke queue',
-        2 => 'Mengunduh video via yt-dlp…',
+        2 => 'Mengambil info video via yt-dlp…',
         3 => 'Mengambil transcript YouTube…',
         4 => 'Mengirim transcript ke Gemini…',
         5 => 'Menyusun segmen subtitle…',
@@ -76,7 +76,7 @@ class AnalyzeVideoJob implements ShouldQueue
             );
         } catch (JobCancelled) {
             // The cancel endpoint already marked the project; drop the partial download
-            foreach (glob(storage_path('app/temp/'.$this->projectId.'/video.*')) ?: [] as $partial) {
+            foreach (glob(storage_path('app/temp/'.$this->projectId.'/audio.*')) ?: [] as $partial) {
                 @unlink($partial);
             }
             Log::channel('clipper_jobs')->info('AnalyzeVideoJob cancelled', ['project_id' => $this->projectId]);
@@ -100,19 +100,17 @@ class AnalyzeVideoJob implements ShouldQueue
             'clip_count' => $project->clip_count,
         ]);
 
-        // Stage 2 — download
+        // Stage 2 — video info. The video itself is not downloaded here: captions need
+        // none of it, Whisper only the sound, and each render fetches what it uses (ClipSource)
         $this->stage($project, 2);
         $tempDir = storage_path('app/temp/'.$this->projectId);
         @mkdir($tempDir, 0755, true);
-        $videoPath = $tempDir.'/video.mp4';
-
-        $log->info('Downloading video', ['dest' => $videoPath]);
-        $ytdlp->download($project->youtube_url, $videoPath);
-        $log->info('Download complete', ['size_mb' => round(filesize($videoPath) / 1048576, 1)]);
+        $this->storeVideoInfo($project, $ytdlp);
 
         // Stage 3 — transcript (skip re-fetch if already cached from a prior attempt)
         $this->stage($project, 3);
         $existing = Transcript::where('clip_project_id', $project->id)->first();
+        $whisper = false;
         if ($existing && ! empty($existing->content)) {
             $log->info('Transcript loaded from cache (retry)', [
                 'language' => $existing->language,
@@ -121,7 +119,18 @@ class AnalyzeVideoJob implements ShouldQueue
             $transcriptData = ['language' => $existing->language, 'segments' => $existing->content];
         } else {
             $log->info('Fetching transcript');
-            $transcriptData = $transcriptSvc->fetch($project->youtube_url, $videoPath);
+            try {
+                $transcriptData = $transcriptSvc->fetch($project->youtube_url, function () use ($project, $ytdlp, $tempDir, &$whisper) {
+                    $whisper = true;
+
+                    return $this->audioForWhisper($project, $ytdlp, $tempDir);
+                });
+            } finally {
+                // The transcript is all analysis needed it for
+                foreach (glob($tempDir.'/audio.*') ?: [] as $audio) {
+                    @unlink($audio);
+                }
+            }
 
             if (empty($transcriptData['segments'])) {
                 throw new \RuntimeException('Transcript kosong — yt-dlp gagal ambil subtitle (rate-limit/no captions). Coba ulang.');
@@ -229,8 +238,54 @@ class AnalyzeVideoJob implements ShouldQueue
         ClipProject::whereKey($project->id)->whereNull('cancelled_at')->update(['status' => 'done', 'progress_stage' => 6]);
         $log->info('AnalyzeVideoJob done', [
             'project_id' => $project->id,
-            'est_ai_cost_usd' => round(config('billing.gemini_usd_per_call') + ($project->duration_seconds ?? 0) / 3600 * config('billing.groq_usd_per_audio_hour'), 6),
+            'est_ai_cost_usd' => round(config('billing.gemini_usd_per_call') + ($whisper ? ($project->duration_seconds ?? 0) / 3600 * config('billing.groq_usd_per_audio_hour') : 0), 6),
         ]);
+    }
+
+    /**
+     * Length, title and channel from yt-dlp, without downloading anything: the
+     * length lets ClipSource weigh sections against the whole video, bounds
+     * manual clips and instruction-length clips. Autopilot already set title
+     * and channel from its listing; those are kept. Not worth failing for.
+     */
+    private function storeVideoInfo(ClipProject $project, YtDlpService $ytdlp): void
+    {
+        try {
+            $meta = $ytdlp->getMetadata($project->youtube_url);
+        } catch (\RuntimeException $e) {
+            Log::channel('clipper_jobs')->warning('Video info unavailable, continuing without it', ['error' => mb_substr($e->getMessage(), -300)]);
+
+            return;
+        }
+
+        // getMetadata says 'Unknown' for a missing title or channel
+        $known = fn (?string $v) => $v !== null && $v !== '' && $v !== 'Unknown';
+        $thumbnail = $meta['thumbnail_url'] ?? null;
+        $project->update(array_filter([
+            'duration_seconds' => $meta['duration_seconds'] ?: null,
+            'video_title' => $project->video_title ?: ($known($meta['title']) ? mb_substr($meta['title'], 0, 255) : null),
+            'source_channel' => $project->source_channel ?: ($known($meta['channel']) ? mb_substr($meta['channel'], 0, 150) : null),
+            'thumbnail_url' => $project->thumbnail_url ?: ($thumbnail && strlen($thumbnail) <= 255 ? $thumbnail : null),
+        ], fn ($v) => $v !== null));
+        Log::channel('clipper_jobs')->info('Video info', ['duration_s' => $project->duration_seconds, 'title' => $project->video_title]);
+    }
+
+    /** The sound for Whisper: the full download when video_cache has one, else audio only (a few % of the video's bytes) */
+    private function audioForWhisper(ClipProject $project, YtDlpService $ytdlp, string $tempDir): string
+    {
+        $log = Log::channel('clipper_jobs');
+        if ($ytdlp->isCached($project->youtube_url)) {
+            $log->info('Whisper reads the cached video');
+
+            return $ytdlp->cachedPathFor($project->youtube_url);
+        }
+
+        $project->update(['progress_message' => 'Tidak ada subtitle, mengunduh audio untuk transkripsi…']);
+        $log->info('No captions, downloading audio for Whisper');
+        $path = $ytdlp->downloadAudio($project->youtube_url, $tempDir);
+        $log->info('Audio downloaded', ['size_mb' => round(filesize($path) / 1048576, 1)]);
+
+        return $path;
     }
 
     public function failed(Throwable $e): void

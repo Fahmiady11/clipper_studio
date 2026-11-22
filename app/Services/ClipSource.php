@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * Fetches the video a render reads once the project's full download is gone:
+ * Fetches the video a render reads when temp/<project>/video.mp4 is not there
+ * (analysis never downloads it; an earlier render of the project may have):
  * the copy in video_cache when there is one, otherwise only the clip's stretch
  * of it, since a 60 s clip from a 45 min source needs about 2% of the bytes.
  */

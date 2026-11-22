@@ -10,7 +10,8 @@ use Illuminate\Support\Str;
  * Frees disk used by downloaded source videos. Rendered clips are kept.
  * - storage/app/temp/<project>: removed once the project is idle and older
  *   than the retention window (RenderClipJob re-downloads if needed later).
- *   Section downloads a failed render left behind (section_<clip>.mp4) go with it.
+ *   Section downloads a failed render left behind (section_<clip>.mp4) go with it,
+ *   as does audio.* if an analysis died between downloading it for Whisper and deleting it.
  * - storage/app/video_cache/*.mp4: removed when untouched for the window.
  * - storage/app/broll: stock clips and searches unused for BROLL_DAYS.
  */

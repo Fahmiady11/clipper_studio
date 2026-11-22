@@ -78,10 +78,9 @@ class PromptGuidedClipTest extends TestCase
             'user_id' => $user->id, 'youtube_url' => 'https://youtu.be/abcdefg', 'layout_type' => 'reframe',
             'clip_count' => 1, 'duration_mode' => 'auto', 'status' => 'processing', 'instruction' => 'yang lucu-lucu',
         ]);
-        $this->mock(YtDlpService::class)->shouldReceive('download')->andReturnUsing(function ($url, $path) {
-            @mkdir(dirname($path), 0755, true);
-            file_put_contents($path, 'video');
-        });
+        $ytdlp = $this->mock(YtDlpService::class);
+        $ytdlp->shouldReceive('getMetadata')->andReturn(['title' => 'V', 'duration_seconds' => 600, 'thumbnail_url' => null, 'channel' => 'C', 'language' => 'id']);
+        $ytdlp->shouldNotReceive('download'); // captions came through: no video needed for analysis
         $this->mock(TranscriptService::class)->shouldReceive('fetch')
             ->andReturn(['language' => 'id', 'segments' => [['start' => 0, 'end' => 40, 'text' => 'halo']]]);
         $this->mock(GeminiService::class)->shouldReceive('analyzeWithTranscript')
@@ -116,10 +115,9 @@ class PromptGuidedClipTest extends TestCase
             $segments[] = ['start' => $words[0]['start'], 'end' => $words[3]['end'], 'text' => 'satu dua tiga empat.', 'words' => $words];
             $t += 0.6;
         }
-        $this->mock(YtDlpService::class)->shouldReceive('download')->andReturnUsing(function ($url, $path) {
-            @mkdir(dirname($path), 0755, true);
-            file_put_contents($path, 'video');
-        });
+        $ytdlp = $this->mock(YtDlpService::class);
+        $ytdlp->shouldReceive('getMetadata')->andReturn(['title' => 'V', 'duration_seconds' => 120, 'thumbnail_url' => null, 'channel' => 'C', 'language' => 'id']);
+        $ytdlp->shouldNotReceive('download'); // captions came through: no video needed for analysis
         $this->mock(TranscriptService::class)->shouldReceive('fetch')->andReturn(['language' => 'id', 'segments' => $segments]);
         $this->mock(GeminiService::class)->shouldReceive('analyzeWithTranscript')
             // the AI is asked for 10-12 s clips, whatever the project said

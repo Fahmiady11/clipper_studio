@@ -27,10 +27,9 @@ class ViralScoreTest extends TestCase
             'status' => 'processing',
         ]);
 
-        $this->mock(YtDlpService::class)->shouldReceive('download')->andReturnUsing(function ($url, $path) {
-            @mkdir(dirname($path), 0755, true);
-            file_put_contents($path, 'video');
-        });
+        $ytdlp = $this->mock(YtDlpService::class);
+        $ytdlp->shouldReceive('getMetadata')->andReturn(['title' => 'V', 'duration_seconds' => 600, 'thumbnail_url' => null, 'channel' => 'C', 'language' => 'id']);
+        $ytdlp->shouldNotReceive('download'); // captions came through: no video needed for analysis
         $this->mock(TranscriptService::class)->shouldReceive('fetch')
             ->andReturn(['language' => 'id', 'segments' => [['start' => 0, 'end' => 5, 'text' => 'halo']]]);
         $this->mock(GeminiService::class)->shouldReceive('analyzeWithTranscript')->andReturn([

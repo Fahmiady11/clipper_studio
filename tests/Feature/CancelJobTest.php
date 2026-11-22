@@ -14,6 +14,7 @@ use App\Services\HookRenderer;
 use App\Services\MusicService;
 use App\Services\TranscriptService;
 use App\Services\YtDlpService;
+use App\Support\JobCancelled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -89,11 +90,12 @@ class CancelJobTest extends TestCase
     {
         $project = $this->project();
 
-        // The download "takes a while"; the user cancels during it
+        // Reading the video info "takes a while"; the user cancels during it
         $ytdlp = $this->mock(YtDlpService::class);
-        $ytdlp->shouldReceive('download')->once()->andReturnUsing(function ($url, $path) use ($project) {
-            file_put_contents($path, 'partial');
+        $ytdlp->shouldReceive('getMetadata')->once()->andReturnUsing(function () use ($project) {
             $project->update(['cancelled_at' => now(), 'status' => 'failed']);
+
+            return ['title' => 'V', 'duration_seconds' => 600, 'thumbnail_url' => null, 'channel' => 'C', 'language' => 'id'];
         });
         $transcript = $this->mock(TranscriptService::class);
         $transcript->shouldNotReceive('fetch');
@@ -101,8 +103,33 @@ class CancelJobTest extends TestCase
         (new AnalyzeVideoJob($project->id))->handle($ytdlp, $transcript, $this->mock(GeminiService::class));
 
         $this->assertSame('failed', $project->fresh()->status);
-        $this->assertFileDoesNotExist(storage_path("app/temp/{$project->id}/video.mp4"));
         @rmdir(storage_path("app/temp/{$project->id}"));
+    }
+
+    public function test_cancel_during_the_whisper_audio_download_drops_the_partial_file(): void
+    {
+        $project = $this->project();
+        $dir = storage_path("app/temp/{$project->id}");
+
+        $ytdlp = $this->mock(YtDlpService::class);
+        $ytdlp->shouldReceive('getMetadata')->andReturn(['title' => 'V', 'duration_seconds' => 600, 'thumbnail_url' => null, 'channel' => 'C', 'language' => 'id']);
+        $ytdlp->shouldReceive('isCached')->andReturn(false);
+        // Cancellation::exec kills yt-dlp mid-download and throws
+        $ytdlp->shouldReceive('downloadAudio')->once()->andReturnUsing(function ($url, $to) use ($project) {
+            file_put_contents($to.'/audio.webm', 'partial');
+            $project->update(['cancelled_at' => now(), 'status' => 'failed']);
+            throw new JobCancelled;
+        });
+        $transcript = $this->mock(TranscriptService::class);
+        $transcript->shouldReceive('fetch')->once()->andReturnUsing(fn ($url, $audioFile) => $audioFile());
+        $gemini = $this->mock(GeminiService::class);
+        $gemini->shouldNotReceive('analyzeWithTranscript');
+
+        (new AnalyzeVideoJob($project->id))->handle($ytdlp, $transcript, $gemini);
+
+        $this->assertSame('failed', $project->fresh()->status);
+        $this->assertSame([], glob($dir.'/*'));
+        @rmdir($dir);
     }
 
     public function test_failed_analysis_can_be_retried_on_the_same_project(): void

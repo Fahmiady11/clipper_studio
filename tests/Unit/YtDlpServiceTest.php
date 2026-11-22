@@ -85,4 +85,48 @@ SH);
             exec('rm -rf '.escapeshellarg($dir));
         }
     }
+
+    public function test_audio_download_asks_for_the_smallest_audio_stream_and_is_not_cached(): void
+    {
+        $dir = storage_path('framework/testing/ytdlp-audio-'.getmypid());
+        @mkdir($dir, 0755, true);
+        $binary = $dir.'/yt-dlp';
+        // Records its arguments and writes the -o template the way yt-dlp fills in an opus stream
+        file_put_contents($binary, <<<'SH'
+#!/bin/sh
+printf '%s\n' "$@" > "$(dirname "$0")/args"
+while [ $# -gt 0 ]; do
+    if [ "$1" = "-o" ]; then echo opus > "$(echo "$2" | sed 's/%(ext)s/webm/')"; fi
+    shift
+done
+SH);
+        chmod($binary, 0755);
+        $out = $dir.'/project';
+        @mkdir($out);
+        file_put_contents($out.'/audio.m4a', 'stale from an earlier attempt');
+        $url = 'https://www.youtube.com/watch?v=audioTest01';
+
+        try {
+            config([
+                'services.ytdlp.path' => $binary,
+                'services.ytdlp.cookies_from_browser' => 'chrome',
+                'services.ytdlp.cookies_file' => '',
+            ]);
+            $ytdlp = new YtDlpService;
+
+            $path = $ytdlp->downloadAudio($url, $out);
+
+            $args = file($dir.'/args', FILE_IGNORE_NEW_LINES);
+            $this->assertSame($out.'/audio.webm', $path);
+            $this->assertSame([$out.'/audio.webm'], glob($out.'/*'));
+            $this->assertSame('ba[abr<=64]/ba/b', $args[array_search('-f', $args) + 1]);
+            $this->assertSame('+res', $args[array_search('-S', $args) + 1]); // muxed fallback: lowest resolution
+            $this->assertContains('--cookies-from-browser', $args);
+            $this->assertContains('--concurrent-fragments', $args);
+            $this->assertSame($url, end($args));
+            $this->assertFalse($ytdlp->isCached($url));
+        } finally {
+            exec('rm -rf '.escapeshellarg($dir));
+        }
+    }
 }

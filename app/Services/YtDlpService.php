@@ -156,6 +156,33 @@ class YtDlpService
         $this->fetch($url, $outPath, ' --download-sections '.escapeshellarg(sprintf('*%.3f-%.3f', $from, $to)));
     }
 
+    /**
+     * Only the sound, for speech-to-text when the video has no captions: the
+     * smallest audio-only stream (~20 MB an hour against ~700 MB for the
+     * 1080p video). A client that offers muxed HLS only gets its lowest
+     * resolution, which still carries the original-language track. Written
+     * to $dir/audio.<ext> (the container depends on the stream); never cached.
+     *
+     * @return string the file written
+     */
+    public function downloadAudio(string $url, string $dir): string
+    {
+        set_time_limit(0);
+
+        foreach (glob($dir.'/audio.*') ?: [] as $stale) {
+            @unlink($stale);
+        }
+
+        $this->run($url, $dir.'/audio.%(ext)s', 'ba[abr<=64]/ba/b', ' -S '.escapeshellarg('+res'));
+
+        $written = glob($dir.'/audio.*') ?: [];
+        if (! $written) {
+            throw new RuntimeException('yt-dlp finished but no audio file found in '.$dir);
+        }
+
+        return $written[0];
+    }
+
     /** A full download of this URL is in video_cache, so download() costs no network. */
     public function isCached(string $url): bool
     {
@@ -178,16 +205,29 @@ class YtDlpService
             @unlink($outPath);
         }
 
-        $cmd = sprintf(
-            '%s%s'
+        $this->run(
+            $url,
+            $outPath,
             // 1080p: the 9:16 reframe crops a 607px-wide strip out of a 1080p
             // frame (only 405px from 720p, which upscaled visibly blurry).
             // Prefer H264, fall back to VP9/AV1 at the same height.
-            .' -f "bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]'
+            'bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]'
             .'/bestvideo[height<=1080]+bestaudio'
-            .'/best[height<=1080]/bestvideo+bestaudio/best"'
+            .'/best[height<=1080]/bestvideo+bestaudio/best',
+            ' --merge-output-format mp4'.$extraArgs
+        );
+
+        if (! file_exists($outPath)) {
+            throw new RuntimeException('yt-dlp finished but output file not found: '.$outPath);
+        }
+    }
+
+    private function run(string $url, string $outTemplate, string $format, string $extraArgs = ''): void
+    {
+        $cmd = sprintf(
+            '%s%s'
+            .' -f %s'
             .' --concurrent-fragments 4'  // bypass YouTube per-connection throttle
-            .' --merge-output-format mp4'
             .' --no-continue'
             .' --force-overwrites'
             .' --no-part'
@@ -197,8 +237,9 @@ class YtDlpService
             .' 2>&1',
             $this->bin,
             $this->cookieArg,
+            escapeshellarg($format),
             $extraArgs,
-            escapeshellarg($outPath),
+            escapeshellarg($outTemplate),
             escapeshellarg($url)
         );
 
@@ -206,10 +247,6 @@ class YtDlpService
 
         if ($code !== 0) {
             throw new RuntimeException('yt-dlp download failed: '.implode("\n", $output));
-        }
-
-        if (! file_exists($outPath)) {
-            throw new RuntimeException('yt-dlp finished but output file not found: '.$outPath);
         }
     }
 
