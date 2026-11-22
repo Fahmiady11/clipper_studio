@@ -2,9 +2,12 @@
 # Production image for Clipper Studio. Build from repo root:
 #   docker build -f docker/Dockerfile -t clipper-app:<tag> .
 
-# Pinned upstream versions (checked 2026-10-10)
+# Pinned upstream versions (checked 2026-10-10; yt-dlp 2026-11-22)
 ARG WHISPER_CPP_VERSION=v1.9.5
-ARG YTDLP_VERSION=2026.08.19
+ARG YTDLP_VERSION=2026.10.26
+# From https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS
+ARG YTDLP_SHA256_X86_64=767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795
+ARG YTDLP_SHA256_AARCH64=e87e9533e89fe5889abaa21f5114dfe7756d6aa6219b83551add04d48b18e483
 ARG DENO_VERSION=v2.9.7
 ARG OPENCV_VERSION=4.10.0.84
 ARG NUMPY_VERSION=1.26.4
@@ -51,6 +54,8 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NAT
 # ---- 4. runtime ----
 FROM php:8.4-fpm-bookworm AS runtime
 ARG YTDLP_VERSION
+ARG YTDLP_SHA256_X86_64
+ARG YTDLP_SHA256_AARCH64
 ARG DENO_VERSION
 ARG OPENCV_VERSION
 ARG NUMPY_VERSION
@@ -68,11 +73,12 @@ RUN apt-get update \
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
-        x86_64)  ytdlp=yt-dlp_linux;         deno_arch=x86_64-unknown-linux-gnu ;; \
-        aarch64) ytdlp=yt-dlp_linux_aarch64; deno_arch=aarch64-unknown-linux-gnu ;; \
+        x86_64)  ytdlp=yt-dlp_linux;         ytdlp_sha="$YTDLP_SHA256_X86_64";  deno_arch=x86_64-unknown-linux-gnu ;; \
+        aarch64) ytdlp=yt-dlp_linux_aarch64; ytdlp_sha="$YTDLP_SHA256_AARCH64"; deno_arch=aarch64-unknown-linux-gnu ;; \
         *) echo "unsupported arch $arch"; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${ytdlp}" -o /usr/local/bin/yt-dlp; \
+    echo "${ytdlp_sha}  /usr/local/bin/yt-dlp" | sha256sum -c -; \
     chmod 0755 /usr/local/bin/yt-dlp; \
     curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-${deno_arch}.zip" -o /tmp/deno.zip; \
     unzip -q /tmp/deno.zip -d /usr/local/bin; \

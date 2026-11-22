@@ -27,31 +27,93 @@ class TranscriptFallbackTest extends TestCase
         parent::tearDown();
     }
 
-    /** A yt-dlp that writes an Indonesian json3 caption file when $captions, nothing otherwise */
-    private function fakeYtDlp(bool $captions): void
+    /**
+     * A yt-dlp that writes sub.<lang>.json3 only for the languages in $available, appends every
+     * requested --sub-langs value to calls.log, and exits $exit (1 mimics a 429 on a request).
+     *
+     * @param  list<string>  $available
+     */
+    private function fakeYtDlp(array $available, int $exit = 0): void
     {
         $json3 = json_encode(['events' => [['tStartMs' => 0, 'dDurationMs' => 2000, 'segs' => [['utf8' => 'halo semua']]]]]);
-        $write = $captions ? 'echo '.escapeshellarg($json3).' > "$(echo "$2" | sed \'s/%(ext)s/id.json3/\')"' : ':';
         $binary = $this->dir.'/yt-dlp';
-        file_put_contents($binary, "#!/bin/sh\nwhile [ \$# -gt 0 ]; do\n    if [ \"\$1\" = \"-o\" ]; then {$write}; fi\n    shift\ndone\n");
+        file_put_contents($binary, sprintf(<<<'SH'
+#!/bin/sh
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sub-langs) langs="$2" ;;
+        -o) out="$2" ;;
+    esac
+    shift
+done
+echo "$langs" >> %s
+for l in %s; do
+    [ "$l" = "$langs" ] && echo %s > "$(echo "$out" | sed "s/%%(ext)s/$l.json3/")"
+done
+exit %d
+SH,
+            escapeshellarg($this->dir.'/calls.log'),
+            $available ? implode(' ', array_map('escapeshellarg', $available)) : "''",
+            escapeshellarg($json3),
+            $exit));
         chmod($binary, 0755);
         config(['services.ytdlp.path' => $binary, 'services.ytdlp.cookies_from_browser' => '']);
     }
 
+    /** @return list<string> the --sub-langs value of each yt-dlp call, in order */
+    private function langCalls(): array
+    {
+        $log = $this->dir.'/calls.log';
+
+        return file_exists($log) ? array_values(array_filter(explode("\n", file_get_contents($log)))) : [];
+    }
+
     public function test_captions_found_never_asks_for_the_audio(): void
     {
-        $this->fakeYtDlp(captions: true);
+        $this->fakeYtDlp(['id']);
         config(['services.groq.api_key' => 'gsk_test']);
 
         $result = (new TranscriptService)->fetch('https://youtu.be/fallbackT01', fn () => $this->fail('audio fetched although captions exist'));
 
         $this->assertSame('id', $result['language']);
         $this->assertSame('halo semua', $result['segments'][0]['text']);
+        $this->assertSame(['id'], $this->langCalls());
+    }
+
+    public function test_english_is_requested_only_when_indonesian_is_missing(): void
+    {
+        $this->fakeYtDlp(['en']);
+
+        $result = (new TranscriptService)->fetch('https://youtu.be/fallbackT04', fn () => $this->fail('audio fetched although captions exist'));
+
+        $this->assertSame('en', $result['language']);
+        $this->assertSame('halo semua', $result['segments'][0]['text']);
+        $this->assertSame(['id', 'en'], $this->langCalls());
+    }
+
+    public function test_a_rate_limited_indonesian_request_falls_through_to_english(): void
+    {
+        $this->fakeYtDlp(['en'], exit: 1);
+
+        $result = (new TranscriptService)->fetch('https://youtu.be/fallbackT05');
+
+        $this->assertSame('en', $result['language']);
+        $this->assertSame(['id', 'en'], $this->langCalls());
+    }
+
+    public function test_indonesian_file_wins_even_when_yt_dlp_exits_non_zero(): void
+    {
+        $this->fakeYtDlp(['id', 'en'], exit: 1);
+
+        $result = (new TranscriptService)->fetch('https://youtu.be/fallbackT06');
+
+        $this->assertSame('id', $result['language']);
+        $this->assertSame(['id'], $this->langCalls());
     }
 
     public function test_no_groq_key_means_no_audio_download(): void
     {
-        $this->fakeYtDlp(captions: false);
+        $this->fakeYtDlp([]);
         config(['services.groq.api_key' => '']);
 
         $result = (new TranscriptService)->fetch('https://youtu.be/fallbackT02', fn () => $this->fail('audio fetched with no Whisper to send it to'));
@@ -61,7 +123,7 @@ class TranscriptFallbackTest extends TestCase
 
     public function test_no_captions_asks_for_the_audio_once(): void
     {
-        $this->fakeYtDlp(captions: false);
+        $this->fakeYtDlp([]);
         config(['services.groq.api_key' => 'gsk_test']);
         $calls = 0;
 

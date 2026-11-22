@@ -82,20 +82,29 @@ class TranscriptService
 
         // yt-dlp inserts the lang code: out template "sub.%(ext)s" -> "sub.id.json3"
         $outTpl = $tmpDir.'/sub.%(ext)s';
-        $cmd = sprintf(
-            '%s%s --skip-download --write-auto-subs --write-subs --sub-langs %s'
-            .' --sub-format json3 --no-playlist -o %s -- %s 2>&1',
-            $bin,
-            $cookie,
-            escapeshellarg('id,en'),
-            escapeshellarg($outTpl),
-            escapeshellarg($url)
-        );
 
-        // Don't hard-fail on non-zero exit: a 429 on the 2nd lang still leaves
-        // the 1st lang's file written. We validate by looking for output files.
-        [$code, $output] = Cancellation::exec($cmd);
-        Log::channel('clipper_jobs')->info('yt-dlp subtitle fetch', ['code' => $code, 'out' => implode("\n", $output)]);
+        // One language per call: YouTube answers a second subtitle request in the same run with
+        // HTTP 429, so English is only requested when no Indonesian file was written.
+        foreach (['id', 'en'] as $lang) {
+            $cmd = sprintf(
+                '%s%s --skip-download --write-auto-subs --write-subs --sub-langs %s'
+                .' --sub-format json3 --no-playlist -o %s -- %s 2>&1',
+                $bin,
+                $cookie,
+                escapeshellarg($lang),
+                escapeshellarg($outTpl),
+                escapeshellarg($url)
+            );
+
+            // Don't hard-fail on non-zero exit (a 429 can still leave a file written):
+            // validate by looking for output files.
+            [$code, $output] = Cancellation::exec($cmd);
+            Log::channel('clipper_jobs')->info('yt-dlp subtitle fetch', ['lang' => $lang, 'code' => $code, 'out' => implode("\n", $output)]);
+
+            if (glob("{$tmpDir}/*.{$lang}.json3")) {
+                break;
+            }
+        }
 
         // Prefer Indonesian, then English, then anything written
         $file = null;
