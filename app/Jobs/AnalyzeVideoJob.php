@@ -205,7 +205,8 @@ class AnalyzeVideoJob implements ShouldQueue
                 'viral_reasons' => ViralityScore::reasons($clip['viral_reasons'] ?? null),
                 'hook_text' => HookText::clean($clip['hook_text'] ?? null, shorten: true),
                 'subtitle_json' => $clip['subtitle_segments'] ?? [],
-                // B-roll moments come with the analysis, so rendering needs no extra AI call
+                // B-roll is no longer requested from the analysis (EditPlanner picks it
+                // at render time); keep parsing it so old responses stay usable as fallback.
                 'broll_json' => array_values(array_filter((array) ($clip['broll'] ?? []), fn ($b) => is_array($b) && isset($b['time'], $b['query']))),
                 'music_mood' => MusicService::normalizeMood($clip['music_mood'] ?? null),
                 'status' => 'pending',
