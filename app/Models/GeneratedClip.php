@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -171,5 +172,12 @@ class GeneratedClip extends Model
     public function durationSeconds(): float
     {
         return $this->end_seconds - $this->start_seconds;
+    }
+
+    /** Rendering now or queued to (autopilot clips render before review): they still need the source video. */
+    public function scopeAwaitingRender(Builder $query): Builder
+    {
+        return $query->where(fn ($q) => $q->where('status', 'processing')
+            ->orWhere(fn ($q) => $q->where('status', 'pending')->where('review_status', 'pending')));
     }
 }

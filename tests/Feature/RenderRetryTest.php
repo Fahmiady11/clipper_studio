@@ -87,7 +87,11 @@ class RenderRetryTest extends TestCase
     public function test_a_transient_error_still_gets_the_second_attempt(): void
     {
         $clip = $this->queuedClip(withSource: false);
-        $this->mock(YtDlpService::class)->shouldReceive('download')->once()->andThrow(new RuntimeException('Connection reset by peer'));
+        $ytdlp = $this->mock(YtDlpService::class);
+        $ytdlp->shouldReceive('isCached')->andReturn(false);
+        // The section fails, then the whole-video fallback too
+        $ytdlp->shouldReceive('downloadSection')->once()->andThrow(new RuntimeException('Connection reset by peer'));
+        $ytdlp->shouldReceive('download')->once()->andThrow(new RuntimeException('Connection reset by peer'));
         $this->mock(JobWatchdog::class)->shouldNotReceive('notifyClip');
 
         $this->work();

@@ -119,21 +119,54 @@ class YtDlpService
         $videoId = $this->extractVideoId($url);
 
         // Serve from cache if the same video was already downloaded
-        if ($videoId) {
-            $cached = $this->cachedPath($videoId);
-            if (file_exists($cached) && filesize($cached) > 1024 * 1024) {
-                if (! is_dir(dirname($outPath))) {
-                    @mkdir(dirname($outPath), 0755, true);
-                }
-                // Hard-link to avoid duplicating disk space; fall back to copy
-                if (! @link($cached, $outPath)) {
-                    copy($cached, $outPath);
-                }
-
-                return;
+        if ($this->isCached($url)) {
+            if (! is_dir(dirname($outPath))) {
+                @mkdir(dirname($outPath), 0755, true);
             }
+            // Hard-link to avoid duplicating disk space; fall back to copy
+            $cached = $this->cachedPath($videoId);
+            if (! @link($cached, $outPath)) {
+                copy($cached, $outPath);
+            }
+
+            return;
         }
 
+        $this->fetch($url, $outPath);
+
+        // Store in cache for future projects using the same URL
+        if ($videoId) {
+            $cached = $this->cachedPath($videoId);
+            @mkdir(dirname($cached), 0755, true);
+            @link($outPath, $cached) || @copy($outPath, $cached);
+        }
+    }
+
+    /**
+     * Only [$from, $to] of the video (source seconds), in the same format as a
+     * full download, stream-copied (no re-encode). Its sound starts exactly at
+     * $from and its picture at the first frame after it, so seeking the section
+     * at t - $from gives what the full video has at t, the picture at most one
+     * frame later. Never cached.
+     */
+    public function downloadSection(string $url, string $outPath, float $from, float $to): void
+    {
+        set_time_limit(0);
+
+        $this->fetch($url, $outPath, ' --download-sections '.escapeshellarg(sprintf('*%.3f-%.3f', $from, $to)));
+    }
+
+    /** A full download of this URL is in video_cache, so download() costs no network. */
+    public function isCached(string $url): bool
+    {
+        $videoId = $this->extractVideoId($url);
+        $cached = $videoId ? $this->cachedPath($videoId) : null;
+
+        return $cached && file_exists($cached) && filesize($cached) > 1024 * 1024;
+    }
+
+    private function fetch(string $url, string $outPath, string $extraArgs = ''): void
+    {
         $dir = dirname($outPath);
         $base = pathinfo($outPath, PATHINFO_FILENAME);
 
@@ -158,11 +191,13 @@ class YtDlpService
             .' --no-continue'
             .' --force-overwrites'
             .' --no-part'
+            .'%s'
             .' -o %s'
             .' -- %s'
             .' 2>&1',
             $this->bin,
             $this->cookieArg,
+            $extraArgs,
             escapeshellarg($outPath),
             escapeshellarg($url)
         );
@@ -175,13 +210,6 @@ class YtDlpService
 
         if (! file_exists($outPath)) {
             throw new RuntimeException('yt-dlp finished but output file not found: '.$outPath);
-        }
-
-        // Store in cache for future projects using the same URL
-        if ($videoId) {
-            $cached = $this->cachedPath($videoId);
-            @mkdir(dirname($cached), 0755, true);
-            @link($outPath, $cached) || @copy($outPath, $cached);
         }
     }
 

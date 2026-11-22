@@ -117,9 +117,11 @@ class StorageCleanupTest extends TestCase
         ]);
         $this->paths[] = storage_path('app/temp/'.$project->id);
 
+        // Only the clip's stretch comes back (ClipSourceTest covers when the whole video does)
         $ytdlp = $this->mock(YtDlpService::class);
-        $ytdlp->shouldReceive('download')->once()
-            ->with('https://youtu.be/abcdefg', storage_path("app/temp/{$project->id}/video.mp4"))
+        $ytdlp->shouldReceive('isCached')->andReturn(false);
+        $ytdlp->shouldReceive('downloadSection')->once()
+            ->with('https://youtu.be/abcdefg', storage_path("app/temp/{$project->id}/section_{$clip->id}.mp4"), 2.0, 23.0)
             ->andReturnUsing(fn ($url, $path) => file_put_contents($path, 'src'));
 
         $ffmpeg = $this->mock(FFmpegService::class);

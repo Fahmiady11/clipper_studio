@@ -7,6 +7,7 @@ use App\Jobs\RenderClipJob;
 use App\Models\ClipProject;
 use App\Models\GeneratedClip;
 use App\Models\User;
+use App\Services\ClipSource;
 use App\Services\FFmpegService;
 use App\Services\GeminiService;
 use App\Services\HookRenderer;
@@ -142,7 +143,7 @@ class CancelJobTest extends TestCase
         $ffmpeg->shouldNotReceive('applyLayout');
 
         (new RenderClipJob($clip->id))->handle(
-            $ffmpeg, $this->mock(MusicService::class), $this->mock(YtDlpService::class), $this->mock(HookRenderer::class)
+            $ffmpeg, $this->mock(MusicService::class), $this->mock(ClipSource::class), $this->mock(HookRenderer::class)
         );
 
         $this->assertSame('pending', $clip->fresh()->status);

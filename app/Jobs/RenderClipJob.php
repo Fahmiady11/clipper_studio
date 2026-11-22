@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Exceptions\FFmpegFailed;
 use App\Models\BrandKit;
 use App\Models\GeneratedClip;
+use App\Services\ClipSource;
 use App\Services\EditPlanner;
 use App\Services\FaceTracker;
 use App\Services\FFmpegService;
@@ -16,7 +17,6 @@ use App\Services\MusicService;
 use App\Services\RenderQuota;
 use App\Services\SmartCut;
 use App\Services\StockFootage;
-use App\Services\YtDlpService;
 use App\Support\BrollCues;
 use App\Support\Cancellation;
 use App\Support\EditPlan;
@@ -52,7 +52,7 @@ class RenderClipJob implements ShouldQueue
         return [(new WithoutOverlapping('render:'.$this->clipId))->expireAfter($this->timeout)->dontRelease()];
     }
 
-    public function handle(FFmpegService $ffmpeg, MusicService $music, YtDlpService $ytdlp, HookRenderer $hooks): void
+    public function handle(FFmpegService $ffmpeg, MusicService $music, ClipSource $sources, HookRenderer $hooks): void
     {
         $clip = GeneratedClip::with(['clipProject.subtitleSetting', 'clipProject.hookSetting', 'clipProject.transcript'])->find($this->clipId);
         if (! $clip || $clip->cancelled_at || $clip->review_status === 'rejected') {
@@ -67,7 +67,7 @@ class RenderClipJob implements ShouldQueue
             Cancellation::watch(
                 // Deleted (history cleared) counts as cancelled too
                 fn () => ! GeneratedClip::whereKey($this->clipId)->whereNull('cancelled_at')->exists(),
-                fn () => $this->render($clip, $ffmpeg, $music, $ytdlp, $hooks)
+                fn () => $this->render($clip, $ffmpeg, $music, $sources, $hooks)
             );
         } catch (JobCancelled) {
             // The cancel endpoint already reset the clip; just drop the half-made files
@@ -84,7 +84,7 @@ class RenderClipJob implements ShouldQueue
         }
     }
 
-    private function render(GeneratedClip $clip, FFmpegService $ffmpeg, MusicService $music, YtDlpService $ytdlp, HookRenderer $hooks): void
+    private function render(GeneratedClip $clip, FFmpegService $ffmpeg, MusicService $music, ClipSource $sources, HookRenderer $hooks): void
     {
         $log = Log::channel('clipper_jobs');
         $project = $clip->clipProject;
@@ -118,13 +118,17 @@ class RenderClipJob implements ShouldQueue
 
         $tempDir = storage_path('app/temp/'.$project->id);
         $srcVideo = $tempDir.'/video.mp4';
+        // Source time at the start of $srcVideo: everything below is timed against the
+        // whole video, only reads of the file seek at source time minus $srcOffset
+        $srcOffset = 0.0;
 
         if (! file_exists($srcVideo)) {
-            // Source removed by clipper:cleanup — fetch it again (served from video_cache when still there)
-            $log->info('Source video missing, re-downloading', ['project_id' => $project->id]);
-            @mkdir($tempDir, 0755, true);
-            $timed('download', fn () => $ytdlp->download($project->youtube_url, $srcVideo));
+            // Source removed by clipper:cleanup: fetch it again, often only the clip's section
+            $source = $timed('download', fn () => $sources->fetch($clip, $tempDir));
+            [$srcVideo, $srcOffset] = [$source['path'], $source['offset']];
         }
+        $seekStart = (float) $clip->start_seconds - $srcOffset;
+        $seekEnd = (float) $clip->end_seconds - $srcOffset;
 
         $step2 = $tempDir.'/layout_'.$this->clipId.'.mp4';
 
@@ -145,7 +149,7 @@ class RenderClipJob implements ShouldQueue
 
         $track = null;
         if (in_array($layoutType, ['reframe', 'gameplay'], true)) {
-            $track = $timed('face_track', fn () => app(FaceTracker::class)->plan($srcVideo, (float) $clip->start_seconds, (float) $clip->end_seconds));
+            $track = $timed('face_track', fn () => app(FaceTracker::class)->plan($srcVideo, $seekStart, $seekEnd));
             $log->info('Face tracking', ['pieces' => $track ? count($track) : 0]);
         }
 
@@ -160,8 +164,10 @@ class RenderClipJob implements ShouldQueue
         $sourceSegments = $clipSegments;
         $pieces = [[0.0, (float) $clip->end_seconds - $clipStart]];
         if ($project->jump_cut) {
-            $words = array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments));
-            $pieces = $timed('smart_cut', fn () => app(SmartCut::class)->pieces($srcVideo, $clipStart, (float) $clip->end_seconds, $words));
+            // On the file's clock, like the seek
+            $words = array_map(fn ($w) => ['start' => $w['start'] - $srcOffset, 'end' => ($w['end'] ?? $w['start']) - $srcOffset] + $w,
+                array_merge([], ...array_map(fn ($s) => $s['words'] ?? [], $clipSegments)));
+            $pieces = $timed('smart_cut', fn () => app(SmartCut::class)->pieces($srcVideo, $seekStart, $seekEnd, $words));
             $clipSegments = SmartCut::remapSegments($clipSegments, $pieces, $clipStart);
         }
         $clipDuration = SmartCut::outputDuration($pieces);
@@ -289,7 +295,7 @@ class RenderClipJob implements ShouldQueue
         $logoPath = $logo && Storage::disk('local')->exists($logo) ? Storage::disk('local')->path($logo) : null;
 
         $log->info('Rendering', ['hook' => $hookText, 'hook_dur' => $hookDuration, 'subs' => (bool) $assPath, 'emoji' => array_map(fn ($e) => round($e['start'], 1), $emojis), 'title' => (bool) $titlePath, 'progress' => (bool) $progress]);
-        $timed('apply_layout', fn () => $ffmpeg->applyLayout($srcVideo, $layoutType, $step2, $clipStart, (float) $clip->end_seconds, $track, $pieces, $zoom, [
+        $timed('apply_layout', fn () => $ffmpeg->applyLayout($srcVideo, $layoutType, $step2, $seekStart, $seekEnd, $track, $pieces, $zoom, [
             'ass' => $assPath, 'hook' => $hookOverlay, 'hook_duration' => $hookDuration, 'emojis' => $emojis,
             'title' => $titlePath, 'progress' => $progress, 'broll' => $broll, 'logo' => $logoPath, 'gameplay' => $gameplay,
         ]));
@@ -382,7 +388,7 @@ class RenderClipJob implements ShouldQueue
 
     private function cleanupTemp(string $dir, string $clipId): void
     {
-        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_', 'sfx_', 'title_'] as $prefix) {
+        foreach (['cut_', 'layout_', 'subtitled_', 'hook_', 'final_', 'sub_', 'music_', 'loud_', 'sfx_', 'title_', 'section_'] as $prefix) {
             foreach (['.mp4', '.ass', '.png'] as $ext) {
                 $f = $dir.'/'.$prefix.$clipId.$ext;
                 if (file_exists($f)) {
