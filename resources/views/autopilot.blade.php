@@ -66,6 +66,8 @@
   .ap-media video { width: 100%; height: 100%; object-fit: contain; display: block; }
   .ap-placeholder { position: absolute; inset: 0; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; font-size: 13px; color: var(--text-muted); text-align: center; padding: 20px; word-break: break-word; }
   .ap-placeholder.is-failed { color: var(--danger); }
+  .ap-wait { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .ap-wait b { color: var(--warn); font-size: 14px; }
   .ap-spin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent-ink); animation: ap-spin 1s linear infinite; }
   @keyframes ap-spin { to { transform: rotate(360deg); } }
   .ap-badge { position: absolute; top: 10px; left: 10px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); }
@@ -305,6 +307,7 @@
             <div class="ap-chips" style="margin-top:12px"><template x-for="c in lookChips(s.settings, s.style_preset_name)" :key="c"><span class="ap-chip" x-html="c"></span></template></div>
             <p class="ap-src-instr" x-show="s.settings.instruction">Instruksi: <span x-text="'“' + s.settings.instruction + '”'"></span></p>
             <div x-show="s.last_error" class="ap-error" style="margin-top:12px;font-size:12px" x-text="s.last_error"></div>
+            <p class="ap-src-instr" x-show="s.enabled && s.quota_paused">Kuota render bulan ini habis, jadi video baru belum dianalisis. <a class="ap-link" style="font-size:12.5px" href="{{ route('pricing') }}">Buka Paket &amp; kuota</a></p>
             <div class="ap-card-foot">
               <button class="btn btn-secondary ap-btn" @click="runSource(s)" type="button">Cek sekarang</button>
               <button class="btn btn-ghost ap-btn" @click="openEditor(s)" type="button" x-text="s.style_preset_id ? 'Atur' : 'Atur tampilan'"></button>
@@ -378,8 +381,16 @@
               </template>
               <template x-if="!c.preview_url">
                 <div class="ap-placeholder" :class="{ 'is-failed': c.status === 'failed' }">
-                  <div class="ap-spin" x-show="c.status !== 'failed' && c.review_status !== 'rejected'"></div>
-                  <span x-text="c.status === 'failed' ? ('Render gagal: ' + (c.error_msg || '')) : (c.review_status === 'rejected' ? 'Ditolak' : 'Sedang dirender…')"></span>
+                  <template x-if="c.waiting_quota && c.review_status !== 'rejected'">
+                    <div class="ap-wait">
+                      <b>Menunggu kuota</b>
+                      <span x-text="c.error_msg"></span>
+                      <span>Klip ini dirender otomatis begitu kuota ada lagi.</span>
+                      <a class="ap-link" href="{{ route('pricing') }}">Buka Paket &amp; kuota</a>
+                    </div>
+                  </template>
+                  <div class="ap-spin" x-show="c.status !== 'failed' && c.review_status !== 'rejected' && !c.waiting_quota"></div>
+                  <span x-show="!c.waiting_quota || c.review_status === 'rejected'" x-text="c.status === 'failed' ? ('Render gagal: ' + (c.error_msg || '')) : (c.review_status === 'rejected' ? 'Ditolak' : 'Sedang dirender…')"></span>
                 </div>
               </template>
               <span class="ap-badge" :class="clipBadge(c).cls" x-text="clipBadge(c).label"></span>
@@ -1152,6 +1163,7 @@ function autopilot() {
       if (c.review_status === 'rejected') return { label: 'Ditolak', cls: '' };
       if (c.status === 'failed') return { label: 'Gagal render', cls: 'b-fail' };
       if (c.review_status === 'pending') {
+        if (c.waiting_quota) return { label: 'Menunggu kuota', cls: 'b-warn' };
         return c.status === 'done' ? { label: 'Perlu review', cls: 'b-pending' } : { label: 'Rendering', cls: 'b-busy' };
       }
       const posts = this.AUTOPOST.map(p => c[p.id]).filter(Boolean);

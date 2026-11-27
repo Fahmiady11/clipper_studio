@@ -62,6 +62,7 @@ class GeneratedClip extends Model
         'manual',
         'error_msg',
         'cancelled_at',
+        'quota_blocked_at',
     ];
 
     protected $casts = [
@@ -76,6 +77,7 @@ class GeneratedClip extends Model
         'manual' => 'boolean',
         'edit_plan' => 'array',
         'cancelled_at' => 'datetime',
+        'quota_blocked_at' => 'datetime',
         'youtube_uploaded_at' => 'datetime',
         'youtube_checked_at' => 'datetime',
         'tiktok_uploaded_at' => 'datetime',

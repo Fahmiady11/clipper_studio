@@ -17,6 +17,7 @@ use App\Services\ClipPerformanceSummary;
 use App\Services\ConnectedAccounts;
 use App\Services\MusicService;
 use App\Services\ProjectCreator;
+use App\Services\RenderQuota;
 use App\Services\StorageCleanup;
 use App\Services\TikTokService;
 use App\Support\CaptionCredit;
@@ -36,8 +37,10 @@ class AutopilotController extends Controller
 
     private const REVIEW_PER_PAGE = 9;
 
-    public function sources(): JsonResponse
+    public function sources(RenderQuota $quota): JsonResponse
     {
+        // DiscoveryService skips the run while this holds; the card says why nothing new comes in
+        $quotaPaused = ! Auth::user()->is_admin && $quota->remainingSeconds(Auth::user()) === 0;
         $sources = VideoSource::where('user_id', Auth::id())
             ->with('stylePreset')
             ->withCount('discoveredVideos')
@@ -56,6 +59,7 @@ class AutopilotController extends Controller
             'videos_found' => $s->discovered_videos_count,
             'last_run_at' => $s->last_run_at?->toISOString(),
             'last_error' => $s->last_error,
+            'quota_paused' => $quotaPaused,
             'settings' => $s->clipSettings(),
             'style_preset_id' => $s->stylePreset?->id,
             'style_preset_name' => $s->stylePreset?->name,
@@ -201,6 +205,7 @@ class AutopilotController extends Controller
                     'review_status' => $c->review_status,
                     'status' => $c->status,
                     'error_msg' => $c->error_msg,
+                    'waiting_quota' => $c->quota_blocked_at !== null,
                     'topic' => $c->topic,
                     'reason' => $c->reason,
                     'viral_potential' => $c->viral_potential,
@@ -371,14 +376,14 @@ class AutopilotController extends Controller
     }
 
     /**
-     * Delete unreviewed clips that are finished (rendered or failed). Clips
-     * still queued or rendering are kept, so the render job never loses its row.
+     * Delete unreviewed clips that are finished (rendered or failed) or waiting
+     * for quota. Clips queued or rendering are kept, so the render job never loses its row.
      */
     public function cleanPending(StorageCleanup $cleanup): JsonResponse
     {
         $clips = GeneratedClip::with('clipProject')
             ->where('review_status', 'pending')
-            ->whereIn('status', ['done', 'failed'])
+            ->where(fn ($q) => $q->whereIn('status', ['done', 'failed'])->orWhereNotNull('quota_blocked_at'))
             ->whereHas('clipProject', fn ($q) => $q->where('user_id', Auth::id()))
             ->get();
 

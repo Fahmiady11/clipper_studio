@@ -227,8 +227,8 @@ class AnalyzeVideoJob implements ShouldQueue
                     app(RenderQuota::class)->reserve($project->user, $generated);
                     RenderClipJob::dispatch($generated->id);
                 } catch (QuotaExceeded $e) {
-                    $generated->update(['error_msg' => $e->getMessage()]);
-                    $log->warning('Autopilot render skipped, quota exhausted', ['clip_id' => $generated->id, 'user_id' => $project->user_id]);
+                    app(RenderQuota::class)->block($generated, $e); // rendered once there is quota again
+                    $log->warning('Autopilot render waits for quota', ['clip_id' => $generated->id, 'user_id' => $project->user_id]);
                 }
             }
             $log->debug('GeneratedClip saved', ['ranking' => $clip['ranking']]);

@@ -19,12 +19,23 @@ class DiscoveryService
     public function __construct(
         private YtDlpService $ytdlp,
         private ProjectCreator $creator,
+        private RenderQuota $quota,
     ) {}
 
     /** @return ClipProject[] projects started in this run */
     public function run(VideoSource $source): array
     {
         $log = Log::channel('clipper_jobs');
+
+        // No render minutes left: analysing more videos only spends CPU and Gemini on clips that
+        // would wait. The videos stay unseen, so the first run after quota returns picks them up.
+        $user = $source->user;
+        if ($user && ! $user->is_admin && $this->quota->remainingSeconds($user) === 0) {
+            $log->info('Autopilot: discovery paused, render quota used up', ['source_id' => $source->id, 'user_id' => $user->id]);
+            $source->update(['last_run_at' => now(), 'last_error' => null]);
+
+            return [];
+        }
 
         $candidates = $this->ytdlp->listVideos($source->type, $source->value, self::LIST_LIMIT);
         $seen = DiscoveredVideo::where('user_id', $source->user_id)

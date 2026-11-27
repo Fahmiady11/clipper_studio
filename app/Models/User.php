@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\RenderQuota;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -29,6 +30,13 @@ class User extends Authenticatable
             Storage::disk('local')->deleteDirectory("gameplay/{$user->id}");
             Storage::disk('local')->deleteDirectory("brand/{$user->id}");
             Storage::deleteDirectory("clips/{$user->id}");
+        });
+
+        // More minutes (or fewer) right away: clips waiting for quota need not wait for clipper:resume-quota
+        static::updated(function (self $user) {
+            if ($user->wasChanged('plan_id')) {
+                app(RenderQuota::class)->resumeWaiting($user);
+            }
         });
     }
 

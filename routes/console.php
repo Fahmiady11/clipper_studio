@@ -10,6 +10,7 @@ use App\Services\HookTestService;
 use App\Services\JobWatchdog;
 use App\Services\LoadMonitor;
 use App\Services\MetaStatusPoller;
+use App\Services\RenderQuota;
 use App\Services\ScheduledPublisher;
 use App\Services\StorageCleanup;
 use App\Services\ThreadsLogin;
@@ -109,6 +110,13 @@ Artisan::command('clipper:watchdog', function (JobWatchdog $watchdog) {
 })->purpose('Fail jobs stuck in processing past their timeout');
 
 Schedule::command('clipper:watchdog')->everyFiveMinutes()->name('clipper-watchdog')->withoutOverlapping();
+
+// Clips waiting for render quota: a new month, an upgrade or a freed reservation lets them start
+Artisan::command('clipper:resume-quota', function (RenderQuota $quota) {
+    $this->info('Queued '.$quota->resumeAll().' renders that waited for quota');
+})->purpose('Render clips that waited for quota once it is available');
+
+Schedule::command('clipper:resume-quota')->everyFiveMinutes()->name('resume-quota')->withoutOverlapping();
 
 Artisan::command('clipper:invite {--uses=1 : How many people can sign up with it} {--days= : Expire after this many days} {--note= : Who it is for}', function () {
     $invite = InviteCode::generate((int) $this->option('uses'), $this->option('days') ? (int) $this->option('days') : null, $this->option('note'));

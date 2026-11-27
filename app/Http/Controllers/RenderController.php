@@ -48,7 +48,7 @@ class RenderController extends Controller
             return response()->json(['message' => $e->getMessage()], 402);
         }
 
-        $clip->fill(['status' => 'processing', 'error_msg' => null, 'cancelled_at' => null])->save();
+        $clip->fill(['status' => 'processing', 'error_msg' => null, 'cancelled_at' => null, 'quota_blocked_at' => null])->save();
 
         RenderClipJob::dispatch($clip->id);
         $this->ensureQueueWorkerRunning();
@@ -146,6 +146,7 @@ class RenderController extends Controller
             'clip_id' => $clip->id,
             'status' => $clip->status,
             'error_msg' => $clip->error_msg,
+            'waiting_quota' => $clip->quota_blocked_at !== null,
             'output_path' => $clip->output_path,
             // Music was requested but the library had nothing to pick from
             'music_missing' => $clip->status === 'done' && $clip->clipProject->music_enabled && ! $clip->music_track,

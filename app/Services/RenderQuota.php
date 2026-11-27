@@ -3,16 +3,23 @@
 namespace App\Services;
 
 use App\Exceptions\QuotaExceeded;
+use App\Jobs\RenderClipJob;
 use App\Models\GeneratedClip;
 use App\Models\Plan;
 use App\Models\RenderUsage;
 use App\Models\User;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /** Monthly render-minute quota: reserve when a render is queued, settle or release when the job ends. */
 class RenderQuota
 {
+    private const RESUME_LOCK_SECONDS = 120;
+
+    private const RESUME_WAIT_SECONDS = 10;
+
     public function period(): string
     {
         return now()->format('Y-m');
@@ -87,9 +94,92 @@ class RenderQuota
     }
 
     /** A render that failed, was cancelled or never ran costs the user nothing. */
+    /** Refund a reservation that was never rendered; the freed seconds go to clips waiting for quota. */
     public function release(string $clipId): void
     {
-        RenderUsage::where('generated_clip_id', $clipId)->where('status', 'reserved')->delete();
+        $userId = RenderUsage::where('generated_clip_id', $clipId)->where('status', 'reserved')->value('user_id');
+        if (! RenderUsage::where('generated_clip_id', $clipId)->where('status', 'reserved')->delete()) {
+            return;
+        }
+
+        if ($user = User::find($userId)) {
+            $this->resumeWaiting($user);
+        }
+    }
+
+    /**
+     * A render refused for quota that should still happen later: the clip
+     * stays 'pending' and resumeWaiting() queues it once there is room.
+     */
+    public function block(GeneratedClip $clip, QuotaExceeded $e): void
+    {
+        $clip->update(['quota_blocked_at' => $clip->quota_blocked_at ?? now(), 'error_msg' => $e->getMessage()]);
+    }
+
+    /**
+     * Queue the user's clips waiting for quota, oldest first, until one does
+     * not fit. The lock keeps a plan change, a release and the schedule from
+     * dispatching the same clip twice. Returns how many were queued.
+     */
+    public function resumeWaiting(User $user): int
+    {
+        try {
+            return Cache::lock('render-quota-resume:'.$user->id, self::RESUME_LOCK_SECONDS)
+                ->block(self::RESUME_WAIT_SECONDS, fn () => $this->resumeLocked($user));
+        } catch (LockTimeoutException) {
+            return 0; // clipper:resume-quota tries again within minutes
+        }
+    }
+
+    /** resumeWaiting() for every approved user with a clip waiting for quota. */
+    public function resumeAll(): int
+    {
+        $userIds = GeneratedClip::whereNotNull('quota_blocked_at')
+            ->join('clip_projects', 'clip_projects.id', '=', 'generated_clips.clip_project_id')
+            ->distinct()
+            ->pluck('clip_projects.user_id');
+
+        return User::whereIn('id', $userIds)->whereNotNull('approved_at')->get()
+            ->sum(fn (User $user) => $this->resumeWaiting($user));
+    }
+
+    private function resumeLocked(User $user): int
+    {
+        $waiting = GeneratedClip::with('clipProject')
+            ->whereNotNull('quota_blocked_at')
+            ->whereHas('clipProject', fn ($q) => $q->where('user_id', $user->id))
+            ->orderBy('quota_blocked_at')
+            ->orderBy('ranking')
+            ->orderBy('id')
+            ->get();
+
+        $queued = 0;
+        foreach ($waiting as $clip) {
+            // Rejected, cancelled, project cancelled, or rendered some other way meanwhile: it no longer waits
+            if ($clip->review_status === 'rejected' || $clip->cancelled_at || $clip->clipProject->cancelled_at || $clip->status !== 'pending') {
+                $clip->update(['quota_blocked_at' => null]);
+
+                continue;
+            }
+
+            try {
+                $this->reserve($user, $clip);
+            } catch (QuotaExceeded $e) {
+                $clip->update(['error_msg' => $e->getMessage()]); // the minutes in the message are current again
+
+                break;
+            }
+
+            $clip->update(['quota_blocked_at' => null, 'error_msg' => null]);
+            RenderClipJob::dispatch($clip->id);
+            $queued++;
+        }
+
+        if ($queued) {
+            Log::channel('clipper_jobs')->info('Renders resumed after quota wait', ['user_id' => $user->id, 'queued' => $queued]);
+        }
+
+        return $queued;
     }
 
     public function message(User $user): string
